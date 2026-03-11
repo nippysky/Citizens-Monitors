@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-
 import AuthShell from "@/components/auth/AuthShell";
 import AuthTermsSetPassword from "@/components/auth/AuthTermsSetpassword";
 import AppScreenLoader from "@/components/feedback/AppScreenLaoder";
@@ -27,14 +26,14 @@ export default function SetPasswordScreen() {
 
       showToast({
         type: "success",
-        message: "Successfully!!",
+        message: "Password set successfully.",
       });
 
       console.log("Set password values:", values);
     } catch {
       showToast({
         type: "error",
-        message: "Something went wrong.",
+        message: "Could not set password.",
       });
     } finally {
       setLoading(false);
@@ -82,6 +81,7 @@ export default function SetPasswordScreen() {
               title="Set Password"
               onPress={onSubmit}
               loading={formState.isSubmitting || loading}
+              disabled={!formState.isValid || loading}
             />
           </View>
 
@@ -103,8 +103,7 @@ const styles = StyleSheet.create({
   headerBlock: {
     gap: 20,
     marginBottom: 34,
-    marginTop:20
-    
+    marginTop: 20,
   },
   subtitle: {
     color: Theme.colors.text,

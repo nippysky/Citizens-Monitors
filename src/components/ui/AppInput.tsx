@@ -1,7 +1,7 @@
 import AppText from "@/components/ui/AppText";
 import { Theme } from "@/theme";
 import { Ionicons } from "@expo/vector-icons";
-import { ReactNode, useMemo, useState } from "react";
+import { cloneElement, isValidElement, ReactNode, useMemo, useState } from "react";
 import {
   Pressable,
   StyleProp,
@@ -39,9 +39,12 @@ export default function AppInput({
   secureTextEntry,
   editable = true,
   style,
+  onFocus,
+  onBlur,
   ...props
 }: Props) {
   const [isSecureVisible, setIsSecureVisible] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
 
   const hasError = Boolean(errorText);
   const showSecureToggle = secureToggle || secureTextEntry;
@@ -51,18 +54,34 @@ export default function AppInput({
     return !isSecureVisible;
   }, [showSecureToggle, secureTextEntry, isSecureVisible]);
 
+  const iconColor = hasError
+    ? Theme.colors.danger
+    : isFocused
+      ? Theme.colors.primary
+      : Theme.colors.textSoft;
+
+  const getTintedIcon = (icon: ReactNode) => {
+    if (!isValidElement(icon)) return icon;
+
+    return cloneElement(icon, {
+      color: iconColor,
+    } as Record<string, unknown>);
+  };
+
   const renderStartIcon = () => {
     if (!startIcon) return null;
+
+    const tintedStartIcon = getTintedIcon(startIcon);
 
     if (onPressStartIcon) {
       return (
         <Pressable onPress={onPressStartIcon} style={styles.iconButton}>
-          {startIcon}
+          {tintedStartIcon}
         </Pressable>
       );
     }
 
-    return <View style={styles.iconSlot}>{startIcon}</View>;
+    return <View style={styles.iconSlot}>{tintedStartIcon}</View>;
   };
 
   const renderEndIcon = () => {
@@ -76,7 +95,7 @@ export default function AppInput({
           <Ionicons
             name={isSecureVisible ? "eye-off-outline" : "eye-outline"}
             size={22}
-            color={Theme.colors.textSoft}
+            color={iconColor}
           />
         </Pressable>
       );
@@ -84,15 +103,17 @@ export default function AppInput({
 
     if (!endIcon) return null;
 
+    const tintedEndIcon = getTintedIcon(endIcon);
+
     if (onPressEndIcon) {
       return (
         <Pressable onPress={onPressEndIcon} style={styles.iconButton}>
-          {endIcon}
+          {tintedEndIcon}
         </Pressable>
       );
     }
 
-    return <View style={styles.iconSlot}>{endIcon}</View>;
+    return <View style={styles.iconSlot}>{tintedEndIcon}</View>;
   };
 
   return (
@@ -112,14 +133,21 @@ export default function AppInput({
         ]}
       >
         {renderStartIcon()}
-
-        <TextInput
-          {...props}
-          editable={editable}
-          secureTextEntry={resolvedSecureTextEntry}
-          placeholderTextColor={Theme.colors.placeholder}
-          style={[styles.input, !editable && styles.inputDisabled, style]}
-        />
+<TextInput
+  {...props}
+  editable={editable}
+  secureTextEntry={resolvedSecureTextEntry}
+  placeholderTextColor={Theme.colors.placeholder}
+  style={[styles.input, !editable && styles.inputDisabled, style]}
+  onFocus={(e) => {
+    setIsFocused(true);
+    onFocus?.(e);
+  }}
+  onBlur={(e) => {
+    setIsFocused(false);
+    onBlur?.(e);
+  }}
+/>
 
         {renderEndIcon()}
       </View>
@@ -153,8 +181,8 @@ const styles = StyleSheet.create({
     minHeight: 58,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: Theme.colors.border,
-    backgroundColor: Theme.colors.surface,
+    borderColor: "#D9DEE8",
+    backgroundColor: "rgba(255,255,255,0.58)",
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
@@ -189,6 +217,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: Theme.fonts.body.regular,
     paddingVertical: 0,
+    backgroundColor: "transparent",
   },
 
   inputDisabled: {},

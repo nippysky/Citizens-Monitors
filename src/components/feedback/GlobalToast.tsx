@@ -65,7 +65,7 @@ export default function GlobalToast({
     }, 2400);
 
     return () => clearTimeout(timer);
-  }, [onHide, opacity, translateY, visible]);
+  }, [visible, translateY, opacity, onHide]);
 
   if (!visible) return null;
 
@@ -97,12 +97,16 @@ export default function GlobalToast({
         >
           <Ionicons
             name={isSuccess ? "checkmark" : "close"}
-            size={16}
+            size={15}
             color="#fff"
           />
         </View>
 
-        <AppText style={styles.message}>{message}</AppText>
+        <View style={styles.messageWrap}>
+          <AppText numberOfLines={2} style={styles.message}>
+            {message}
+          </AppText>
+        </View>
       </View>
     </Animated.View>
   );
@@ -118,8 +122,8 @@ const styles = StyleSheet.create({
   },
 
   toast: {
-    minHeight: 52,
-    maxWidth: 280,
+    minHeight: 54,
+    maxWidth: 290,
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -148,6 +152,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
 
   successCircle: {
@@ -158,10 +163,17 @@ const styles = StyleSheet.create({
     backgroundColor: "#E45858",
   },
 
+  messageWrap: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+  },
+
   message: {
     color: Theme.colors.text,
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
     fontFamily: Theme.fonts.body.medium,
+    flexShrink: 1,
   },
 });

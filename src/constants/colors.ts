@@ -29,7 +29,7 @@ export const Colors = {
   placeholder: "#98A2B3",
   overlay: "rgba(17, 24, 39, 0.08)",
 
-  wave: "#79D9D4",
+  wave: "#CFEFEB",
 
   authBgTop: "#F7F6E8",
   authBgMid: "#FBFAF4",

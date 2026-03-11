@@ -12,16 +12,22 @@ import SocialButton from "@/components/ui/SocialButton";
 import AuthShell from "@/components/auth/AuthShell";
 import ControlledTextField from "@/components/form/ControlledTextField";
 import { EmailIcon, LockIcon } from "@/components/ui/InputIcons";
-import { Paths } from "@/constants/path";
+import { Paths } from "@/constants/paths";
+import { useAppToast } from "@/hooks/useAppToast";
 import { useSignInForm } from "@/hooks/useSignInForms";
 import { Theme } from "@/theme";
 
-
 export default function SignInScreen() {
   const { control, handleSubmit, formState } = useSignInForm();
+  const { showToast } = useAppToast();
 
-  const onSubmit = handleSubmit((values) => {
+  const onSubmit = handleSubmit(async (values) => {
     console.log("Sign in values:", values);
+
+    showToast({
+      type: "success",
+      message: "Signed in successfully.",
+    });
   });
 
   return (
@@ -44,7 +50,10 @@ export default function SignInScreen() {
         </View>
 
         <View style={styles.form}>
-          <SocialButton title="Continue With Google" />
+          <SocialButton
+            title="Continue With Google"
+            onPress={() => router.push(Paths.setPassword)}
+          />
           <DividerText text="OR SIGN IN WITH" />
 
           <ControlledTextField
@@ -74,6 +83,7 @@ export default function SignInScreen() {
             title="Sign In"
             onPress={onSubmit}
             loading={formState.isSubmitting}
+            disabled={!formState.isValid || formState.isSubmitting}
           />
         </View>
 

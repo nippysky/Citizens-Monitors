@@ -74,6 +74,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: Theme.spacing.lg,
+    marginVertical: Theme.spacing.lg
   },
   content: {
     flexDirection: "row",

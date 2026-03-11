@@ -14,8 +14,8 @@ import SocialButton from "@/components/ui/SocialButton";
 import AuthShell from "@/components/auth/AuthShell";
 import AppScreenLoader from "@/components/feedback/AppScreenLaoder";
 import ControlledTextField from "@/components/form/ControlledTextField";
-import { EmailIcon } from "@/components/ui/InputIcons";
-import { Paths } from "@/constants/path";
+import { EmailIcon, LockIcon } from "@/components/ui/InputIcons";
+import { Paths } from "@/constants/paths";
 import { useAppToast } from "@/hooks/useAppToast";
 import { useSignUpForm } from "@/hooks/useSignUpForms";
 import { Theme } from "@/theme";
@@ -29,26 +29,27 @@ export default function SignUpScreen() {
     try {
       setLoading(true);
 
-      console.log("Sign up email value:", values);
-
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 1800));
 
       setLoading(false);
 
       showToast({
         type: "success",
-        message: "Successfully!!",
+        message: "Account created. Verify your email.",
       });
 
       setTimeout(() => {
-        router.push(Paths.setPassword);
+        router.push({
+          pathname: Paths.verifyEmail,
+          params: { email: values.email },
+        });
       }, 450);
     } catch (error) {
       setLoading(false);
 
       showToast({
         type: "error",
-        message: "Something went wrong.",
+        message: "Unable to continue sign up.",
       });
 
       console.log("Sign up simulation error:", error);
@@ -94,10 +95,23 @@ export default function SignUpScreen() {
               startIcon={<EmailIcon />}
             />
 
+            <ControlledTextField
+              control={control}
+              name="password"
+              label="Set Password"
+              placeholder="Your password"
+              secureTextEntry
+              secureToggle
+              autoCapitalize="none"
+              autoCorrect={false}
+              startIcon={<LockIcon />}
+            />
+
             <AppButton
               title="Sign Up"
               onPress={onSubmit}
               loading={formState.isSubmitting || loading}
+              disabled={!formState.isValid || loading}
             />
           </View>
 
