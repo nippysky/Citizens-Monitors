@@ -11,7 +11,14 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ToastProvider } from "@/components/feedback/ToastProvider";
 import { AuthProvider } from "@/context/AuthContext";
 
-SplashScreen.preventAutoHideAsync();
+// Keep splash visible until resources load
+void SplashScreen.preventAutoHideAsync();
+
+// Smooth fade transition
+SplashScreen.setOptions({
+  duration: 500,
+  fade: true,
+});
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
@@ -26,14 +33,16 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (loaded || error) {
-      SplashScreen.hideAsync();
+      void SplashScreen.hideAsync();
     }
   }, [loaded, error]);
 
-  if (!loaded && !error) return null;
+  if (!loaded && !error) {
+    return null;
+  }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#F4F1D9" }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#F7F4EA" }}>
       <SafeAreaProvider>
         <BottomSheetModalProvider>
           <AuthProvider>
@@ -43,7 +52,7 @@ export default function RootLayout() {
                 screenOptions={{
                   headerShown: false,
                   animation: "slide_from_right",
-                  contentStyle: { backgroundColor: "#F4F1D9" },
+                  contentStyle: { backgroundColor: "#F7F4EA" },
                 }}
               />
             </ToastProvider>

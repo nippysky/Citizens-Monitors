@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Citizen Monitor",
+    "name": "Citizen Monitors",
     "slug": "citizen-monitors",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,16 +8,18 @@
     "scheme": "citizenmonitors",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.citizenmonitors"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#F7F4EA",
+        "backgroundColor": "#05A39C",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.citizenmonitors"
     },
     "web": {
       "output": "static",
@@ -28,13 +30,14 @@
       [
         "expo-splash-screen",
         {
+          "backgroundColor": "#05A39C",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#F7F4EA"
+          "resizeMode": "contain"
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-dev-client"
     ],
     "experiments": {
       "typedRoutes": true,
