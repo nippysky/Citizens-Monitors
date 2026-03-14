@@ -1,14 +1,16 @@
+import { router } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import AuthShell from "@/components/auth/AuthShell";
 import AuthTermsSetPassword from "@/components/auth/AuthTermsSetpassword";
-import AppScreenLoader from "@/components/feedback/AppScreenLaoder";
+import AppScreenLoader from "@/components/feedback/AppScreenLoader";
 import ControlledTextField from "@/components/form/ControlledTextField";
 import AppButton from "@/components/ui/AppButton";
 import AppText from "@/components/ui/AppText";
 import BackButton from "@/components/ui/BackButton";
 import { LockIcon } from "@/components/ui/InputIcons";
+import { Paths } from "@/constants/paths";
 import { useAppToast } from "@/hooks/useAppToast";
 import { useSetPasswordForm } from "@/hooks/useSetPasswordForm";
 import { Theme } from "@/theme";
@@ -30,10 +32,14 @@ export default function SetPasswordScreen() {
       });
 
       console.log("Set password values:", values);
+
+      setTimeout(() => {
+        router.replace(Paths.onboarding);
+      }, 400);
     } catch {
       showToast({
         type: "error",
-        message: "Could not set password.",
+        message: "Something went wrong.",
       });
     } finally {
       setLoading(false);

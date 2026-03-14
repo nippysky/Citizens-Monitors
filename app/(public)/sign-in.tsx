@@ -1,34 +1,41 @@
 import { router } from "expo-router";
 import { StyleSheet, View } from "react-native";
 
-import AppButton from "@/components/ui/AppButton";
-import AppText from "@/components/ui/AppText";
-
 import AuthMetaAction from "@/components/auth/AuthMetaAction";
-import BackButton from "@/components/ui/BackButton";
-import DividerText from "@/components/ui/DividerText";
-import SocialButton from "@/components/ui/SocialButton";
-
 import AuthShell from "@/components/auth/AuthShell";
 import ControlledTextField from "@/components/form/ControlledTextField";
+import AppButton from "@/components/ui/AppButton";
+import AppText from "@/components/ui/AppText";
+import BackButton from "@/components/ui/BackButton";
+import DividerText from "@/components/ui/DividerText";
 import { EmailIcon, LockIcon } from "@/components/ui/InputIcons";
+import SocialButton from "@/components/ui/SocialButton";
 import { Paths } from "@/constants/paths";
-import { useAppToast } from "@/hooks/useAppToast";
+import { useAuth } from "@/context/AuthContext";
 import { useSignInForm } from "@/hooks/useSignInForms";
 import { Theme } from "@/theme";
 
 export default function SignInScreen() {
   const { control, handleSubmit, formState } = useSignInForm();
-  const { showToast } = useAppToast();
+  const { signIn } = useAuth();
 
   const onSubmit = handleSubmit(async (values) => {
-    console.log("Sign in values:", values);
-
-    showToast({
-      type: "success",
-      message: "Signed in successfully.",
+    signIn({
+      id: "local-user",
+      email: values.email,
     });
+
+    router.replace(Paths.appHome);
   });
+
+  const handleGoogleContinue = (): void => {
+    signIn({
+      id: "google-user",
+      email: "googleuser@example.com",
+    });
+
+    router.replace(Paths.appHome);
+  };
 
   return (
     <AuthShell
@@ -52,8 +59,9 @@ export default function SignInScreen() {
         <View style={styles.form}>
           <SocialButton
             title="Continue With Google"
-            onPress={() => router.push(Paths.setPassword)}
+            onPress={handleGoogleContinue}
           />
+
           <DividerText text="OR SIGN IN WITH" />
 
           <ControlledTextField
@@ -93,6 +101,7 @@ export default function SignInScreen() {
             actionLabel="Reset Password"
             underline
             stacked
+            onPress={() => {}}
           />
         </View>
       </View>

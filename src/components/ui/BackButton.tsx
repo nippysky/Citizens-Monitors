@@ -23,13 +23,17 @@ export default function BackButton({ label = "Go back", onPress }: Props) {
     }
   };
 
+  const hasLabel = label.trim().length > 0;
+
   return (
     <Pressable onPress={handlePress} style={styles.button} hitSlop={10}>
       <View style={styles.inner}>
         <Ionicons name="chevron-back" size={22} color={Theme.colors.text} />
-        <AppText variant="body" style={styles.label}>
-          {label}
-        </AppText>
+        {hasLabel ? (
+          <AppText variant="body" style={styles.label}>
+            {label}
+          </AppText>
+        ) : null}
       </View>
     </Pressable>
   );

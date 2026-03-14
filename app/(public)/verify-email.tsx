@@ -11,7 +11,7 @@ import AuthShell from "@/components/auth/AuthShell";
 import OtpInputRow from "@/components/auth/OtpInputRow";
 import VerifyEmailFooter from "@/components/auth/VerifyEmailFooter";
 import VerifyEmailIntro from "@/components/auth/VerifyEmailIntor";
-import AppScreenLoader from "@/components/feedback/AppScreenLaoder";
+import AppScreenLoader from "@/components/feedback/AppScreenLoader";
 import AppButton from "@/components/ui/AppButton";
 import BackButton from "@/components/ui/BackButton";
 import { Paths } from "@/constants/paths";
@@ -53,11 +53,11 @@ export default function VerifyEmailScreen() {
     return () => clearInterval(timer);
   }, [secondsLeft]);
 
-  const focusInput = (index: number) => {
+  const focusInput = (index: number): void => {
     inputRefs.current[index]?.focus();
   };
 
-  const handleChangeDigit = (index: number, rawValue: string) => {
+  const handleChangeDigit = (index: number, rawValue: string): void => {
     const value = rawValue.replace(/[^0-9]/g, "").slice(0, 1);
 
     const next = [...code];
@@ -72,13 +72,13 @@ export default function VerifyEmailScreen() {
   const handleKeyPressDigit = (
     index: number,
     e: NativeSyntheticEvent<{ key: string }>
-  ) => {
+  ): void => {
     if (e.nativeEvent.key === "Backspace" && !code[index] && index > 0) {
       focusInput(index - 1);
     }
   };
 
-  const handleResend = async () => {
+  const handleResend = async (): Promise<void> => {
     setLoading(true);
 
     await new Promise((resolve) => setTimeout(resolve, 1200));
@@ -95,7 +95,7 @@ export default function VerifyEmailScreen() {
     focusInput(0);
   };
 
-  const handleVerify = async () => {
+  const handleVerify = async (): Promise<void> => {
     if (!isComplete) return;
 
     try {

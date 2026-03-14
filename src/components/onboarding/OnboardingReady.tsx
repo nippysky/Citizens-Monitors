@@ -1,8 +1,11 @@
+import { router } from "expo-router";
 import { StyleSheet, View } from "react-native";
 
 import AuthShell from "@/components/auth/AuthShell";
 import AppButton from "@/components/ui/AppButton";
 import AppText from "@/components/ui/AppText";
+import { Paths } from "@/constants/paths";
+import { useAuth } from "@/context/AuthContext";
 import CheckIcon from "@/svgs/CheckIcon";
 import CitizenIcon from "@/svgs/CitizenIcon";
 import { Theme } from "@/theme";
@@ -10,26 +13,25 @@ import { OnboardingDraft } from "@/types/onboarding";
 
 type Props = {
   draft: OnboardingDraft;
-  onOpenApp?: () => Promise<void> | void;
 };
 
-export default function OnboardingReady({ draft, onOpenApp }: Props) {
+export default function OnboardingReady({ draft }: Props) {
+  const { completeOnboarding } = useAuth();
+
   const firstName = draft.stepOne.firstName || "Citizen";
 
-  const handleOpen = async () => {
-    await onOpenApp?.();
+  const handleOpen = async (): Promise<void> => {
+    completeOnboarding({
+      firstName: draft.stepOne.firstName,
+    });
 
     console.log("Final onboarding payload:", draft);
 
-    // Replace this with your actual app home route later.
-    // router.replace("/(tabs)");
+    router.replace(Paths.appHome);
   };
 
   return (
-    <AuthShell
-      topSlot={<CitizenIcon width={28} height={28} />}
-      scroll={false}
-    >
+    <AuthShell topSlot={<CitizenIcon width={28} height={28} />} scroll={false}>
       <View style={styles.container}>
         <View style={styles.centerContent}>
           <CheckIcon width={58} height={58} />
@@ -40,7 +42,8 @@ export default function OnboardingReady({ draft, onOpenApp }: Props) {
             </AppText>
 
             <AppText style={styles.subtitle}>
-              Your profile is complete. Time to protect democracy — your polling unit is watching.
+              Your profile is complete. Time to protect democracy — your polling
+              unit is watching.
             </AppText>
           </View>
         </View>

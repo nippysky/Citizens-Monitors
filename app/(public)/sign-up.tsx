@@ -2,20 +2,19 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
+import AuthMetaAction from "@/components/auth/AuthMetaAction";
+import AuthShell from "@/components/auth/AuthShell";
+import AuthTermsNotice from "@/components/auth/AuthTermsNotice";
+import AppScreenLoader from "@/components/feedback/AppScreenLoader";
+import ControlledTextField from "@/components/form/ControlledTextField";
 import AppButton from "@/components/ui/AppButton";
 import AppText from "@/components/ui/AppText";
-
-import AuthMetaAction from "@/components/auth/AuthMetaAction";
-import AuthTermsNotice from "@/components/auth/AuthTermsNotice";
 import BackButton from "@/components/ui/BackButton";
 import DividerText from "@/components/ui/DividerText";
-import SocialButton from "@/components/ui/SocialButton";
-
-import AuthShell from "@/components/auth/AuthShell";
-import AppScreenLoader from "@/components/feedback/AppScreenLaoder";
-import ControlledTextField from "@/components/form/ControlledTextField";
 import { EmailIcon, LockIcon } from "@/components/ui/InputIcons";
+import SocialButton from "@/components/ui/SocialButton";
 import { Paths } from "@/constants/paths";
+import { useAuth } from "@/context/AuthContext";
 import { useAppToast } from "@/hooks/useAppToast";
 import { useSignUpForm } from "@/hooks/useSignUpForms";
 import { Theme } from "@/theme";
@@ -23,6 +22,7 @@ import { Theme } from "@/theme";
 export default function SignUpScreen() {
   const { control, handleSubmit, formState } = useSignUpForm();
   const { showToast } = useAppToast();
+  const { signIn } = useAuth();
   const [loading, setLoading] = useState(false);
 
   const onSubmit = handleSubmit(async (values) => {
@@ -30,6 +30,11 @@ export default function SignUpScreen() {
       setLoading(true);
 
       await new Promise((resolve) => setTimeout(resolve, 1800));
+
+      signIn({
+        id: "local-user",
+        email: values.email,
+      });
 
       setLoading(false);
 
@@ -56,6 +61,15 @@ export default function SignUpScreen() {
     }
   });
 
+  const handleGoogleContinue = (): void => {
+    signIn({
+      id: "google-user",
+      email: "googleuser@example.com",
+    });
+
+    router.push(Paths.setPassword);
+  };
+
   return (
     <>
       <AuthShell
@@ -79,7 +93,7 @@ export default function SignUpScreen() {
           <View style={styles.form}>
             <SocialButton
               title="Continue With Google"
-              onPress={() => router.push(Paths.setPassword)}
+              onPress={handleGoogleContinue}
             />
 
             <DividerText text="OR SIGN UP WITH EMAIL" />

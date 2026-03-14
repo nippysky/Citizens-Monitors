@@ -1,8 +1,8 @@
-import { Redirect } from "expo-router";
+import { Redirect, Stack } from "expo-router";
 
 import { useAuth } from "@/context/AuthContext";
 
-export default function IndexScreen() {
+export default function AppLayout() {
   const { isAuthenticated, isOnboardingComplete } = useAuth();
 
   if (!isAuthenticated) {
@@ -13,5 +13,12 @@ export default function IndexScreen() {
     return <Redirect href="/(public)/onboarding" />;
   }
 
-  return <Redirect href="/(app)/(tabs)/home" />;
+  return (
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        animation: "slide_from_right",
+      }}
+    />
+  );
 }
