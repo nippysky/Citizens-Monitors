@@ -7,14 +7,22 @@ import OnboardingStepFour from "@/components/onboarding/OnboardingStepFour";
 import OnboardingStepOne from "@/components/onboarding/OnboardingStepOne";
 import OnboardingStepThree from "@/components/onboarding/OnboardingStepThree";
 import OnboardingStepTwo from "@/components/onboarding/OnboardingStepTwo";
+import OnboardingVerifyIdetity from "@/components/onboarding/OnboardingVerifyIdetity";
 import AppButton from "@/components/ui/AppButton";
 import AppPageShell from "@/components/ui/AppPageShell";
-import { CitizenType, OnboardingDraft, StepFourForm, StepOneForm, StepThreeForm } from "@/types/onboarding";
+import {
+  CitizenType,
+  OnboardingDraft,
+  StepFourForm,
+  StepOneForm,
+  StepThreeForm,
+} from "@/types/onboarding";
 
 export default function OnboardingIndexScreen() {
   useLocalSearchParams<{ email?: string }>();
 
   const [step, setStep] = useState<number>(1);
+  const [showReady, setShowReady] = useState<boolean>(false);
 
   const [draft, setDraft] = useState<OnboardingDraft>({
     stepOne: {
@@ -44,6 +52,9 @@ export default function OnboardingIndexScreen() {
     },
   });
 
+  const isObserver = draft.citizenType === "observer";
+  const totalVisibleSteps = isObserver ? 5 : 4;
+
   const canContinueStep1 = useMemo((): boolean => {
     const { stepOne } = draft;
 
@@ -57,11 +68,22 @@ export default function OnboardingIndexScreen() {
     );
   }, [draft]);
 
-  const canContinueStep2 = useMemo((): boolean => {
+  const canContinuePollingUnit = useMemo((): boolean => {
+    const { stepFour } = draft;
+
+    return (
+      stepFour.pollingState.trim().length > 0 &&
+      stepFour.localGovernmentArea.trim().length > 0 &&
+      stepFour.ward.trim().length > 0 &&
+      stepFour.pollingUnit.trim().length > 0
+    );
+  }, [draft]);
+
+  const canContinueCitizenType = useMemo((): boolean => {
     return draft.citizenType !== "";
   }, [draft.citizenType]);
 
-  const canContinueStep3 = useMemo((): boolean => {
+  const canContinueCoverage = useMemo((): boolean => {
     const { citizenType, stepThree } = draft;
     const isPublicViewer = citizenType === "public-viewer";
 
@@ -82,25 +104,20 @@ export default function OnboardingIndexScreen() {
     );
   }, [draft]);
 
-  const canContinueStep4 = useMemo((): boolean => {
-    const { stepFour } = draft;
-
-    return (
-      stepFour.pollingState.trim().length > 0 &&
-      stepFour.localGovernmentArea.trim().length > 0 &&
-      stepFour.ward.trim().length > 0 &&
-      stepFour.pollingUnit.trim().length > 0
-    );
-  }, [draft]);
-
   const handleBack = (): void => {
-    if (step === 1) {
-      router.back();
+    if (showReady) {
+      setShowReady(false);
+
+      if (isObserver) {
+        setStep(5);
+      } else {
+        setStep(4);
+      }
       return;
     }
 
-    if (step === 5) {
-      setStep(4);
+    if (step === 1) {
+      router.back();
       return;
     }
 
@@ -113,18 +130,23 @@ export default function OnboardingIndexScreen() {
       return;
     }
 
-    if (step === 2 && canContinueStep2) {
+    if (step === 2 && canContinuePollingUnit) {
       setStep(3);
       return;
     }
 
-    if (step === 3 && canContinueStep3) {
+    if (step === 3 && canContinueCitizenType) {
       setStep(4);
       return;
     }
 
-    if (step === 4 && canContinueStep4) {
-      setStep(5);
+    if (step === 4 && canContinueCoverage) {
+      if (isObserver) {
+        setStep(5);
+        return;
+      }
+
+      setShowReady(true);
     }
   };
 
@@ -156,17 +178,25 @@ export default function OnboardingIndexScreen() {
     }));
   };
 
-  if (step === 5) {
+  const handleVerifyComplete = (): void => {
+    setShowReady(true);
+  };
+
+  const handleVerifySkip = (): void => {
+    setShowReady(true);
+  };
+
+  if (showReady) {
     return <OnboardingReady draft={draft} />;
   }
 
-  const continueLabel = step === 4 ? "Finish Setup" : "Save & Continue";
+  const continueLabel = step === 4 ? "Save & Continue" : "Save & Continue";
 
   const continueDisabled =
     (step === 1 && !canContinueStep1) ||
-    (step === 2 && !canContinueStep2) ||
-    (step === 3 && !canContinueStep3) ||
-    (step === 4 && !canContinueStep4);
+    (step === 2 && !canContinuePollingUnit) ||
+    (step === 3 && !canContinueCitizenType) ||
+    (step === 4 && !canContinueCoverage);
 
   const renderStep = () => {
     switch (step) {
@@ -180,13 +210,21 @@ export default function OnboardingIndexScreen() {
 
       case 2:
         return (
+          <OnboardingStepFour
+            value={draft.stepFour}
+            onChange={handleStepFourChange}
+          />
+        );
+
+      case 3:
+        return (
           <OnboardingStepTwo
             value={draft.citizenType}
             onChange={handleCitizenTypeChange}
           />
         );
 
-      case 3:
+      case 4:
         return (
           <OnboardingStepThree
             citizenType={draft.citizenType}
@@ -195,11 +233,11 @@ export default function OnboardingIndexScreen() {
           />
         );
 
-      case 4:
+      case 5:
         return (
-          <OnboardingStepFour
-            value={draft.stepFour}
-            onChange={handleStepFourChange}
+          <OnboardingVerifyIdetity
+            onComplete={handleVerifyComplete}
+            onSkip={handleVerifySkip}
           />
         );
 
@@ -208,20 +246,24 @@ export default function OnboardingIndexScreen() {
     }
   };
 
+  const shouldShowFooterButton = step !== 5;
+
   return (
     <AppPageShell
-      key={step}
+      key={`${step}-${draft.citizenType}`}
       footer={
-        <AppButton
-          title={continueLabel}
-          onPress={handleContinue}
-          disabled={continueDisabled}
-        />
+        shouldShowFooterButton ? (
+          <AppButton
+            title={continueLabel}
+            onPress={handleContinue}
+            disabled={continueDisabled}
+          />
+        ) : undefined
       }
     >
       <OnboardingHeader
         step={step}
-        total={4}
+        total={totalVisibleSteps}
         leading={step === 1 ? "logo" : "back"}
         onBack={handleBack}
         onHelp={() => {}}

@@ -1,3 +1,4 @@
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import { Platform, StyleSheet, View } from "react-native";
@@ -8,16 +9,15 @@ import { Theme } from "@/theme";
 type TabIconProps = {
   focused: boolean;
   color: string;
-  size: number;
-  icon: keyof typeof Ionicons.glyphMap;
   label: string;
+  icon: React.ReactNode;
 };
 
-function TabIcon({ focused, color, size, icon, label }: TabIconProps) {
+function TabIcon({ focused, color, label, icon }: TabIconProps) {
   return (
     <View style={styles.tabIconWrap}>
       <View style={[styles.iconPill, focused && styles.iconPillActive]}>
-        <Ionicons name={icon} size={size} color={color} />
+        {icon}
       </View>
 
       <AppText
@@ -49,13 +49,12 @@ export default function TabsLayout() {
         name="home"
         options={{
           title: "Home",
-          tabBarIcon: ({ focused, color, size }) => (
+          tabBarIcon: ({ focused, color }) => (
             <TabIcon
               focused={focused}
               color={color}
-              size={22}
-              icon="home-outline"
               label="Home"
+              icon={<Ionicons name="home-outline" size={22} color={color} />}
             />
           ),
         }}
@@ -65,45 +64,54 @@ export default function TabsLayout() {
         name="elections"
         options={{
           title: "Elections",
-          tabBarIcon: ({ focused, color, size }) => (
+          tabBarIcon: ({ focused, color }) => (
             <TabIcon
               focused={focused}
               color={color}
-              size={22}
-              icon="grid-outline"
               label="Elections"
+              icon={
+                <MaterialCommunityIcons
+                  name="vote-outline"
+                  size={24}
+                  color={color}
+                />
+              }
             />
           ),
         }}
       />
 
       <Tabs.Screen
-        name="live"
+        name="collation"
         options={{
-          title: "Live",
-          tabBarIcon: ({ focused, color, size }) => (
+          title: "Collation",
+          tabBarIcon: ({ focused, color }) => (
             <TabIcon
               focused={focused}
               color={color}
-              size={22}
-              icon="pulse-outline"
-              label="Live"
+              label="Collation"
+              icon={<Ionicons name="filter-outline" size={22} color={color} />}
             />
           ),
         }}
       />
 
       <Tabs.Screen
-        name="news"
+        name="alerts"
         options={{
-          title: "News",
-          tabBarIcon: ({ focused, color, size }) => (
+          title: "Alerts",
+          tabBarIcon: ({ focused, color }) => (
             <TabIcon
               focused={focused}
               color={color}
-              size={22}
-              icon="newspaper-outline"
-              label="News"
+              label="Alerts"
+              icon={
+                <Ionicons
+                  name="notifications-outline"
+                  size={22}
+                  color={color}
+                />
+              }
             />
           ),
         }}
@@ -113,13 +121,12 @@ export default function TabsLayout() {
         name="me"
         options={{
           title: "Me",
-          tabBarIcon: ({ focused, color, size }) => (
+          tabBarIcon: ({ focused, color }) => (
             <TabIcon
               focused={focused}
               color={color}
-              size={22}
-              icon="person-outline"
               label="Me"
+              icon={<Ionicons name="person-outline" size={22} color={color} />}
             />
           ),
         }}

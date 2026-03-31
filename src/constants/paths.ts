@@ -14,6 +14,7 @@ export const Paths = {
   appProfile: "/(app)/(tabs)/profile",
   appNotifications: "/(app)/notifications",
   appMyReports: "/(app)/my-reports",
+  appElectionCalendar: "/(app)/elections-calendar",
 
   electionDetails: (id: string) =>
     ({

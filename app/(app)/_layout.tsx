@@ -1,5 +1,6 @@
 import { Redirect, Stack } from "expo-router";
 
+import { ElectionsProvider } from "@/context/ElectionsContext";
 import { useAuth } from "@/context/AuthContext";
 
 export default function AppLayout() {
@@ -14,11 +15,13 @@ export default function AppLayout() {
   }
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        animation: "slide_from_right",
-      }}
-    />
+    <ElectionsProvider>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: "slide_from_right",
+        }}
+      />
+    </ElectionsProvider>
   );
 }
