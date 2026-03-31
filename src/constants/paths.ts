@@ -8,8 +8,8 @@ export const Paths = {
 
   appHome: "/(app)/(tabs)/home",
   appElections: "/(app)/(tabs)/elections",
-  appLive: "/(app)/(tabs)/live",
-  appNews: "/(app)/(tabs)/news",
+  appLive: "/(app)/(tabs)/collation",
+  appAlerts: "/(app)/(tabs)/alerts",
   appMe: "/(app)/(tabs)/me",
   appProfile: "/(app)/(tabs)/profile",
   appNotifications: "/(app)/notifications",

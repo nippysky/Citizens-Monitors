@@ -9,7 +9,12 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.citizenmonitors"
+      "bundleIdentifier": "com.anonymous.citizenmonitors",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Citizen Monitor uses your camera so you can capture election evidence and submit incident reports.",
+        "NSPhotoLibraryUsageDescription": "Citizen Monitor uses your photo library so you can attach election evidence from your gallery.",
+        "NSLocationWhenInUseUsageDescription": "Citizen Monitor uses your location to verify that reports and evidence are submitted from the correct polling area."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +24,14 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.citizenmonitors"
+      "package": "com.anonymous.citizenmonitors",
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO"
+      ]
     },
     "web": {
       "output": "static",
@@ -36,8 +48,22 @@
           "resizeMode": "contain"
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Citizen Monitor accesses your photos so you can attach election evidence from your gallery.",
+          "cameraPermission": "Citizen Monitor accesses your camera so you can capture live election evidence."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Citizen Monitor uses your location to verify that reports are submitted from the correct polling area."
+        }
+      ],
       "expo-font",
-      "expo-dev-client"
+      "expo-dev-client",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,

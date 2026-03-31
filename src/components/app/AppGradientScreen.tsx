@@ -47,9 +47,9 @@ export default function AppGradientScreen({
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
           {content}
-
-          {footer ? <View style={styles.footer}>{footer}</View> : null}
         </KeyboardAvoidingView>
+
+        {footer ? <View style={styles.footer}>{footer}</View> : null}
       </View>
     </SafeAreaView>
   );

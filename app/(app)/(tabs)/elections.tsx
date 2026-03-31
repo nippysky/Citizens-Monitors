@@ -1,7 +1,14 @@
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { Animated, Easing, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import {
+  Animated,
+  Easing,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import { useEffect, useMemo, useRef } from "react";
 
 import AppGradientScreen from "@/components/app/AppGradientScreen";
@@ -18,9 +25,9 @@ import {
   electionsDummyData,
   filterElections,
   formatDisplayDate,
-  parseDateKeyLocal,
   getElectionDateRangeLabel,
   getElectionHeadline,
+  parseDateKeyLocal,
   startOfMonth,
 } from "@/data/elections";
 import { Theme } from "@/theme";
@@ -31,6 +38,10 @@ export default function ElectionsScreen() {
 
   const badgeOpacity = useRef(new Animated.Value(0)).current;
   const badgeTranslateY = useRef(new Animated.Value(-6)).current;
+
+  const contentOpacity = useRef(new Animated.Value(1)).current;
+  const contentTranslateY = useRef(new Animated.Value(0)).current;
+  const contentScale = useRef(new Animated.Value(1)).current;
 
   const {
     scope,
@@ -79,6 +90,57 @@ export default function ElectionsScreen() {
     setVisibleCalendarMonth(startOfMonth(parseDateKeyLocal(todayKey)));
   };
 
+  const handleScopeChange = (nextScope: typeof scope): void => {
+    if (nextScope === scope) return;
+
+    Animated.parallel([
+      Animated.timing(contentOpacity, {
+        toValue: 0,
+        duration: 120,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+      Animated.timing(contentTranslateY, {
+        toValue: 8,
+        duration: 120,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+      Animated.timing(contentScale, {
+        toValue: 0.992,
+        duration: 120,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setScope(nextScope);
+
+      contentTranslateY.setValue(-8);
+      contentScale.setValue(0.996);
+
+      Animated.parallel([
+        Animated.timing(contentOpacity, {
+          toValue: 1,
+          duration: 190,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(contentTranslateY, {
+          toValue: 0,
+          duration: 190,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(contentScale, {
+          toValue: 1,
+          duration: 190,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
+  };
+
   return (
     <AppGradientScreen>
       <View style={styles.container}>
@@ -87,7 +149,7 @@ export default function ElectionsScreen() {
             onNotifications={() => router.push(Paths.appNotifications)}
           />
 
-          <ElectionScopeTabs value={scope} onChange={setScope} />
+          <ElectionScopeTabs value={scope} onChange={handleScopeChange} />
 
           <View style={styles.discoverWrap}>
             <View style={styles.discoverTextBlock}>
@@ -171,7 +233,18 @@ export default function ElectionsScreen() {
           ) : null}
         </View>
 
-        <View style={styles.feedSection}>
+        <Animated.View
+          style={[
+            styles.feedSection,
+            {
+              opacity: contentOpacity,
+              transform: [
+                { translateY: contentTranslateY },
+                { scale: contentScale },
+              ],
+            },
+          ]}
+        >
           <ScrollView
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.cardsWrap}
@@ -195,7 +268,7 @@ export default function ElectionsScreen() {
 
             <TabBarSpacer />
           </ScrollView>
-        </View>
+        </Animated.View>
 
         <ElectionFiltersBottomSheet
           sheetRef={filterSheetRef}

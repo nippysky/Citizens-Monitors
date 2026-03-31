@@ -133,21 +133,22 @@ export default function AppInput({
         ]}
       >
         {renderStartIcon()}
-<TextInput
-  {...props}
-  editable={editable}
-  secureTextEntry={resolvedSecureTextEntry}
-  placeholderTextColor={Theme.colors.placeholder}
-  style={[styles.input, !editable && styles.inputDisabled, style]}
-  onFocus={(e) => {
-    setIsFocused(true);
-    onFocus?.(e);
-  }}
-  onBlur={(e) => {
-    setIsFocused(false);
-    onBlur?.(e);
-  }}
-/>
+
+        <TextInput
+          {...props}
+          editable={editable}
+          secureTextEntry={resolvedSecureTextEntry}
+          placeholderTextColor={Theme.colors.placeholder}
+          style={[styles.input, !editable && styles.inputDisabled, style]}
+          onFocus={(e) => {
+            setIsFocused(true);
+            onFocus?.(e);
+          }}
+          onBlur={(e) => {
+            setIsFocused(false);
+            onBlur?.(e);
+          }}
+        />
 
         {renderEndIcon()}
       </View>
