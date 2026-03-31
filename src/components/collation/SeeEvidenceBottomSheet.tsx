@@ -1,9 +1,19 @@
-import { BottomSheetModal } from "@gorhom/bottom-sheet";
+import {
+  BottomSheetBackdrop,
+  BottomSheetModal,
+  BottomSheetScrollView,
+} from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
-import { forwardRef } from "react";
-import { Image, StyleSheet, View } from "react-native";
+import { forwardRef, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  ImageBackground,
+  Pressable,
+  StyleSheet,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import AppBottomSheet from "@/components/ui/AppBottomSheet";
 import AppText from "@/components/ui/AppText";
 import CollationVideoPlayer from "@/components/collation/CollationVideoPlayer";
 import { Theme } from "@/theme";
@@ -40,6 +50,11 @@ const demoVideo =
 
 const SeeEvidenceBottomSheet = forwardRef<BottomSheetModal, Props>(
   function SeeEvidenceBottomSheet({ evidence }, ref) {
+    const insets = useSafeAreaInsets();
+    const snapPoints = useMemo(() => ["90%"], []);
+    const [imageLoading, setImageLoading] = useState(true);
+    const [imageFailed, setImageFailed] = useState(false);
+
     if (!evidence) return null;
 
     const imageUri = evidence.imageUri ?? demoImage;
@@ -48,9 +63,51 @@ const SeeEvidenceBottomSheet = forwardRef<BottomSheetModal, Props>(
     const verificationStatus = evidence.verificationStatus ?? "verified";
     const sourceType = evidence.sourceType ?? "observer-upload";
 
+    const handleClose = () => {
+      if (ref && typeof ref !== "function" && ref.current) {
+        ref.current.dismiss();
+      }
+    };
+
     return (
-      <AppBottomSheet ref={ref} title="See Evidence" snapPoints={["90%"]}>
-        <View style={styles.content}>
+      <BottomSheetModal
+        ref={ref}
+        snapPoints={snapPoints}
+        enablePanDownToClose
+        topInset={insets.top + 12}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
+        backdropComponent={(props) => (
+          <BottomSheetBackdrop
+            {...props}
+            appearsOnIndex={0}
+            disappearsOnIndex={-1}
+            opacity={0.32}
+            pressBehavior="close"
+          />
+        )}
+        handleIndicatorStyle={styles.handle}
+        backgroundStyle={styles.sheetBackground}
+      >
+        <BottomSheetScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: insets.bottom + 22 },
+          ]}
+        >
+          <View style={styles.header}>
+            <AppText style={styles.headerTitle}>See Evidence</AppText>
+
+            <Pressable onPress={handleClose} hitSlop={8} style={styles.closeBtn}>
+              <Ionicons name="close" size={22} color={Theme.colors.textMuted} />
+            </Pressable>
+          </View>
+
+          <View style={styles.divider} />
+
           <View style={styles.heroCard}>
             <View style={styles.heroTopRow}>
               <View style={styles.heroTopLeft}>
@@ -162,7 +219,48 @@ const SeeEvidenceBottomSheet = forwardRef<BottomSheetModal, Props>(
             </View>
 
             <View style={styles.mediaCard}>
-              <Image source={{ uri: imageUri }} style={styles.image} />
+              {!imageFailed ? (
+                <ImageBackground
+                  source={{ uri: imageUri }}
+                  style={styles.image}
+                  imageStyle={styles.imageInner}
+                  onLoadStart={() => {
+                    setImageLoading(true);
+                    setImageFailed(false);
+                  }}
+                  onLoadEnd={() => setImageLoading(false)}
+                  onError={() => {
+                    setImageLoading(false);
+                    setImageFailed(true);
+                  }}
+                >
+                  {imageLoading ? (
+                    <View style={styles.imageOverlay}>
+                      <ActivityIndicator color={Theme.colors.primary} />
+                      <AppText style={styles.imageOverlayText}>
+                        Loading evidence image...
+                      </AppText>
+                    </View>
+                  ) : null}
+                </ImageBackground>
+              ) : (
+                <View style={styles.imageFallback}>
+                  <View style={styles.imageFallbackIcon}>
+                    <Ionicons
+                      name="image-outline"
+                      size={24}
+                      color={Theme.colors.textMuted}
+                    />
+                  </View>
+                  <AppText style={styles.imageFallbackTitle}>
+                    Evidence image unavailable
+                  </AppText>
+                  <AppText style={styles.imageFallbackText}>
+                    The uploaded image could not be loaded right now. Try again later
+                    or re-open the sheet.
+                  </AppText>
+                </View>
+              )}
             </View>
 
             <View style={styles.infoStrip}>
@@ -285,10 +383,7 @@ const SeeEvidenceBottomSheet = forwardRef<BottomSheetModal, Props>(
             <View style={styles.verifiedMetaBody}>
               <VerifiedMetaRow
                 label="Election"
-                value={
-                  evidence.electionName ??
-                  "Alimosho Local Government Election 2026"
-                }
+                value={evidence.electionName ?? "Alimosho Local Government Election 2026"}
               />
               <VerifiedMetaRow
                 label="Submitted By"
@@ -304,10 +399,7 @@ const SeeEvidenceBottomSheet = forwardRef<BottomSheetModal, Props>(
               />
               <VerifiedMetaRow
                 label="Geo Address"
-                value={
-                  evidence.locationMeta ??
-                  "No 20 Ao, Alimosho, Lagos State, Nigeria"
-                }
+                value={evidence.locationMeta ?? "No 20 Ao, Alimosho, Lagos State, Nigeria"}
               />
             </View>
 
@@ -323,8 +415,8 @@ const SeeEvidenceBottomSheet = forwardRef<BottomSheetModal, Props>(
               </AppText>
             </View>
           </View>
-        </View>
-      </AppBottomSheet>
+        </BottomSheetScrollView>
+      </BottomSheetModal>
     );
   }
 );
@@ -382,8 +474,50 @@ function VerifiedMetaRow({
 }
 
 const styles = StyleSheet.create({
+  sheetBackground: {
+    backgroundColor: Theme.colors.background,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+  },
+
+  handle: {
+    backgroundColor: "rgba(17, 26, 50, 0.12)",
+    width: 44,
+  },
+
   content: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
     gap: 18,
+  },
+
+  header: {
+    minHeight: 62,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  headerTitle: {
+    fontSize: 18,
+    lineHeight: 24,
+    fontFamily: Theme.fonts.heading.semibold,
+    color: Theme.colors.text,
+  },
+
+  closeBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(255,255,255,0.74)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  divider: {
+    height: 1,
+    backgroundColor: "#DFE4EB",
+    marginHorizontal: -16,
   },
 
   heroCard: {
@@ -577,8 +711,63 @@ const styles = StyleSheet.create({
   image: {
     width: "100%",
     height: 260,
-    resizeMode: "cover",
     backgroundColor: "#EEF2F6",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  imageInner: {
+    resizeMode: "cover",
+  },
+
+  imageOverlay: {
+    position: "absolute",
+    inset: 0,
+    backgroundColor: "rgba(248,250,252,0.82)",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+
+  imageOverlayText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Theme.colors.textMuted,
+    fontFamily: Theme.fonts.body.medium,
+  },
+
+  imageFallback: {
+    height: 260,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    gap: 10,
+    backgroundColor: "#F8FAFC",
+  },
+
+  imageFallbackIcon: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: "#EEF2F6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  imageFallbackTitle: {
+    fontSize: 16,
+    lineHeight: 20,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.semibold,
+    textAlign: "center",
+  },
+
+  imageFallbackText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Theme.colors.textMuted,
+    textAlign: "center",
+    maxWidth: 260,
   },
 
   infoStrip: {

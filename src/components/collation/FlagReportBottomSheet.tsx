@@ -1,4 +1,8 @@
-import { BottomSheetModal } from "@gorhom/bottom-sheet";
+import {
+  BottomSheetBackdrop,
+  BottomSheetModal,
+  BottomSheetScrollView,
+} from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
 import { forwardRef, useMemo, useState } from "react";
 import {
@@ -8,8 +12,8 @@ import {
   StyleSheet,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import AppBottomSheet from "@/components/ui/AppBottomSheet";
 import AppButton from "@/components/ui/AppButton";
 import AppInput from "@/components/ui/AppInput";
 import AppText from "@/components/ui/AppText";
@@ -36,6 +40,7 @@ type BusyAction =
 
 const FlagReportBottomSheet = forwardRef<BottomSheetModal, Props>(
   function FlagReportBottomSheet({ onSubmitted }, ref) {
+    const insets = useSafeAreaInsets();
     const { showToast } = useAppToast();
     const {
       busy,
@@ -51,6 +56,8 @@ const FlagReportBottomSheet = forwardRef<BottomSheetModal, Props>(
     const [videoAsset, setVideoAsset] = useState<PickedMedia | null>(null);
     const [locationInfo, setLocationInfo] = useState<ResolvedLocation | null>(null);
     const [busyAction, setBusyAction] = useState<BusyAction>(null);
+
+    const snapPoints = useMemo(() => ["92%"], []);
 
     const canSubmit = useMemo(() => {
       return reason.trim().length > 8 && !!locationInfo && !!imageAsset;
@@ -184,7 +191,8 @@ const FlagReportBottomSheet = forwardRef<BottomSheetModal, Props>(
       if (!canSubmit) {
         showToast({
           type: "error",
-          message: "Add your reason, verify location, and attach image evidence before submitting.",
+          message:
+            "Add your reason, verify location, and attach image evidence before submitting.",
         });
         return;
       }
@@ -208,8 +216,44 @@ const FlagReportBottomSheet = forwardRef<BottomSheetModal, Props>(
     const videoReady = !!videoAsset;
 
     return (
-      <AppBottomSheet ref={ref} title="Flagging Report" snapPoints={["92%"]}>
-        <View style={styles.content}>
+      <BottomSheetModal
+        ref={ref}
+        snapPoints={snapPoints}
+        enablePanDownToClose
+        topInset={insets.top + 12}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
+        backdropComponent={(props) => (
+          <BottomSheetBackdrop
+            {...props}
+            appearsOnIndex={0}
+            disappearsOnIndex={-1}
+            opacity={0.32}
+            pressBehavior="close"
+          />
+        )}
+        handleIndicatorStyle={styles.handle}
+        backgroundStyle={styles.sheetBackground}
+      >
+        <BottomSheetScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: insets.bottom + 22 },
+          ]}
+        >
+          <View style={styles.header}>
+            <AppText style={styles.headerTitle}>Flagging Report</AppText>
+
+            <Pressable onPress={closeSheet} hitSlop={8} style={styles.closeBtn}>
+              <Ionicons name="close" size={22} color={Theme.colors.textMuted} />
+            </Pressable>
+          </View>
+
+          <View style={styles.divider} />
+
           <View style={styles.introCard}>
             <AppText style={styles.introTitle}>
               Your report helps ensure a transparent election process.
@@ -221,23 +265,10 @@ const FlagReportBottomSheet = forwardRef<BottomSheetModal, Props>(
           </View>
 
           <View style={styles.progressRow}>
-            <StatusPill
-              label="Reason"
-              complete={reason.trim().length > 8}
-            />
-            <StatusPill
-              label="Location"
-              complete={locationReady}
-            />
-            <StatusPill
-              label="Image"
-              complete={imageReady}
-            />
-            <StatusPill
-              label="Video"
-              complete={videoReady}
-              optional
-            />
+            <StatusPill label="Reason" complete={reason.trim().length > 8} />
+            <StatusPill label="Location" complete={locationReady} />
+            <StatusPill label="Image" complete={imageReady} />
+            <StatusPill label="Video" complete={videoReady} optional />
           </View>
 
           <View style={styles.section}>
@@ -310,8 +341,8 @@ const FlagReportBottomSheet = forwardRef<BottomSheetModal, Props>(
               Location metadata is attached when verified. Image evidence is required.
             </AppText>
           </View>
-        </View>
-      </AppBottomSheet>
+        </BottomSheetScrollView>
+      </BottomSheetModal>
     );
   }
 );
@@ -643,8 +674,50 @@ function ActionButton({
 }
 
 const styles = StyleSheet.create({
+  sheetBackground: {
+    backgroundColor: Theme.colors.background,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+  },
+
+  handle: {
+    backgroundColor: "rgba(17, 26, 50, 0.12)",
+    width: 44,
+  },
+
   content: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
     gap: 18,
+  },
+
+  header: {
+    minHeight: 62,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  headerTitle: {
+    fontSize: 18,
+    lineHeight: 24,
+    fontFamily: Theme.fonts.heading.semibold,
+    color: Theme.colors.text,
+  },
+
+  closeBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(255,255,255,0.74)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  divider: {
+    height: 1,
+    backgroundColor: "#DFE4EB",
+    marginHorizontal: -16,
   },
 
   introCard: {

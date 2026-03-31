@@ -30,10 +30,7 @@ export default function CollationVideoPlayer({
 
   if (!isActivated) {
     return (
-      <Pressable
-        onPress={() => setIsActivated(true)}
-        style={styles.previewCard}
-      >
+      <Pressable onPress={() => setIsActivated(true)} style={styles.previewCard}>
         <View style={styles.previewIconWrap}>
           <Ionicons name="play" size={24} color={Theme.colors.primary} />
         </View>
@@ -55,10 +52,12 @@ export default function CollationVideoPlayer({
       <VideoView
         style={styles.video}
         player={player}
-        allowsFullscreen
-        allowsPictureInPicture={false}
         nativeControls
         contentFit="cover"
+        allowsPictureInPicture={false}
+        fullscreenOptions={{
+          enable: true,
+        }}
       />
     </View>
   );

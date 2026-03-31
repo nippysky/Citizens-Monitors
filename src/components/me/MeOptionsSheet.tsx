@@ -1,8 +1,10 @@
-import { BottomSheetModal } from "@gorhom/bottom-sheet";
-import { forwardRef } from "react";
+import {
+  BottomSheetModal,
+  BottomSheetScrollView,
+} from "@gorhom/bottom-sheet";
+import { forwardRef, useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
-import AppBottomSheet from "@/components/ui/AppBottomSheet";
 import AppText from "@/components/ui/AppText";
 import { Theme } from "@/theme";
 
@@ -13,78 +15,100 @@ type Props = {
   onSelect: (value: string) => void;
 };
 
-const MeOptionsSheet = forwardRef<BottomSheetModal, Props>(function MeOptionsSheet(
-  { title, options, selectedValue, onSelect },
-  ref
-) {
-  const handleSelect = (value: string) => {
-    onSelect(value);
+const MeOptionsSheet = forwardRef<BottomSheetModal, Props>(
+  function MeOptionsSheet({ title, options, selectedValue, onSelect }, ref) {
+    const snapPoints = useMemo(() => ["50%", "75%"], []);
 
-    if (ref && typeof ref !== "function" && ref.current) {
-      ref.current.dismiss();
-    }
-  };
+    const handleSelect = (value: string) => {
+      onSelect(value);
+      if (ref && typeof ref !== "function" && ref.current) {
+        ref.current.dismiss();
+      }
+    };
 
-  return (
-    <AppBottomSheet ref={ref} title={title} snapPoints={["58%"]}>
-      <View style={styles.wrap}>
-        {options.map((option, index) => {
-          const isLast = index === options.length - 1;
-          const isActive = selectedValue === option;
+    return (
+      <BottomSheetModal
+        ref={ref}
+        snapPoints={snapPoints}
+        backgroundStyle={styles.sheetBg}
+        handleIndicatorStyle={styles.handle}
+      >
+        <View style={styles.container}>
+          <AppText style={styles.title}>{title}</AppText>
 
-          return (
-            <Pressable
-              key={option}
-              onPress={() => handleSelect(option)}
-              style={[
-                styles.row,
-                !isLast && styles.rowBorder,
-                isActive && styles.rowActive,
-              ]}
-            >
-              <AppText style={[styles.label, isActive && styles.labelActive]}>
-                {option}
-              </AppText>
-            </Pressable>
-          );
-        })}
-      </View>
-    </AppBottomSheet>
-  );
-});
+          <BottomSheetScrollView showsVerticalScrollIndicator={false}>
+            <View style={styles.wrap}>
+              {options.map((option, index) => {
+                const isActive = selectedValue === option;
+
+                return (
+                  <Pressable
+                    key={option}
+                    onPress={() => handleSelect(option)}
+                    style={[
+                      styles.row,
+                      isActive && styles.rowActive,
+                    ]}
+                  >
+                    <AppText
+                      style={[
+                        styles.label,
+                        isActive && styles.labelActive,
+                      ]}
+                    >
+                      {option}
+                    </AppText>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </BottomSheetScrollView>
+        </View>
+      </BottomSheetModal>
+    );
+  }
+);
 
 export default MeOptionsSheet;
 
 const styles = StyleSheet.create({
-  wrap: {
-    borderRadius: 18,
-    overflow: "hidden",
-    backgroundColor: "rgba(255,255,255,0.28)",
-    borderWidth: 1,
-    borderColor: "#D9DEE8",
+  sheetBg: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
   },
-
+  handle: {
+    backgroundColor: "#D1D5DB",
+    width: 40,
+  },
+  container: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+  },
+  title: {
+    fontSize: 17,
+    marginBottom: 14,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+  wrap: {
+    borderRadius: 16,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
   row: {
     minHeight: 54,
     justifyContent: "center",
     paddingHorizontal: 16,
+    backgroundColor: "#FFFFFF",
   },
-
-  rowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: "#D9DEE8",
-  },
-
   rowActive: {
-    backgroundColor: "rgba(5,163,156,0.06)",
+    backgroundColor: "rgba(5,163,156,0.08)",
   },
-
   label: {
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: 15,
     color: Theme.colors.text,
   },
-
   labelActive: {
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.semibold,

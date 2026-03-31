@@ -1,8 +1,10 @@
-import { BottomSheetModal } from "@gorhom/bottom-sheet";
-import { forwardRef } from "react";
+import {
+  BottomSheetModal,
+  BottomSheetScrollView,
+} from "@gorhom/bottom-sheet";
+import { forwardRef, useMemo } from "react";
 import { StyleSheet, Switch, View } from "react-native";
 
-import AppBottomSheet from "@/components/ui/AppBottomSheet";
 import AppButton from "@/components/ui/AppButton";
 import AppText from "@/components/ui/AppText";
 import { Theme } from "@/theme";
@@ -19,70 +21,59 @@ type Props = {
   onSave: () => void;
 };
 
-function NotificationRow({
-  title,
-  subtitle,
-  value,
-  onValueChange,
-}: {
-  title: string;
-  subtitle: string;
-  value: boolean;
-  onValueChange: (next: boolean) => void;
-}) {
-  return (
-    <View style={styles.card}>
-      <View style={styles.textWrap}>
-        <AppText style={styles.title}>{title}</AppText>
-        <AppText style={styles.subtitle}>{subtitle}</AppText>
-      </View>
-
-      <Switch
-        value={value}
-        onValueChange={onValueChange}
-        thumbColor="#FFFFFF"
-        trackColor={{
-          false: "#E5E7EB",
-          true: Theme.colors.primary,
-        }}
-      />
-    </View>
-  );
-}
-
 const NotificationAlertBottomSheet = forwardRef<BottomSheetModal, Props>(
   function NotificationAlertBottomSheet({ value, onChange, onSave }, ref) {
+    const snapPoints = useMemo(() => ["65%"], []);
+
     return (
-      <AppBottomSheet ref={ref} title="Update Notification Alert" snapPoints={["58%"]}>
-        <NotificationRow
-          title="Election Updates"
-          subtitle="Real-time results and polling data"
-          value={value.electionUpdates}
-          onValueChange={(electionUpdates) =>
-            onChange({ ...value, electionUpdates })
-          }
-        />
+      <BottomSheetModal
+        ref={ref}
+        snapPoints={snapPoints}
+        backgroundStyle={styles.sheetBg}
+        handleIndicatorStyle={styles.handle}
+      >
+        <BottomSheetScrollView contentContainerStyle={styles.container}>
+          <AppText style={styles.title}>Notification Alerts</AppText>
 
-        <NotificationRow
-          title="Security Alerts"
-          subtitle="Emergency broadcasts and safety tips"
-          value={value.securityAlerts}
-          onValueChange={(securityAlerts) =>
-            onChange({ ...value, securityAlerts })
-          }
-        />
+          {[
+            {
+              key: "electionUpdates",
+              title: "Election Updates",
+              subtitle: "Real-time results and polling data",
+            },
+            {
+              key: "securityAlerts",
+              title: "Security Alerts",
+              subtitle: "Emergency broadcasts and safety tips",
+            },
+            {
+              key: "newsletters",
+              title: "Newsletters",
+              subtitle: "Weekly digest of election news",
+            },
+          ].map((item) => (
+            <View key={item.key} style={styles.card}>
+              <View style={{ flex: 1 }}>
+                <AppText style={styles.cardTitle}>{item.title}</AppText>
+                <AppText style={styles.cardSub}>{item.subtitle}</AppText>
+              </View>
 
-        <NotificationRow
-          title="Newsletters"
-          subtitle="Weekly digest of election news"
-          value={value.newsletters}
-          onValueChange={(newsletters) =>
-            onChange({ ...value, newsletters })
-          }
-        />
+              <Switch
+                value={value[item.key as keyof NotificationSettingsState]}
+                onValueChange={(val) =>
+                  onChange({ ...value, [item.key]: val })
+                }
+                trackColor={{
+                  false: "#E5E7EB",
+                  true: Theme.colors.primary,
+                }}
+              />
+            </View>
+          ))}
 
-        <AppButton title="Save Changes" onPress={onSave} />
-      </AppBottomSheet>
+          <AppButton title="Save Changes" onPress={onSave} />
+        </BottomSheetScrollView>
+      </BottomSheetModal>
     );
   }
 );
@@ -90,34 +81,38 @@ const NotificationAlertBottomSheet = forwardRef<BottomSheetModal, Props>(
 export default NotificationAlertBottomSheet;
 
 const styles = StyleSheet.create({
-  card: {
-    minHeight: 78,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#D9DEE8",
-    backgroundColor: "rgba(255,255,255,0.42)",
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
+  sheetBg: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
   },
-
-  textWrap: {
-    flex: 1,
-    gap: 4,
+  handle: {
+    backgroundColor: "#D1D5DB",
   },
-
+  container: {
+    paddingHorizontal: 16,
+    paddingBottom: 28,
+    gap: 14,
+  },
   title: {
-    fontSize: 15,
-    lineHeight: 20,
-    color: Theme.colors.text,
+    fontSize: 17,
+    marginBottom: 8,
     fontFamily: Theme.fonts.body.semibold,
   },
-
-  subtitle: {
+  card: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    padding: 14,
+    gap: 10,
+  },
+  cardTitle: {
+    fontSize: 15,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+  cardSub: {
     fontSize: 13,
-    lineHeight: 18,
     color: Theme.colors.textMuted,
   },
 });

@@ -1,6 +1,6 @@
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
-import { Share, StyleSheet, View } from "react-native";
+import { ScrollView, Share, StyleSheet, View } from "react-native";
 import { useRef, useState } from "react";
 
 import AppInput from "@/components/ui/AppInput";
@@ -9,11 +9,9 @@ import CommentsBottomSheet, {
   DiscussionComment,
 } from "@/components/collation/CommentsBottomSheet";
 import ShareOpinionBottomSheet from "@/components/collation/ShareOpinionBottomSheet";
-
 import { useAppToast } from "@/hooks/useAppToast";
 import { CollationItem } from "@/data/collation";
 import { Theme } from "@/theme";
-import AppPageShell from "../ui/AppPageShell";
 import NoElection from "@/svgs/NoElection";
 
 type Props = {
@@ -69,61 +67,59 @@ export default function CollationDiscussionsTab({ collation }: Props) {
 
   return (
     <>
-      <AppPageShell scroll footer={null}>
-        <View style={styles.content}>
-          <View style={styles.section}>
-            <AppText style={styles.sectionTitle}>Community Verification</AppText>
-            <AppText style={styles.sectionSubtitle}>
-              Discuss this election with observer and volunteer at your Polling
-              Units in Ikotun Primary School, PU LA/12/35.
+      <ScrollView style={styles.pageContent}>
+        <View style={styles.section}>
+          <AppText style={styles.sectionTitle}>Community Verification</AppText>
+          <AppText style={styles.sectionSubtitle}>
+            Discuss this election with observer and volunteer at your Polling
+            Units in Ikotun Primary School, PU LA/12/35.
+          </AppText>
+        </View>
+
+        {!collation.canJoinDiscussion ? (
+          <View style={styles.emptyWrap}>
+            <NoElection width={110} height={110} />
+            <AppText style={styles.emptyTitle}>No Discussion yet</AppText>
+            <AppText style={styles.emptySubtitle}>
+              You can be the first to drop your opinion
             </AppText>
           </View>
+        ) : (
+          <>
+            {collation.discussions.map((item) => (
+              <View key={item.id} style={styles.card}>
+                <AppText style={styles.author}>{item.author}</AppText>
+                <AppText style={styles.body}>{item.body}</AppText>
+                <AppText style={styles.timeText}>{item.minutesAgo} min ago</AppText>
 
-          {!collation.canJoinDiscussion ? (
-            <View style={styles.emptyWrap}>
-              <NoElection width={110} height={110} />
-              <AppText style={styles.emptyTitle}>No Discussion yet</AppText>
-              <AppText style={styles.emptySubtitle}>
-                You can be the first to drop your opinion
-              </AppText>
-            </View>
-          ) : (
-            <>
-              {collation.discussions.map((item) => (
-                <View key={item.id} style={styles.card}>
-                  <AppText style={styles.author}>{item.author}</AppText>
-                  <AppText style={styles.body}>{item.body}</AppText>
-                  <AppText style={styles.timeText}>{item.minutesAgo} min ago</AppText>
-
-                  <View style={styles.footerRow}>
-                    <View style={styles.metaRow}>
-                      <MetaItem icon="thumbs-up-outline" value={`${item.likes} Likes`} />
-                      <MetaButton
-                        icon="chatbox-ellipses-outline"
-                        value={`${item.commentCount} Comments`}
-                        onPress={() => commentsRef.current?.present()}
-                      />
-                      <MetaButton
-                        icon="share-social-outline"
-                        value={`${item.shares} Shares`}
-                        onPress={() => handleShare(item.body)}
-                      />
-                    </View>
+                <View style={styles.footerRow}>
+                  <View style={styles.metaRow}>
+                    <MetaItem icon="thumbs-up-outline" value={`${item.likes} Likes`} />
+                    <MetaButton
+                      icon="chatbox-ellipses-outline"
+                      value={`${item.commentCount} Comments`}
+                      onPress={() => commentsRef.current?.present()}
+                    />
+                    <MetaButton
+                      icon="share-social-outline"
+                      value={`${item.shares} Shares`}
+                      onPress={() => handleShare(item.body)}
+                    />
                   </View>
                 </View>
-              ))}
-
-              <View style={styles.inputWrap}>
-                <AppInput
-                  placeholder="How Do You Feel About This Election Today?"
-                  editable={false}
-                  onPressIn={() => shareOpinionRef.current?.present()}
-                />
               </View>
-            </>
-          )}
-        </View>
-      </AppPageShell>
+            ))}
+
+            <View style={styles.inputWrap}>
+              <AppInput
+                placeholder="How Do You Feel About This Election Today?"
+                editable={false}
+                onPressIn={() => shareOpinionRef.current?.present()}
+              />
+            </View>
+          </>
+        )}
+      </ScrollView>
 
       <CommentsBottomSheet
         ref={commentsRef}
@@ -194,7 +190,10 @@ function MetaButton({
 }
 
 const styles = StyleSheet.create({
-  content: {
+  pageContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 32,
     gap: 14,
   },
 

@@ -1,10 +1,10 @@
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
-import { Share, StyleSheet, View, Pressable } from "react-native";
+import { Pressable, ScrollView, Share, StyleSheet, View } from "react-native";
 import { useRef, useState } from "react";
 
-import AppText from "@/components/ui/AppText";
 import AppButton from "@/components/ui/AppButton";
+import AppText from "@/components/ui/AppText";
 import FlagReportBottomSheet from "@/components/collation/FlagReportBottomSheet";
 import SeeEvidenceBottomSheet, {
   EvidencePayload,
@@ -12,7 +12,6 @@ import SeeEvidenceBottomSheet, {
 import { useAppToast } from "@/hooks/useAppToast";
 import { CollationItem } from "@/data/collation";
 import { Theme } from "@/theme";
-import AppPageShell from "../ui/AppPageShell";
 import NoElection from "@/svgs/NoElection";
 
 type Props = {
@@ -24,7 +23,6 @@ export default function CollationReviewReportsTab({ collation }: Props) {
 
   const evidenceRef = useRef<BottomSheetModal>(null);
   const flagRef = useRef<BottomSheetModal>(null);
-
   const [selectedEvidence, setSelectedEvidence] = useState<EvidencePayload | null>(
     null
   );
@@ -41,11 +39,9 @@ export default function CollationReviewReportsTab({ collation }: Props) {
       locationMeta: "No 20 Ao, Alimosho, Lagos State, Nigeria",
       pollingUnitName: "Ikotun Primary School",
       pollingUnitCode: "PU LA/12/35",
-      observerName: "Citizen Monitor Field Observer",
+      observerName: isResult ? "Citizen Monitor Field Observer" : "Community Reporter",
       observerHandle: report.author,
-      submittedAt: isResult
-        ? "15 Mar 2027 · 08:42 AM WAT"
-        : report.createdAgo,
+      submittedAt: isResult ? "15 Mar 2027 · 08:42 AM WAT" : report.createdAgo,
       verificationStatus: isResult ? "verified" : "pending",
       sourceType: isResult ? "observer-upload" : "community-report",
       electionName: collation.fullTitle,
@@ -81,33 +77,7 @@ export default function CollationReviewReportsTab({ collation }: Props) {
   if (!collation.canReviewReports) {
     return (
       <>
-        <AppPageShell scroll footer={null}>
-          <View style={styles.emptyWrap}>
-            <AppText style={styles.sectionTitle}>Community Verification</AppText>
-            <AppText style={styles.sectionSubtitle}>
-              Review report submitted by our observer at your Polling Units in
-              Ikotun Primary School, PU LA/12/35. Confirm what&apos;s accurate, and
-              flag what&apos;s false.
-            </AppText>
-
-            <NoElection width={110} height={110} />
-            <AppText style={styles.emptyTitle}>No Election Report yet</AppText>
-            <AppText style={styles.emptySubtitle}>
-              Citizen Monitor have not commence operate then.
-            </AppText>
-          </View>
-        </AppPageShell>
-
-        <SeeEvidenceBottomSheet ref={evidenceRef} evidence={selectedEvidence} />
-        <FlagReportBottomSheet ref={flagRef} />
-      </>
-    );
-  }
-
-  return (
-    <>
-      <AppPageShell scroll footer={null}>
-        <View style={styles.content}>
+        <View style={styles.pageContent}>
           <View style={styles.section}>
             <AppText style={styles.sectionTitle}>Community Verification</AppText>
             <AppText style={styles.sectionSubtitle}>
@@ -117,104 +87,127 @@ export default function CollationReviewReportsTab({ collation }: Props) {
             </AppText>
           </View>
 
-          {collation.reviewReports.map((report) => {
-            const isResult = report.type === "result";
-
-            return (
-              <View key={report.id} style={styles.card}>
-                <View style={styles.cardHead}>
-                  <View style={styles.authorRow}>
-                    <AppText style={styles.author}>{report.author}</AppText>
-                    <AppText style={styles.createdAgo}>{report.createdAgo}</AppText>
-                  </View>
-
-                  {report.tag ? (
-                    <View style={styles.tagPill}>
-                      <AppText style={styles.tagText}>{report.tag}</AppText>
-                    </View>
-                  ) : null}
-                </View>
-
-                <AppText style={styles.reportTitle}>{report.title}</AppText>
-                <AppText style={styles.reportBody}>{report.body}</AppText>
-
-                <Pressable
-                  onPress={() => handleOpenEvidence(report)}
-                  hitSlop={8}
-                >
-                  <AppText style={styles.linkText}>
-                    {isResult ? "See Evidence Here >" : "See evidence >"}
-                  </AppText>
-                </Pressable>
-
-                <AppText style={styles.reviewCount}>
-                  {report.reviewCount} People have reviewed
-                </AppText>
-
-                <View style={styles.actionsRow}>
-                  {report.isConfirmed ? (
-                    <View style={[styles.statePill, styles.confirmedPill]}>
-                      <Ionicons
-                        name="checkmark-circle-outline"
-                        size={14}
-                        color={Theme.colors.primary}
-                      />
-                      <AppText style={styles.confirmedText}>
-                        You confirmed this – thank you
-                      </AppText>
-                    </View>
-                  ) : report.flagged ? (
-                    <View style={[styles.statePill, styles.flaggedPill]}>
-                      <Ionicons
-                        name="alert-circle-outline"
-                        size={14}
-                        color="#F04A1D"
-                      />
-                      <AppText style={styles.flaggedText}>
-                        Flagged - evidence under review
-                      </AppText>
-                    </View>
-                  ) : (
-                    <View style={styles.buttonRow}>
-                      <MiniActionButton
-                        icon="checkmark-circle-outline"
-                        label="Confirm"
-                        activeColor={Theme.colors.primary}
-                        onPress={() =>
-                          showToast({
-                            type: "success",
-                            message: "Report confirmed successfully.",
-                          })
-                        }
-                      />
-                      <MiniActionButton
-                        icon="flag-outline"
-                        label="Flag"
-                        activeColor="#F04A1D"
-                        onPress={() => flagRef.current?.present()}
-                      />
-                    </View>
-                  )}
-
-                  <AppButton
-                    title="Share"
-                    variant="ghost"
-                    style={styles.shareGhost}
-                    leftIcon={
-                      <Ionicons
-                        name="share-social-outline"
-                        size={14}
-                        color={Theme.colors.textMuted}
-                      />
-                    }
-                    onPress={() => handleShare(report.title)}
-                  />
-                </View>
-              </View>
-            );
-          })}
+          <View style={styles.emptyWrap}>
+            <NoElection width={110} height={110} />
+            <AppText style={styles.emptyTitle}>No Election Report yet</AppText>
+            <AppText style={styles.emptySubtitle}>
+              Citizen Monitor have not commence operate then.
+            </AppText>
+          </View>
         </View>
-      </AppPageShell>
+
+        <SeeEvidenceBottomSheet ref={evidenceRef} evidence={selectedEvidence} />
+        <FlagReportBottomSheet ref={flagRef} />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <ScrollView style={styles.pageContent}>
+        <View style={styles.section}>
+          <AppText style={styles.sectionTitle}>Community Verification</AppText>
+          <AppText style={styles.sectionSubtitle}>
+            Review report submitted by our observer at your Polling Units in
+            Ikotun Primary School, PU LA/12/35. Confirm what&apos;s accurate, and
+            flag what&apos;s false.
+          </AppText>
+        </View>
+
+        {collation.reviewReports.map((report) => {
+          const isResult = report.type === "result";
+
+          return (
+            <View key={report.id} style={styles.card}>
+              <View style={styles.cardHead}>
+                <View style={styles.authorRow}>
+                  <AppText style={styles.author}>{report.author}</AppText>
+                  <AppText style={styles.createdAgo}>{report.createdAgo}</AppText>
+                </View>
+
+                {report.tag ? (
+                  <View style={styles.tagPill}>
+                    <AppText style={styles.tagText}>{report.tag}</AppText>
+                  </View>
+                ) : null}
+              </View>
+
+              <AppText style={styles.reportTitle}>{report.title}</AppText>
+              <AppText style={styles.reportBody}>{report.body}</AppText>
+
+              <Pressable onPress={() => handleOpenEvidence(report)} hitSlop={8}>
+                <AppText style={styles.linkText}>
+                  {isResult ? "See Evidence Here >" : "See evidence >"}
+                </AppText>
+              </Pressable>
+
+              <AppText style={styles.reviewCount}>
+                {report.reviewCount} People have reviewed
+              </AppText>
+
+              <View style={styles.actionsRow}>
+                {report.isConfirmed ? (
+                  <View style={[styles.statePill, styles.confirmedPill]}>
+                    <Ionicons
+                      name="checkmark-circle-outline"
+                      size={14}
+                      color={Theme.colors.primary}
+                    />
+                    <AppText style={styles.confirmedText}>
+                      You confirmed this – thank you
+                    </AppText>
+                  </View>
+                ) : report.flagged ? (
+                  <View style={[styles.statePill, styles.flaggedPill]}>
+                    <Ionicons
+                      name="alert-circle-outline"
+                      size={14}
+                      color="#F04A1D"
+                    />
+                    <AppText style={styles.flaggedText}>
+                      Flagged - evidence under review
+                    </AppText>
+                  </View>
+                ) : (
+                  <View style={styles.buttonRow}>
+                    <MiniActionButton
+                      icon="checkmark-circle-outline"
+                      label="Confirm"
+                      activeColor={Theme.colors.primary}
+                      onPress={() =>
+                        showToast({
+                          type: "success",
+                          message: "Report confirmed successfully.",
+                        })
+                      }
+                    />
+                    <MiniActionButton
+                      icon="flag-outline"
+                      label="Flag"
+                      activeColor="#F04A1D"
+                      onPress={() => flagRef.current?.present()}
+                    />
+                  </View>
+                )}
+
+                <AppButton
+                  title="Share"
+                  variant="ghost"
+                  style={styles.shareGhost}
+                  leftIcon={
+                    <Ionicons
+                      name="share-social-outline"
+                      size={14}
+                      color={Theme.colors.textMuted}
+                    />
+                  }
+                  onPress={() => handleShare(report.title)}
+                />
+              </View>
+            </View>
+          );
+        })}
+      </ScrollView>
 
       <SeeEvidenceBottomSheet ref={evidenceRef} evidence={selectedEvidence} />
       <FlagReportBottomSheet
@@ -255,7 +248,10 @@ function MiniActionButton({
 }
 
 const styles = StyleSheet.create({
-  content: {
+  pageContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 32,
     gap: 14,
   },
 
