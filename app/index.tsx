@@ -4,8 +4,9 @@ import { Animated, Easing, StyleSheet, View } from "react-native";
 
 import AuthBackground from "@/components/auth/AuthBackground";
 import { useAuth } from "@/context/AuthContext";
-import OnbaordCZIcon from "@/svgs/OnboardCZIcon";
-import OnboardHands from "@/svgs/OnboardHands";
+import { getHasSeenIntroSlides } from "@/lib/introStorage";
+import OnbaordCZIcon from "@/svgs/app/OnboardCZIcon";
+import OnboardHands from "@/svgs/app/OnboardHands";
 import { Theme } from "@/theme";
 
 const BRANDING_DURATION = 2400;
@@ -14,6 +15,7 @@ const DOT_COLORS = ["#EA4335", "#4285F4", "#34A853", "#FBBC05", "#F29900"];
 export default function IndexScreen() {
   const { isAuthenticated, isOnboardingComplete } = useAuth();
   const [readyToRoute, setReadyToRoute] = useState(false);
+  const [hasSeenIntro, setHasSeenIntro] = useState<boolean | null>(null);
 
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const logoTranslateY = useRef(new Animated.Value(18)).current;
@@ -40,6 +42,14 @@ export default function IndexScreen() {
   const logoExitOpacity = useRef(new Animated.Value(1)).current;
 
   const routeNode = useMemo(() => {
+    if (hasSeenIntro === null) {
+      return null;
+    }
+
+    if (!hasSeenIntro) {
+      return <Redirect href="/(public)/intro" />;
+    }
+
     if (!isAuthenticated) {
       return <Redirect href="/(public)/welcome" />;
     }
@@ -49,7 +59,21 @@ export default function IndexScreen() {
     }
 
     return <Redirect href="/(app)/(tabs)/home" />;
-  }, [isAuthenticated, isOnboardingComplete]);
+  }, [hasSeenIntro, isAuthenticated, isOnboardingComplete]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    getHasSeenIntroSlides().then((value) => {
+      if (mounted) {
+        setHasSeenIntro(value);
+      }
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     const entrance = Animated.parallel([
@@ -200,7 +224,7 @@ export default function IndexScreen() {
     logoTranslateY,
   ]);
 
-  if (readyToRoute) {
+  if (readyToRoute && routeNode) {
     return routeNode;
   }
 

@@ -1,7 +1,7 @@
 import { StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
-import NoNotification from "@/svgs/NoNotification";
+import NoNotification from "@/svgs/app/NoNotification";
 import { Theme } from "@/theme";
 
 export default function EmptyNotificationState() {

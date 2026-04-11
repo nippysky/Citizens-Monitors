@@ -1,7 +1,7 @@
 import { StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
-import QuietDay from "@/svgs/QuietDay";
+import QuietDay from "@/svgs/app/QuietDay";
 import { Theme } from "@/theme";
 
 type Props = {

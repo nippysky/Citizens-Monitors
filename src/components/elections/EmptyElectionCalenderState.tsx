@@ -2,7 +2,7 @@ import { StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
 import { Theme } from "@/theme";
-import NoElection from "@/svgs/NoElection";
+import NoElection from "@/svgs/app/NoElection";
 
 type Props = {
   title: string;

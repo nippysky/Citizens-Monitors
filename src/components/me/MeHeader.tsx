@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
 import type { MeUser } from "@/data/me";
-import CitizenIcon from "@/svgs/CitizenIcon";
+import CitizenIcon from "@/svgs/app/CitizenIcon";
 import ProfilePhoto from "@/svgs/profile/ProfilePhoto";
 import { Theme } from "@/theme";
 

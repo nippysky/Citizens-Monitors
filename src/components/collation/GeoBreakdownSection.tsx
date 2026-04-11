@@ -3,7 +3,7 @@ import { StyleSheet, View } from "react-native";
 import AppText from "@/components/ui/AppText";
 import { CollationItem, formatCompactNumber } from "@/data/collation";
 import { Theme } from "@/theme";
-import NoElection from "@/svgs/NoElection";
+import NoElection from "@/svgs/app/NoElection";
 
 type Props = {
   collation: CollationItem;

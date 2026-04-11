@@ -6,8 +6,8 @@ import AppButton from "@/components/ui/AppButton";
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
 import { useAuth } from "@/context/AuthContext";
-import CheckIcon from "@/svgs/CheckIcon";
-import CitizenIcon from "@/svgs/CitizenIcon";
+import CheckIcon from "@/svgs/app/CheckIcon";
+import CitizenIcon from "@/svgs/app/CitizenIcon";
 import { Theme } from "@/theme";
 import { OnboardingDraft } from "@/types/onboarding";
 

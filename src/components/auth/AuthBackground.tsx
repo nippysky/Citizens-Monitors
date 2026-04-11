@@ -1,5 +1,5 @@
-import AuthBottomLines from "@/svgs/AuthBottomLines";
-import AuthTopLines from "@/svgs/AuthTopLines";
+import AuthBottomLines from "@/svgs/app/AuthBottomLines";
+import AuthTopLines from "@/svgs/app/AuthTopLines";
 import { Theme } from "@/theme";
 import { LinearGradient } from "expo-linear-gradient";
 import { ReactNode } from "react";

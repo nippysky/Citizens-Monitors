@@ -1,5 +1,5 @@
 import AppText from "@/components/ui/AppText";
-import CitizenIcon from "@/svgs/CitizenIcon";
+import CitizenIcon from "@/svgs/app/CitizenIcon";
 import { Theme } from "@/theme";
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, View } from "react-native";

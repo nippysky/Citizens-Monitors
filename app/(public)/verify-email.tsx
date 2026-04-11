@@ -16,7 +16,7 @@ import AppButton from "@/components/ui/AppButton";
 import BackButton from "@/components/ui/BackButton";
 import { Paths } from "@/constants/paths";
 import { useAppToast } from "@/hooks/useAppToast";
-import CheckIcon from "@/svgs/CheckIcon";
+import CheckIcon from "@/svgs/app/CheckIcon";
 
 const OTP_LENGTH = 5;
 const INITIAL_SECONDS = 60;

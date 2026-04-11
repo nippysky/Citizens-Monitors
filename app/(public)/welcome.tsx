@@ -7,7 +7,7 @@ import AppButton from "@/components/ui/AppButton";
 import AppText from "@/components/ui/AppText";
 import { PersonIcon } from "@/components/ui/InputIcons";
 import { Paths } from "@/constants/paths";
-import FullLogo from "@/svgs/FullLogo";
+import FullLogo from "@/svgs/app/FullLogo";
 
 export default function WelcomeScreen() {
   return (

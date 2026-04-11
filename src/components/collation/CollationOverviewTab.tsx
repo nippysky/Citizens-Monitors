@@ -10,7 +10,7 @@ import {
   formatCompactNumber,
 } from "@/data/collation";
 import { Theme } from "@/theme";
-import NoElection from "@/svgs/NoElection";
+import NoElection from "@/svgs/app/NoElection";
 import GeoBreakdownSection from "./GeoBreakdownSection";
 import PartyResultRow from "./PartyResultRow";
 import SentimentAnalysisSection from "./SentimentAnalysisSection";

@@ -1,5 +1,5 @@
 import AppText from "@/components/ui/AppText";
-import GoogleIcon from "@/svgs/GoogleIcon";
+import GoogleIcon from "@/svgs/app/GoogleIcon";
 import { Theme } from "@/theme";
 import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from "react-native";
 

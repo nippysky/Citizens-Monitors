@@ -10,8 +10,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AppButton from "@/components/ui/AppButton";
 import AppText from "@/components/ui/AppText";
-import Female from "@/svgs/Female";
-import Male from "@/svgs/Male";
+import Female from "@/svgs/app/Female";
+import Male from "@/svgs/app/Male";
 import { Theme } from "@/theme";
 import { Gender } from "@/types/onboarding";
 

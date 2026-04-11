@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
-import CitizenIcon from "@/svgs/CitizenIcon";
+import CitizenIcon from "@/svgs/app/CitizenIcon";
 import { Theme } from "@/theme";
 
 export default function NewsHeader() {

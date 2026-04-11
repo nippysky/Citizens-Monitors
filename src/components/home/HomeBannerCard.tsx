@@ -2,8 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
-import Observer from "@/svgs/Observer";
-import Volunteer from "@/svgs/Volunteer";
+import Observer from "@/svgs/app/Observer";
+import Volunteer from "@/svgs/app/Volunteer";
 import { Theme } from "@/theme";
 import { InfoBannerItem } from "@/types/home";
 

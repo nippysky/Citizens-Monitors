@@ -4,9 +4,9 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
-import Observer from "@/svgs/Observer";
-import PublicViewer from "@/svgs/PublicViewer";
-import Volunteer from "@/svgs/Volunteer";
+import Observer from "@/svgs/app/Observer";
+import PublicViewer from "@/svgs/app/PublicViewer";
+import Volunteer from "@/svgs/app/Volunteer";
 import { Theme } from "@/theme";
 import { ElectionCardItem } from "@/types/home";
 

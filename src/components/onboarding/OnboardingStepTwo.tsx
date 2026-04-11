@@ -4,9 +4,9 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import TutorialBanner from "@/components/onboarding/TutorialBanner";
 import AppText from "@/components/ui/AppText";
-import Observer from "@/svgs/Observer";
-import PublicViewer from "@/svgs/PublicViewer";
-import Volunteer from "@/svgs/Volunteer";
+import Observer from "@/svgs/app/Observer";
+import PublicViewer from "@/svgs/app/PublicViewer";
+import Volunteer from "@/svgs/app/Volunteer";
 import { Theme } from "@/theme";
 import { CitizenType } from "@/types/onboarding";
 

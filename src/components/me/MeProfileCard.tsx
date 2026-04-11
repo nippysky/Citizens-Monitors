@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
-import Observer from "@/svgs/Observer";
+import Observer from "@/svgs/app/Observer";
 import { Theme } from "@/theme";
 
 

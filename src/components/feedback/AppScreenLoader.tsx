@@ -1,4 +1,4 @@
-import CitizenIcon from "@/svgs/CitizenIcon";
+import CitizenIcon from "@/svgs/app/CitizenIcon";
 import { Theme } from "@/theme";
 import { useEffect, useRef } from "react";
 import {
