@@ -15,10 +15,15 @@ type Props = {
   onChange: (value: StepFourForm) => void;
 };
 
-const POLLING_DATA: Record<
-  string,
-  Record<string, Record<string, string[]>>
-> = {
+type PollingData = {
+  [state: string]: {
+    [lga: string]: {
+      [ward: string]: string[];
+    };
+  };
+};
+
+const POLLING_DATA: PollingData = {
   Lagos: {
     Ikeja: {
       "Ward A": ["PU 001", "PU 002", "PU 003"],
@@ -50,9 +55,13 @@ export default function OnboardingStepFour({ value, onChange }: Props) {
   const wardSheetRef = useRef<BottomSheetModal>(null);
   const unitSheetRef = useRef<BottomSheetModal>(null);
 
-  const [query, setQuery] = useState("");
+  const [stateQuery, setStateQuery] = useState("");
+  const [lgaQuery, setLgaQuery] = useState("");
+  const [wardQuery, setWardQuery] = useState("");
+  const [unitQuery, setUnitQuery] = useState("");
 
   const states = useMemo(() => Object.keys(POLLING_DATA), []);
+
   const lgas = useMemo(() => {
     if (!value.pollingState) return [];
     return Object.keys(POLLING_DATA[value.pollingState] ?? {});
@@ -66,89 +75,71 @@ export default function OnboardingStepFour({ value, onChange }: Props) {
   }, [value.pollingState, value.localGovernmentArea]);
 
   const pollingUnits = useMemo(() => {
-    if (!value.pollingState || !value.localGovernmentArea || !value.ward) return [];
+    if (!value.pollingState || !value.localGovernmentArea || !value.ward)
+      return [];
     return (
-      POLLING_DATA[value.pollingState]?.[value.localGovernmentArea]?.[value.ward] ?? []
+      POLLING_DATA[value.pollingState]?.[value.localGovernmentArea]?.[
+        value.ward
+      ] ?? []
     );
   }, [value.pollingState, value.localGovernmentArea, value.ward]);
 
-  const selectOption = (
-    field: keyof StepFourForm,
-    fieldValue: string
-  ): void => {
-    if (field === "pollingState") {
-      onChange({
-        pollingState: fieldValue,
-        localGovernmentArea: "",
-        ward: "",
-        pollingUnit: "",
-      });
-      stateSheetRef.current?.dismiss();
-      return;
-    }
+  const filteredStates = useMemo(
+    () =>
+      states.filter((s: string) =>
+        s.toLowerCase().includes(stateQuery.trim().toLowerCase())
+      ),
+    [states, stateQuery]
+  );
 
-    if (field === "localGovernmentArea") {
-      onChange({
-        ...value,
-        localGovernmentArea: fieldValue,
-        ward: "",
-        pollingUnit: "",
-      });
-      lgaSheetRef.current?.dismiss();
-      return;
-    }
+  const filteredLgas = useMemo(
+    () =>
+      lgas.filter((s: string) =>
+        s.toLowerCase().includes(lgaQuery.trim().toLowerCase())
+      ),
+    [lgas, lgaQuery]
+  );
 
-    if (field === "ward") {
-      onChange({
-        ...value,
-        ward: fieldValue,
-        pollingUnit: "",
-      });
-      wardSheetRef.current?.dismiss();
-      return;
-    }
+  const filteredWards = useMemo(
+    () =>
+      wards.filter((s: string) =>
+        s.toLowerCase().includes(wardQuery.trim().toLowerCase())
+      ),
+    [wards, wardQuery]
+  );
 
+  const filteredUnits = useMemo(
+    () =>
+      pollingUnits.filter((s: string) =>
+        s.toLowerCase().includes(unitQuery.trim().toLowerCase())
+      ),
+    [pollingUnits, unitQuery]
+  );
+
+  const handlePickState = (picked: string): void => {
     onChange({
-      ...value,
-      pollingUnit: fieldValue,
+      pollingState: picked,
+      localGovernmentArea: "",
+      ward: "",
+      pollingUnit: "",
     });
-    unitSheetRef.current?.dismiss();
+    stateSheetRef.current?.dismiss();
   };
 
-  const SimpleOptionsSheet = ({
-    title,
-    options,
-    selectedValue,
-    onPick,
-    sheetRef,
-  }: {
-    title: string;
-    options: string[];
-    selectedValue: string;
-    onPick: (picked: string) => void;
-    sheetRef: React.RefObject<BottomSheetModal | null>;
-  }) => (
-    <NationalitySheet
-      ref={sheetRef}
-      query={query}
-      onChangeQuery={setQuery}
-      selectedCountry={selectedValue}
-      onSelectCountry={onPick}
-    />
-  );
+  const handlePickLga = (picked: string): void => {
+    onChange({ ...value, localGovernmentArea: picked, ward: "", pollingUnit: "" });
+    lgaSheetRef.current?.dismiss();
+  };
 
-  const filteredStates = states.filter((item) =>
-    item.toLowerCase().includes(query.trim().toLowerCase())
-  );
-  const filteredLgas = lgas.filter((item) =>
-    item.toLowerCase().includes(query.trim().toLowerCase())
-  );
-  const filteredWards = wards.filter((item) =>
-    item.toLowerCase().includes(query.trim().toLowerCase())
-  );
-  const filteredUnits = pollingUnits.filter((item) =>
-    item.toLowerCase().includes(query.trim().toLowerCase())
-  );
+  const handlePickWard = (picked: string): void => {
+    onChange({ ...value, ward: picked, pollingUnit: "" });
+    wardSheetRef.current?.dismiss();
+  };
+
+  const handlePickUnit = (picked: string): void => {
+    onChange({ ...value, pollingUnit: picked });
+    unitSheetRef.current?.dismiss();
+  };
 
   return (
     <>
@@ -170,7 +161,7 @@ export default function OnboardingStepFour({ value, onChange }: Props) {
             value={value.pollingState}
             placeholder="Select state"
             onPress={() => {
-              setQuery("");
+              setStateQuery("");
               stateSheetRef.current?.present();
             }}
             leftIcon={
@@ -188,7 +179,7 @@ export default function OnboardingStepFour({ value, onChange }: Props) {
             placeholder="Select state first"
             onPress={() => {
               if (!value.pollingState) return;
-              setQuery("");
+              setLgaQuery("");
               lgaSheetRef.current?.present();
             }}
             leftIcon={
@@ -206,7 +197,7 @@ export default function OnboardingStepFour({ value, onChange }: Props) {
             placeholder="Select LGA first"
             onPress={() => {
               if (!value.localGovernmentArea) return;
-              setQuery("");
+              setWardQuery("");
               wardSheetRef.current?.present();
             }}
             leftIcon={
@@ -224,7 +215,7 @@ export default function OnboardingStepFour({ value, onChange }: Props) {
             placeholder="Select ward first"
             onPress={() => {
               if (!value.ward) return;
-              setQuery("");
+              setUnitQuery("");
               unitSheetRef.current?.present();
             }}
             leftIcon={
@@ -238,36 +229,44 @@ export default function OnboardingStepFour({ value, onChange }: Props) {
         </View>
       </View>
 
-      <SimpleOptionsSheet
+      <NationalitySheet
+        ref={stateSheetRef}
         title="Select State"
+        query={stateQuery}
+        onChangeQuery={setStateQuery}
+        selectedCountry={value.pollingState}
+        onSelectCountry={handlePickState}
         options={filteredStates}
-        selectedValue={value.pollingState}
-        onPick={(picked) => selectOption("pollingState", picked)}
-        sheetRef={stateSheetRef}
       />
 
-      <SimpleOptionsSheet
+      <NationalitySheet
+        ref={lgaSheetRef}
         title="Select LGA"
+        query={lgaQuery}
+        onChangeQuery={setLgaQuery}
+        selectedCountry={value.localGovernmentArea}
+        onSelectCountry={handlePickLga}
         options={filteredLgas}
-        selectedValue={value.localGovernmentArea}
-        onPick={(picked) => selectOption("localGovernmentArea", picked)}
-        sheetRef={lgaSheetRef}
       />
 
-      <SimpleOptionsSheet
+      <NationalitySheet
+        ref={wardSheetRef}
         title="Select Ward"
+        query={wardQuery}
+        onChangeQuery={setWardQuery}
+        selectedCountry={value.ward}
+        onSelectCountry={handlePickWard}
         options={filteredWards}
-        selectedValue={value.ward}
-        onPick={(picked) => selectOption("ward", picked)}
-        sheetRef={wardSheetRef}
       />
 
-      <SimpleOptionsSheet
+      <NationalitySheet
+        ref={unitSheetRef}
         title="Select Polling Unit"
+        query={unitQuery}
+        onChangeQuery={setUnitQuery}
+        selectedCountry={value.pollingUnit}
+        onSelectCountry={handlePickUnit}
         options={filteredUnits}
-        selectedValue={value.pollingUnit}
-        onPick={(picked) => selectOption("pollingUnit", picked)}
-        sheetRef={unitSheetRef}
       />
     </>
   );
@@ -277,23 +276,19 @@ const styles = StyleSheet.create({
   container: {
     gap: 18,
   },
-
   headerBlock: {
     gap: 6,
     marginTop: 22,
   },
-
   heading: {
     fontSize: 18,
     lineHeight: 24,
   },
-
   subheading: {
     color: Theme.colors.textMuted,
     fontSize: 15,
     lineHeight: 22,
   },
-
   form: {
     gap: 14,
     paddingBottom: 12,

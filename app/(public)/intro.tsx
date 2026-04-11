@@ -326,7 +326,6 @@ const styles = StyleSheet.create({
     color: Theme.colors.white,
     fontFamily: Theme.fonts.heading.semibold,
     letterSpacing: -0.7,
-    maxWidth: 340,
   },
 
   description: {
@@ -334,7 +333,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 23,
     color: "rgba(255,255,255,0.88)",
-    maxWidth: 320,
   },
 
   paginationWrap: {

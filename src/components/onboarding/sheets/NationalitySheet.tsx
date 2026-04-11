@@ -19,26 +19,27 @@ type CountryItem = {
   flag: string;
 };
 
-type WorldCountryName = {
-  common: string;
-};
-
 type WorldCountry = {
   cca2: string;
-  name: WorldCountryName;
+  name: { common: string };
 };
 
 type Props = {
+  // Optional title — defaults to "Nationality"
+  title?: string;
   query: string;
   onChangeQuery: (value: string) => void;
   selectedCountry: string;
   onSelectCountry: (value: string) => void;
+  // If provided, renders these options instead of the full country list.
+  // Used by polling unit sheets.
+  options?: string[];
 };
 
 function flagFromCode(code: string): string {
   return code
     .toUpperCase()
-    .replace(/./g, (char: string) =>
+    .replace(/./g, (char) =>
       String.fromCodePoint(127397 + char.charCodeAt(0))
     );
 }
@@ -46,49 +47,50 @@ function flagFromCode(code: string): string {
 const typedCountries = countries as WorldCountry[];
 
 const countryData: CountryItem[] = typedCountries
-  .map((country: WorldCountry) => ({
-    name: country.name.common,
-    code: country.cca2,
-    flag: flagFromCode(country.cca2),
+  .map((c) => ({
+    name: c.name.common,
+    code: c.cca2,
+    flag: flagFromCode(c.cca2),
   }))
-  .sort((a: CountryItem, b: CountryItem) => a.name.localeCompare(b.name));
+  .sort((a, b) => a.name.localeCompare(b.name));
 
 const NationalitySheet = forwardRef<BottomSheetModal, Props>(
   function NationalitySheet(
-    { query, onChangeQuery, selectedCountry, onSelectCountry },
+    { title = "Nationality", query, onChangeQuery, selectedCountry, onSelectCountry, options },
     ref
   ) {
     const insets = useSafeAreaInsets();
 
-    const filteredCountries = useMemo<CountryItem[]>(() => {
-      const normalizedQuery = query.trim().toLowerCase();
-
-      if (!normalizedQuery) {
-        return countryData;
+    // If custom options provided (polling unit mode), wrap them as simple items
+    const listData = useMemo(() => {
+      if (options) {
+        return options.map((o) => ({ name: o, code: o, flag: "" }));
       }
 
-      return countryData.filter((country: CountryItem) =>
-        country.name.toLowerCase().includes(normalizedQuery)
-      );
-    }, [query]);
+      const q = query.trim().toLowerCase();
+      if (!q) return countryData;
+      return countryData.filter((c) => c.name.toLowerCase().includes(q));
+    }, [options, query]);
 
-    const dismiss = (): void => {
+    const dismiss = () => {
       if (ref && typeof ref !== "function" && ref.current) {
         ref.current.dismiss();
       }
     };
 
-    const handleSelectCountry = (countryName: string): void => {
-      onSelectCountry(countryName);
-      dismiss();
-    };
-
     return (
       <BottomSheetModal
         ref={ref}
-        snapPoints={["84%"]}
+        // Two snap points — full and mid.
+        // Sheet won't collapse to a tiny size when keyboard appears.
+        snapPoints={["60%", "92%"]}
         topInset={insets.top + 12}
         enablePanDownToClose
+        // ← Keyboard fix: sheet extends upward when keyboard shows
+        // instead of snapping to a lower point
+        keyboardBehavior="extend"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
         backgroundStyle={styles.sheetBgTransparent}
         handleIndicatorStyle={styles.sheetHandle}
         backdropComponent={(props) => (
@@ -101,10 +103,11 @@ const NationalitySheet = forwardRef<BottomSheetModal, Props>(
         )}
       >
         <View style={styles.sheetWrap}>
+          {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <AppText variant="title" style={styles.title}>
-                Nationality
+                {title}
               </AppText>
               <Ionicons
                 name="help-circle"
@@ -112,27 +115,17 @@ const NationalitySheet = forwardRef<BottomSheetModal, Props>(
                 color={Theme.colors.textMuted}
               />
             </View>
-
             <Pressable onPress={dismiss} style={styles.closeBtn}>
-              <Ionicons
-                name="close"
-                size={22}
-                color={Theme.colors.textMuted}
-              />
+              <Ionicons name="close" size={22} color={Theme.colors.textMuted} />
             </Pressable>
           </View>
 
           <View style={styles.divider} />
 
+          {/* Search input */}
           <View style={styles.staticTop}>
-            <View style={styles.tipBox}>
-              <AppText style={styles.tipText}>
-                Your nationality is your legal country.
-              </AppText>
-            </View>
-
             <AppInput
-              placeholder="Enter Country Name"
+              placeholder={options ? "Search…" : "Enter Country Name"}
               value={query}
               onChangeText={onChangeQuery}
               startIcon={
@@ -145,28 +138,34 @@ const NationalitySheet = forwardRef<BottomSheetModal, Props>(
             />
           </View>
 
+          {/* List */}
           <View style={styles.listWrap}>
-            <BottomSheetFlatList<CountryItem>
-              data={filteredCountries}
-              keyExtractor={(item: CountryItem) => item.code}
+            <BottomSheetFlatList
+              data={listData}
+              keyExtractor={(item) => item.code}
               showsVerticalScrollIndicator={false}
+              // ← Critical: keeps keyboard open when tapping a list item
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={[
                 styles.listContent,
-                { paddingBottom: Math.max(insets.bottom, 16) },
+                { paddingBottom: Math.max(insets.bottom, 24) },
               ]}
-              renderItem={({ item }: { item: CountryItem }) => {
+              renderItem={({ item }) => {
                 const selected = selectedCountry === item.name;
-
                 return (
                   <Pressable
                     style={[
                       styles.countryRow,
                       selected && styles.countryRowSelected,
                     ]}
-                    onPress={() => handleSelectCountry(item.name)}
+                    onPress={() => {
+                      onSelectCountry(item.name);
+                      dismiss();
+                    }}
                   >
-                    <AppText style={styles.flag}>{item.flag}</AppText>
+                    {item.flag ? (
+                      <AppText style={styles.flag}>{item.flag}</AppText>
+                    ) : null}
 
                     <AppText
                       style={[
@@ -190,7 +189,7 @@ const NationalitySheet = forwardRef<BottomSheetModal, Props>(
               ListEmptyComponent={
                 <View style={styles.emptyWrap}>
                   <AppText style={styles.emptyText}>
-                    No country found for your search.
+                    No results found.
                   </AppText>
                 </View>
               }
@@ -208,12 +207,10 @@ const styles = StyleSheet.create({
   sheetBgTransparent: {
     backgroundColor: "transparent",
   },
-
   sheetHandle: {
     backgroundColor: "rgba(17, 26, 50, 0.12)",
     width: 44,
   },
-
   sheetWrap: {
     flex: 1,
     backgroundColor: "#FBF8EA",
@@ -221,9 +218,8 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 28,
     overflow: "hidden",
   },
-
   header: {
-    minHeight: 76,
+    minHeight: 64,
     paddingHorizontal: 18,
     paddingTop: 12,
     paddingBottom: 12,
@@ -231,18 +227,15 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-
   headerLeft: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
-
   title: {
     fontSize: 18,
     lineHeight: 24,
   },
-
   closeBtn: {
     width: 40,
     height: 40,
@@ -251,80 +244,52 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
   divider: {
     height: 1,
     backgroundColor: "#D9DEE8",
   },
-
   staticTop: {
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 14,
-    gap: 16,
+    paddingBottom: 12,
   },
-
-  tipBox: {
-    borderLeftWidth: 3,
-    borderLeftColor: Theme.colors.primary,
-    backgroundColor: "rgba(255,255,255,0.45)",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-
-  tipText: {
-    color: Theme.colors.textMuted,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-
   listWrap: {
     flex: 1,
   },
-
   listContent: {
     paddingHorizontal: 16,
   },
-
   countryRow: {
-    minHeight: 50,
+    minHeight: 52,
     borderBottomWidth: 1,
     borderBottomColor: "#D9DEE8",
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 4,
     backgroundColor: "transparent",
   },
-
   countryRowSelected: {
     backgroundColor: "rgba(25, 183, 176, 0.04)",
   },
-
   flag: {
     fontSize: 22,
     lineHeight: 28,
   },
-
   countryName: {
     flex: 1,
     fontSize: 16,
     lineHeight: 22,
     color: Theme.colors.text,
   },
-
   countryNameActive: {
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.medium,
   },
-
   emptyWrap: {
-    paddingVertical: 24,
+    paddingVertical: 32,
     alignItems: "center",
-    justifyContent: "center",
   },
-
   emptyText: {
     color: Theme.colors.textMuted,
     fontSize: 14,
