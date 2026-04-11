@@ -32,10 +32,11 @@ export default function OnboardingIndexScreen() {
   const [step, setStep] = useState<number>(1);
   const [showReady, setShowReady] = useState<boolean>(false);
 
-  // ← Store direction AND a snapshot used at render time
-  // This prevents stale closure / batching issues on Android
   const directionRef = useRef<"forward" | "back">("forward");
-  const [animKey, setAnimKey] = useState<{ step: number; dir: "forward" | "back" }>({
+  const [animKey, setAnimKey] = useState<{
+    step: number;
+    dir: "forward" | "back";
+  }>({
     step: 1,
     dir: "forward",
   });
@@ -114,11 +115,10 @@ export default function OnboardingIndexScreen() {
     );
   }, [draft]);
 
-  // ─── Navigation helpers ────────────────────────────────────────────────────
+  // ─── Navigation ────────────────────────────────────────────────────────────
   const goToStep = (nextStep: number, dir: "forward" | "back") => {
     directionRef.current = dir;
     setStep(nextStep);
-    // Commit direction into state so the animated key snapshot is always correct
     setAnimKey({ step: nextStep, dir });
   };
 
@@ -136,21 +136,37 @@ export default function OnboardingIndexScreen() {
   };
 
   const handleContinue = (): void => {
-    if (step === 1 && canContinueStep1)      { goToStep(2, "forward"); return; }
-    if (step === 2 && canContinuePollingUnit) { goToStep(3, "forward"); return; }
-    if (step === 3 && canContinueCitizenType) { goToStep(4, "forward"); return; }
+    if (step === 1 && canContinueStep1) {
+      goToStep(2, "forward");
+      return;
+    }
+    if (step === 2 && canContinuePollingUnit) {
+      goToStep(3, "forward");
+      return;
+    }
+    if (step === 3 && canContinueCitizenType) {
+      goToStep(4, "forward");
+      return;
+    }
     if (step === 4 && canContinueCoverage) {
-      if (isObserver) { goToStep(5, "forward"); return; }
+      if (isObserver) {
+        goToStep(5, "forward");
+        return;
+      }
       setShowReady(true);
     }
   };
 
-  const handleStepOneChange    = (v: StepOneForm)   => setDraft((d) => ({ ...d, stepOne: v }));
-  const handleCitizenTypeChange = (v: CitizenType)  => setDraft((d) => ({ ...d, citizenType: v }));
-  const handleStepThreeChange  = (v: StepThreeForm) => setDraft((d) => ({ ...d, stepThree: v }));
-  const handleStepFourChange   = (v: StepFourForm)  => setDraft((d) => ({ ...d, stepFour: v }));
-  const handleVerifyComplete   = () => setShowReady(true);
-  const handleVerifySkip       = () => setShowReady(true);
+  const handleStepOneChange = (v: StepOneForm) =>
+    setDraft((d) => ({ ...d, stepOne: v }));
+  const handleCitizenTypeChange = (v: CitizenType) =>
+    setDraft((d) => ({ ...d, citizenType: v }));
+  const handleStepThreeChange = (v: StepThreeForm) =>
+    setDraft((d) => ({ ...d, stepThree: v }));
+  const handleStepFourChange = (v: StepFourForm) =>
+    setDraft((d) => ({ ...d, stepFour: v }));
+  const handleVerifyComplete = () => setShowReady(true);
+  const handleVerifySkip = () => setShowReady(true);
 
   // ─── Ready screen ──────────────────────────────────────────────────────────
   if (showReady) {
@@ -159,7 +175,6 @@ export default function OnboardingIndexScreen() {
         entering={FadeIn.duration(380)}
         exiting={FadeOut.duration(200)}
         style={{ flex: 1 }}
-        // ← prevents Android from optimising away the layer during animation
         collapsable={false}
       >
         <OnboardingReady draft={draft} />
@@ -168,26 +183,19 @@ export default function OnboardingIndexScreen() {
   }
 
   const continueDisabled =
-    (step === 1 && !canContinueStep1)       ||
+    (step === 1 && !canContinueStep1) ||
     (step === 2 && !canContinuePollingUnit) ||
     (step === 3 && !canContinueCitizenType) ||
     (step === 4 && !canContinueCoverage);
 
   const shouldShowFooterButton = step !== 5;
 
-  // ─── Direction from committed state snapshot — never stale ────────────────
   const isForward = animKey.dir === "forward";
 
-  // ─── Entering animation — platform safe ───────────────────────────────────
-  // On Android, complex withInitialValues chains can occasionally drop frames.
-  // We keep the transform tiny (18px) and use easing instead of spring
-  // so the native driver handles it cleanly on both platforms.
-  const enteringAnimation = FadeIn
-    .duration(DURATION)
-    .withInitialValues({
-      opacity: 0,
-      transform: [{ translateX: isForward ? OFFSET : -OFFSET }],
-    });
+  const enteringAnimation = FadeIn.duration(DURATION).withInitialValues({
+    opacity: 0,
+    transform: [{ translateX: isForward ? OFFSET : -OFFSET }],
+  });
 
   const renderStep = () => {
     switch (step) {
@@ -234,6 +242,7 @@ export default function OnboardingIndexScreen() {
 
   return (
     <AppPageShell
+      scrollKey={`step-${step}`}
       footer={
         shouldShowFooterButton ? (
           <AppButton
@@ -257,7 +266,7 @@ export default function OnboardingIndexScreen() {
         entering={enteringAnimation}
         exiting={FadeOut.duration(EXIT_DURATION)}
         style={{ flex: 1 }}
-        collapsable={false} // ← critical for Android hardware layer
+        collapsable={false}
       >
         {renderStep()}
       </Animated.View>

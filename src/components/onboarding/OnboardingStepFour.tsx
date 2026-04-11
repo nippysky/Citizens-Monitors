@@ -3,7 +3,7 @@ import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import NationalitySheet from "@/components/onboarding/sheets/NationalitySheet";
+import SelectPickerSheet from "@/components/ui/sheets/SelectPickerSheet";
 import TutorialBanner from "@/components/onboarding/TutorialBanner";
 import AppSelectField from "@/components/ui/AppSelectField";
 import AppText from "@/components/ui/AppText";
@@ -86,7 +86,7 @@ export default function OnboardingStepFour({ value, onChange }: Props) {
 
   const filteredStates = useMemo(
     () =>
-      states.filter((s: string) =>
+      states.filter((s) =>
         s.toLowerCase().includes(stateQuery.trim().toLowerCase())
       ),
     [states, stateQuery]
@@ -94,7 +94,7 @@ export default function OnboardingStepFour({ value, onChange }: Props) {
 
   const filteredLgas = useMemo(
     () =>
-      lgas.filter((s: string) =>
+      lgas.filter((s) =>
         s.toLowerCase().includes(lgaQuery.trim().toLowerCase())
       ),
     [lgas, lgaQuery]
@@ -102,7 +102,7 @@ export default function OnboardingStepFour({ value, onChange }: Props) {
 
   const filteredWards = useMemo(
     () =>
-      wards.filter((s: string) =>
+      wards.filter((s) =>
         s.toLowerCase().includes(wardQuery.trim().toLowerCase())
       ),
     [wards, wardQuery]
@@ -110,7 +110,7 @@ export default function OnboardingStepFour({ value, onChange }: Props) {
 
   const filteredUnits = useMemo(
     () =>
-      pollingUnits.filter((s: string) =>
+      pollingUnits.filter((s) =>
         s.toLowerCase().includes(unitQuery.trim().toLowerCase())
       ),
     [pollingUnits, unitQuery]
@@ -123,22 +123,23 @@ export default function OnboardingStepFour({ value, onChange }: Props) {
       ward: "",
       pollingUnit: "",
     });
-    stateSheetRef.current?.dismiss();
   };
 
   const handlePickLga = (picked: string): void => {
-    onChange({ ...value, localGovernmentArea: picked, ward: "", pollingUnit: "" });
-    lgaSheetRef.current?.dismiss();
+    onChange({
+      ...value,
+      localGovernmentArea: picked,
+      ward: "",
+      pollingUnit: "",
+    });
   };
 
   const handlePickWard = (picked: string): void => {
     onChange({ ...value, ward: picked, pollingUnit: "" });
-    wardSheetRef.current?.dismiss();
   };
 
   const handlePickUnit = (picked: string): void => {
     onChange({ ...value, pollingUnit: picked });
-    unitSheetRef.current?.dismiss();
   };
 
   return (
@@ -229,43 +230,43 @@ export default function OnboardingStepFour({ value, onChange }: Props) {
         </View>
       </View>
 
-      <NationalitySheet
+      <SelectPickerSheet
         ref={stateSheetRef}
         title="Select State"
         query={stateQuery}
         onChangeQuery={setStateQuery}
-        selectedCountry={value.pollingState}
-        onSelectCountry={handlePickState}
+        selectedValue={value.pollingState}
+        onSelectValue={handlePickState}
         options={filteredStates}
       />
 
-      <NationalitySheet
+      <SelectPickerSheet
         ref={lgaSheetRef}
         title="Select LGA"
         query={lgaQuery}
         onChangeQuery={setLgaQuery}
-        selectedCountry={value.localGovernmentArea}
-        onSelectCountry={handlePickLga}
+        selectedValue={value.localGovernmentArea}
+        onSelectValue={handlePickLga}
         options={filteredLgas}
       />
 
-      <NationalitySheet
+      <SelectPickerSheet
         ref={wardSheetRef}
         title="Select Ward"
         query={wardQuery}
         onChangeQuery={setWardQuery}
-        selectedCountry={value.ward}
-        onSelectCountry={handlePickWard}
+        selectedValue={value.ward}
+        onSelectValue={handlePickWard}
         options={filteredWards}
       />
 
-      <NationalitySheet
+      <SelectPickerSheet
         ref={unitSheetRef}
         title="Select Polling Unit"
         query={unitQuery}
         onChangeQuery={setUnitQuery}
-        selectedCountry={value.pollingUnit}
-        onSelectCountry={handlePickUnit}
+        selectedValue={value.pollingUnit}
+        onSelectValue={handlePickUnit}
         options={filteredUnits}
       />
     </>

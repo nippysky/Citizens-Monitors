@@ -13,15 +13,23 @@ type Props = {
   children: ReactNode;
   scroll?: boolean;
   footer?: ReactNode;
+  /**
+   * Change this value to force the ScrollView to remount and reset
+   * its scroll offset back to the top.  Typically pass the current
+   * step number so every navigation resets the position.
+   */
+  scrollKey?: string | number;
 };
 
 export default function AppPageShell({
   children,
   scroll = true,
   footer,
+  scrollKey,
 }: Props) {
   const content = scroll ? (
     <ScrollView
+      key={scrollKey}
       contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
@@ -60,7 +68,7 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: "#FEFEFC",
-    paddingVertical:10
+    paddingVertical: 10,
   },
   flex: {
     flex: 1,

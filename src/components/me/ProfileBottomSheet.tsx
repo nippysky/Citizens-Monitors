@@ -14,9 +14,9 @@ import AppSelectField from "@/components/ui/AppSelectField";
 import AppText from "@/components/ui/AppText";
 import { Theme } from "@/theme";
 import { BirthdayValue, Gender } from "@/types/onboarding";
-import BirthdaySheet from "../onboarding/sheets/BirthdaySheet";
-import GenderSheet from "../onboarding/sheets/GenderSheet";
-import NationalitySheet from "../onboarding/sheets/NationalitySheet";
+import BirthdaySheet from "../ui/sheets/BirthdaySheet";
+import GenderSheet from "../ui/sheets/GenderSheet";
+import NationalitySheet from "../ui/sheets/SelectPickerSheet";
 
 export type ProfileFormState = {
   firstName: string;

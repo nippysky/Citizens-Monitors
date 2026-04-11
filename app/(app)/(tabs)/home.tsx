@@ -1,17 +1,23 @@
-import { useMemo, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import AppGradientScreen from "@/components/app/AppGradientScreen";
+import DiscussionRoomSection from "@/components/home/DiscussionRoomSection";
 import ElectionCarousel from "@/components/home/ElectionCarousel";
-import EmptyNotificationsState from "@/components/home/EmptyNotificationState";
-import HomeBannerCard from "@/components/home/HomeBannerCard";
-import HomeCalendarStrip from "@/components/home/HomeCalenderStrip";
+import ElectionUpdatesSection from "@/components/home/ElectionUpdatesSection";
 import HomeHeader from "@/components/home/HomeHeader";
-import NotificationList from "@/components/home/NotificationList";
+import LatestNewsSection from "@/components/home/LatestNewsSection";
 import QuietDayBanner from "@/components/home/QuietDayBanner";
 import TabBarSpacer from "@/components/layout/TabBarSpacer";
-import AppText from "@/components/ui/AppText";
+import VoterEssentialsModal from "@/components/home/VoterEssentialsModal";
 import { useAuth } from "@/context/AuthContext";
+import { useNetwork } from "@/context/NetworkContext";
 import {
   buildFiveDayWindow,
   defaultHomeDate,
@@ -20,6 +26,8 @@ import {
 } from "@/data/home";
 import { Theme } from "@/theme";
 import { CalendarDayItem } from "@/types/home";
+import HomeCalendarStrip from "@/components/home/HomeCalenderStrip";
+import VoterEssentialsSection from "@/components/home/VoterEssentialSection";
 
 function roleLabelFromRole(role: typeof mockRole): string {
   if (role === "observer") return "Observer";
@@ -29,8 +37,11 @@ function roleLabelFromRole(role: typeof mockRole): string {
 
 export default function HomeScreen() {
   const { user } = useAuth();
+  const { showToast, isConnected } = useNetwork();
 
   const [selectedDate, setSelectedDate] = useState<Date>(defaultHomeDate);
+  const [refreshing, setRefreshing] = useState(false);
+  const [voterEssentialsVisible, setVoterEssentialsVisible] = useState(false);
 
   const calendarItems = useMemo(
     () => buildFiveDayWindow(selectedDate),
@@ -49,6 +60,9 @@ export default function HomeScreen() {
     electionCards: [],
     banners: [],
     notifications: [],
+    electionUpdates: [],
+    discussions: [],
+    news: [],
   };
 
   const monthLabel = useMemo(
@@ -66,91 +80,145 @@ export default function HomeScreen() {
     setSelectedDate(item.date);
   };
 
+  // ── Pull to refresh ──
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    // In production: fetch fresh data, update cache via cacheSet()
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    setRefreshing(false);
+
+    if (isConnected) {
+      showToast({
+        type: "info",
+        title: "Data refreshed!",
+        subtitle: "You're viewing the latest updates.",
+      });
+    }
+  }, [isConnected, showToast]);
+
+  // ── Show live election toast on mount if election day ──
+  useEffect(() => {
+    if (selectedContent.hasElection && selectedContent.electionCards.length > 0) {
+      const timer = setTimeout(() => {
+        showToast({
+          type: "live-election",
+          title: "Alimosho 2026 Election is Live!",
+          subtitle: "Submit result & incident reports.",
+          actionLabel: "Submit Election Report",
+          actionRoute: "/(app)/election/election-1",
+        });
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedContent.hasElection]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
-    <AppGradientScreen>
-      <View style={styles.container}>
-        <View style={styles.topSection}>
-          <HomeHeader
-            firstName={firstName}
-            roleLabel={roleLabelFromRole(mockRole)}
-          />
+    <SafeAreaView edges={["top"]} style={styles.safe}>
+      <View style={styles.root}>
+        {/* Gradient background for top portion */}
+        <LinearGradient
+          colors={["#F4F1D9", "#F4F1D9", "#FFFFFF", "#FFFFFF"]}
+          locations={[0, 0.18, 0.48, 1]}
+          style={StyleSheet.absoluteFill}
+        />
 
-          <HomeCalendarStrip
-            items={calendarItems}
-            selectedKey={selectedKey}
-            monthLabel={monthLabel}
-            onSelect={handleSelectDay}
-          />
-
-          {selectedContent.hasElection ? (
-            <ElectionCarousel items={selectedContent.electionCards} />
-          ) : selectedContent.quietDay ? (
-            <QuietDayBanner
-              title={selectedContent.quietDay.title}
-              subtitle={selectedContent.quietDay.subtitle}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          bounces
+          overScrollMode="never"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={Theme.colors.primary}
+              colors={[Theme.colors.primary]}
+              progressBackgroundColor="#FFFFFF"
             />
-          ) : null}
+          }
+        >
+          {/* ── Top gradient section ── */}
+          <View style={styles.topSection}>
+            <HomeHeader
+              firstName={firstName}
+              roleLabel={roleLabelFromRole(mockRole)}
+            />
 
-          {selectedContent.banners.length > 0 ? (
-            <View style={styles.bannerWrap}>
-              {selectedContent.banners.map((banner) => (
-                <HomeBannerCard key={banner.id} item={banner} />
-              ))}
-            </View>
-          ) : null}
-        </View>
+            <HomeCalendarStrip
+              items={calendarItems}
+              selectedKey={selectedKey}
+              monthLabel={monthLabel}
+              onSelect={handleSelectDay}
+            />
 
-        <View style={styles.feedSection}>
-          {selectedContent.notifications.length > 0 ? (
-            <NotificationList items={selectedContent.notifications} />
-          ) : (
-            <View style={styles.emptyWrap}>
-              <AppText style={styles.sectionTitle}>Notifications</AppText>
-              <EmptyNotificationsState />
-            </View>
-          )}
+            {selectedContent.hasElection ? (
+              <ElectionCarousel items={selectedContent.electionCards} />
+            ) : selectedContent.quietDay ? (
+              <QuietDayBanner
+                title={selectedContent.quietDay.title}
+                subtitle={selectedContent.quietDay.subtitle}
+              />
+            ) : null}
+          </View>
 
-          <TabBarSpacer />
-        </View>
+          {/* ── White section — everything below the election card ── */}
+          <View style={styles.whiteSection}>
+            {/* Election Updates */}
+            {selectedContent.electionUpdates.length > 0 && (
+              <ElectionUpdatesSection items={selectedContent.electionUpdates} />
+            )}
+
+            {/* Discussion Room */}
+            {selectedContent.discussions.length > 0 && (
+              <DiscussionRoomSection items={selectedContent.discussions} />
+            )}
+
+            {/* Latest News & Insights */}
+            {selectedContent.news.length > 0 && (
+              <LatestNewsSection items={selectedContent.news} />
+            )}
+
+            {/* Voter Essentials */}
+            <VoterEssentialsSection
+              onViewAll={() => setVoterEssentialsVisible(true)}
+            />
+
+            <TabBarSpacer />
+          </View>
+        </ScrollView>
+
+        {/* Voter Essentials Modal */}
+        <VoterEssentialsModal
+          visible={voterEssentialsVisible}
+          onClose={() => setVoterEssentialsVisible(false)}
+        />
       </View>
-    </AppGradientScreen>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safe: {
     flex: 1,
-    gap: 0,
+    backgroundColor: "#F4F1D9",
   },
-
+  root: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
   topSection: {
     paddingHorizontal: 16,
     paddingTop: 8,
     gap: 16,
+    paddingBottom: 20,
   },
-
-  bannerWrap: {
-    gap: 12,
-    marginBottom: 8,
-  },
-
-  feedSection: {
+  whiteSection: {
     flex: 1,
     backgroundColor: "#FFFFFF",
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    marginTop: 6,
-  },
-
-  emptyWrap: {
-    gap: 12,
-    paddingTop: 2,
-  },
-
-  sectionTitle: {
-    fontSize: 15,
-    lineHeight: 20,
-    fontFamily: Theme.fonts.body.semibold,
-    color: Theme.colors.text,
+    paddingTop: 24,
+    gap: 32,
   },
 });

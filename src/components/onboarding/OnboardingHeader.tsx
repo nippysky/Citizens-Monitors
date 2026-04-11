@@ -1,8 +1,16 @@
+import { Ionicons } from "@expo/vector-icons";
+import { useEffect } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+  Easing,
+} from "react-native-reanimated";
+
 import AppText from "@/components/ui/AppText";
 import CitizenIcon from "@/svgs/app/CitizenIcon";
 import { Theme } from "@/theme";
-import { Ionicons } from "@expo/vector-icons";
-import { Pressable, StyleSheet, View } from "react-native";
 
 type Props = {
   step: number;
@@ -19,7 +27,18 @@ export default function OnboardingHeader({
   onHelp,
   leading = "logo",
 }: Props) {
-  const progress = step / total;
+  const progress = useSharedValue(step / total);
+
+  useEffect(() => {
+    progress.value = withTiming(step / total, {
+      duration: 340,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [progress, step, total]);
+
+  const fillStyle = useAnimatedStyle(() => ({
+    width: `${progress.value * 100}%`,
+  }));
 
   return (
     <View style={styles.wrap}>
@@ -30,14 +49,22 @@ export default function OnboardingHeader({
           </View>
         ) : (
           <Pressable onPress={onBack} hitSlop={8} style={styles.backWrap}>
-            <Ionicons name="chevron-back" size={22} color={Theme.colors.text} />
+            <Ionicons
+              name="chevron-back"
+              size={22}
+              color={Theme.colors.text}
+            />
             <AppText style={styles.backText}>Go back</AppText>
           </Pressable>
         )}
 
         <Pressable onPress={onHelp} hitSlop={8} style={styles.helpWrap}>
           <AppText style={styles.helpText}>Get help</AppText>
-          <Ionicons name="help-circle-outline" size={20} color={Theme.colors.primary} />
+          <Ionicons
+            name="help-circle-outline"
+            size={20}
+            color={Theme.colors.primary}
+          />
         </Pressable>
       </View>
 
@@ -46,9 +73,11 @@ export default function OnboardingHeader({
 
         <View style={styles.progressRow}>
           <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
+            <Animated.View style={[styles.progressFill, fillStyle]} />
           </View>
-          <AppText style={styles.progressCount}>{step} of {total}</AppText>
+          <AppText style={styles.progressCount}>
+            {step} of {total}
+          </AppText>
         </View>
       </View>
     </View>

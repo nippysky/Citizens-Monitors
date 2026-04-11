@@ -3,9 +3,9 @@ import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import BirthdaySheet from "@/components/onboarding/sheets/BirthdaySheet";
-import GenderSheet from "@/components/onboarding/sheets/GenderSheet";
-import NationalitySheet from "@/components/onboarding/sheets/NationalitySheet";
+import BirthdaySheet from "@/components/ui/sheets/BirthdaySheet";
+import GenderSheet from "@/components/ui/sheets/GenderSheet";
+import SelectPickerSheet from "@/components/ui/sheets/SelectPickerSheet";
 import TutorialBanner from "@/components/onboarding/TutorialBanner";
 
 import AppInput from "@/components/ui/AppInput";
@@ -37,50 +37,29 @@ export default function OnboardingStepOne({ value, onChange }: Props) {
   });
 
   const handleFirstNameChange = (text: string): void => {
-    onChange({
-      ...value,
-      firstName: text,
-    });
+    onChange({ ...value, firstName: text });
   };
 
   const handleLastNameChange = (text: string): void => {
-    onChange({
-      ...value,
-      lastName: text,
-    });
+    onChange({ ...value, lastName: text });
   };
 
   const handleCityCountryChange = (text: string): void => {
-    onChange({
-      ...value,
-      cityCountry: text,
-    });
+    onChange({ ...value, cityCountry: text });
   };
 
   const handleConfirmBirthday = (): void => {
-    onChange({
-      ...value,
-      birthday: birthdayTemp.formatted,
-    });
-
+    onChange({ ...value, birthday: birthdayTemp.formatted });
     birthdaySheetRef.current?.dismiss();
   };
 
   const handleConfirmGender = (): void => {
-    onChange({
-      ...value,
-      gender: selectedGenderTemp,
-    });
-
+    onChange({ ...value, gender: selectedGenderTemp });
     genderSheetRef.current?.dismiss();
   };
 
   const handleSelectNationality = (countryName: string): void => {
-    onChange({
-      ...value,
-      nationality: countryName,
-    });
-
+    onChange({ ...value, nationality: countryName });
     setCountryQuery("");
   };
 
@@ -165,12 +144,12 @@ export default function OnboardingStepOne({ value, onChange }: Props) {
         onConfirm={handleConfirmGender}
       />
 
-      <NationalitySheet
+      <SelectPickerSheet
         ref={nationalitySheetRef}
         query={countryQuery}
         onChangeQuery={setCountryQuery}
-        selectedCountry={value.nationality}
-        onSelectCountry={handleSelectNationality}
+        selectedValue={value.nationality}
+        onSelectValue={handleSelectNationality}
       />
     </>
   );

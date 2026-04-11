@@ -1,8 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
+import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
-import type { ElectionItem } from "@/data/elections";
+import type { ElectionItem, ElectionType } from "@/data/elections";
+import PresidentialElection from "@/svgs/app/PresidentialElection";
+import SenatorElection from "@/svgs/app/SenatorElection";
+import HouseOfRepsElection from "@/svgs/app/HouseOfRepsElection";
 import { Theme } from "@/theme";
 
 type Props = {
@@ -20,6 +24,27 @@ function statusLabel(status: ElectionItem["status"]): string {
   if (status === "live") return "Live";
   if (status === "upcoming") return "UPCOMING";
   return "CONCLUDED";
+}
+
+function ElectionTypeIcon({ type }: { type: ElectionType }) {
+  const size = 34;
+  switch (type) {
+    case "Presidential":
+      return <PresidentialElection width={size} height={size} />;
+    case "Senatorial":
+      return <SenatorElection width={size} height={size} />;
+    case "House of Reps":
+    case "State House of Assembly":
+      return <HouseOfRepsElection width={size} height={size} />;
+    case "Governorship":
+    case "Gubernatorial":
+      // Placeholder: using presidential for now
+      return <PresidentialElection width={size} height={size} />;
+    case "Local Government":
+      return <PresidentialElection width={size} height={size} />;
+    default:
+      return <PresidentialElection width={size} height={size} />;
+  }
 }
 
 export default function ElectionCard({ item, onPress }: Props) {
@@ -47,19 +72,16 @@ export default function ElectionCard({ item, onPress }: Props) {
       <View style={[styles.contentCard, isLive && styles.contentCardLive]}>
         <View style={styles.topRow}>
           <View style={styles.topLeft}>
-            <AppText style={[styles.status, { color: statusColor(item.status) }]}>
+            <AppText
+              style={[styles.status, { color: statusColor(item.status) }]}
+            >
               • {statusLabel(item.status)}
             </AppText>
-
             <AppText style={styles.title}>{item.title}</AppText>
           </View>
 
           <View style={styles.badgeWrap}>
-            <Ionicons
-              name="ribbon-outline"
-              size={34}
-              color="#B8860B"
-            />
+            <ElectionTypeIcon type={item.type} />
           </View>
         </View>
 
@@ -80,7 +102,9 @@ export default function ElectionCard({ item, onPress }: Props) {
                 size={18}
                 color={Theme.colors.textMuted}
               />
-              <AppText style={styles.metaText}>{item.partiesCount} Parties</AppText>
+              <AppText style={styles.metaText}>
+                {item.partiesCount} Parties
+              </AppText>
             </View>
           ) : null}
         </View>
@@ -107,13 +131,11 @@ const styles = StyleSheet.create({
     borderColor: "#E3E6EA",
     backgroundColor: "#FFFFFF",
   },
-
   cardWrapLive: {
     borderColor: "#FF2A2A",
     backgroundColor: "#FF2A2A",
     padding: 10,
   },
-
   dateCol: {
     width: 62,
     backgroundColor: "#F3F3EF",
@@ -122,44 +144,36 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     gap: 2,
   },
-
   dateColLive: {
     backgroundColor: "transparent",
   },
-
   month: {
     fontSize: 13,
     lineHeight: 17,
     color: Theme.colors.textMuted,
     fontFamily: Theme.fonts.body.medium,
   },
-
   monthLive: {
     color: "#FFFFFF",
   },
-
   day: {
     fontSize: 24,
     lineHeight: 26,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.heading.bold,
   },
-
   dayLive: {
     color: "#FFFFFF",
   },
-
   year: {
     fontSize: 13,
     lineHeight: 17,
     color: Theme.colors.textMuted,
     fontFamily: Theme.fonts.body.medium,
   },
-
   yearLive: {
     color: "#FFFFFF",
   },
-
   contentCard: {
     flex: 1,
     backgroundColor: "#FFFFFF",
@@ -167,66 +181,55 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     gap: 12,
   },
-
   contentCardLive: {
     borderRadius: 16,
   },
-
   topRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     gap: 10,
   },
-
   topLeft: {
     flex: 1,
     gap: 4,
   },
-
   status: {
     fontSize: 13.5,
     lineHeight: 18,
     fontFamily: Theme.fonts.body.semibold,
   },
-
   title: {
     fontSize: 18,
     lineHeight: 22,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.heading.bold,
   },
-
   badgeWrap: {
     paddingTop: 4,
   },
-
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 22,
     flexWrap: "wrap",
   },
-
   metaItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
-
   metaText: {
     fontSize: 13.5,
     lineHeight: 18,
     color: Theme.colors.textMuted,
     fontFamily: Theme.fonts.body.medium,
   },
-
   ctaRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
     alignSelf: "flex-start",
   },
-
   ctaText: {
     fontSize: 15,
     lineHeight: 20,

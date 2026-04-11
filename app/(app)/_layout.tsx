@@ -1,7 +1,10 @@
 import { Redirect, Stack } from "expo-router";
 
+
 import { ElectionsProvider } from "@/context/ElectionsContext";
 import { useAuth } from "@/context/AuthContext";
+import { NetworkProvider } from "@/context/NetworkContext";
+import ToastNotification from "@/components/app/ToastNotification";
 
 export default function AppLayout() {
   const { isAuthenticated, isOnboardingComplete } = useAuth();
@@ -15,13 +18,16 @@ export default function AppLayout() {
   }
 
   return (
-    <ElectionsProvider>
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          animation: "slide_from_right",
-        }}
-      />
-    </ElectionsProvider>
+    <NetworkProvider>
+      <ElectionsProvider>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <ToastNotification />
+      </ElectionsProvider>
+    </NetworkProvider>
   );
 }

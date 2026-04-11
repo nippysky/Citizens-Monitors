@@ -8,13 +8,26 @@ export const Paths = {
 
   appHome: "/(app)/(tabs)/home",
   appElections: "/(app)/(tabs)/elections",
-  appLive: "/(app)/(tabs)/collation",
-  appAlerts: "/(app)/(tabs)/alerts",
+  appCollation: "/(app)/(tabs)/collation",
+  appPulse: "/(app)/(tabs)/pulse",
   appMe: "/(app)/(tabs)/me",
   appProfile: "/(app)/(tabs)/profile",
   appNotifications: "/(app)/notifications",
   appMyReports: "/(app)/my-reports",
   appElectionCalendar: "/(app)/elections-calendar",
+
+  // Voter essentials
+  voterCitizenAcademy: "/(app)/voter-essentials/CitizenAcademy",
+  voterDigitalElectionVault: "/(app)/voter-essentials/DigitalElectionVault",
+  voterDonateSupport: "/(app)/voter-essentials/DonateSupport",
+  voterElectionDayProcedure: "/(app)/voter-essentials/ElectionDayProcedure",
+  voterNewsAndInsights: "/(app)/voter-essentials/NewsAndInsights",
+  voterPollingUnitLocator: "/(app)/voter-essentials/PollingUnitLocator",
+  voterPollStationConduct: "/(app)/voter-essentials/PollStationConduct",
+  voterPressCoverage: "/(app)/voter-essentials/PressCoverage",
+  voterVoterRegistration: "/(app)/voter-essentials/VoterRegistration",
+  voterRegistrationGuide: "/(app)/voter-essentials/RegistrationGuide",
+  voterUnderstandingTiers: "/(app)/voter-essentials/UnderstandingTiers",
 
   electionDetails: (id: string) =>
     ({

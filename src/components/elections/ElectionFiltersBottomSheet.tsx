@@ -1,28 +1,27 @@
-import { useMemo, useState } from "react";
-import {
-  Pressable,
-  StyleSheet,
-  View,
-} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import {
   BottomSheetBackdrop,
   BottomSheetModal,
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
-import { Ionicons } from "@expo/vector-icons";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AppButton from "@/components/ui/AppButton";
 import AppInput from "@/components/ui/AppInput";
-import AppSelectField from "@/components/ui/AppSelectField";
 import AppText from "@/components/ui/AppText";
+
 import {
   electionTypeOptions,
   ElectionFilterState,
   electionStatusPills,
   stateOptions,
+  ElectionStatus,
+  ElectionType,
 } from "@/data/elections";
 import { Theme } from "@/theme";
+import SelectPickerSheet from "../ui/sheets/SelectPickerSheet";
 
 type Props = {
   sheetRef: React.RefObject<BottomSheetModal | null>;
@@ -32,7 +31,10 @@ type Props = {
   onReset: () => void;
 };
 
-type ExpandKey = "status" | "types" | "state" | "";
+function statusLabel(s: ElectionStatus | "all"): string {
+  if (s === "all") return "All";
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 
 export default function ElectionFiltersBottomSheet({
   sheetRef,
@@ -42,189 +44,151 @@ export default function ElectionFiltersBottomSheet({
   onReset,
 }: Props) {
   const insets = useSafeAreaInsets();
-  const [expanded, setExpanded] = useState<ExpandKey>("");
+  const stateSheetRef = useRef<BottomSheetModal>(null);
+  const [stateQuery, setStateQuery] = useState("");
 
-  const snapPoints = useMemo(() => ["76%"], []);
+  const snapPoints = useMemo(() => ["72%"], []);
 
   const selectedTypeSet = useMemo(
     () => new Set(value.electionTypes),
     [value.electionTypes]
   );
 
-  const toggleType = (type: (typeof electionTypeOptions)[number]) => {
+  const toggleType = (type: ElectionType) => {
     const next = selectedTypeSet.has(type)
-      ? value.electionTypes.filter((item) => item !== type)
+      ? value.electionTypes.filter((t) => t !== type)
       : [...value.electionTypes, type];
-
-    onChange({
-      ...value,
-      electionTypes: next,
-    });
-  };
-
-  const toggleExpanded = (key: ExpandKey) => {
-    setExpanded((prev) => (prev === key ? "" : key));
+    onChange({ ...value, electionTypes: next });
   };
 
   const closeSheet = () => {
-    if (sheetRef.current) {
-      sheetRef.current.dismiss();
-    }
+    sheetRef.current?.dismiss();
   };
 
+  const renderBackdrop = useCallback(
+    (props: any) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        opacity={0.32}
+        pressBehavior="close"
+      />
+    ),
+    []
+  );
+
   return (
-    <BottomSheetModal
-      ref={sheetRef}
-      snapPoints={snapPoints}
-      enablePanDownToClose
-      topInset={insets.top + 12}
-      keyboardBehavior="interactive"
-      keyboardBlurBehavior="restore"
-      android_keyboardInputMode="adjustResize"
-      backdropComponent={(props) => (
-        <BottomSheetBackdrop
-          {...props}
-          appearsOnIndex={0}
-          disappearsOnIndex={-1}
-          opacity={0.32}
-          pressBehavior="close"
-        />
-      )}
-      handleIndicatorStyle={styles.handle}
-      backgroundStyle={styles.sheetBackground}
-    >
-      <BottomSheetScrollView
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: insets.bottom + 24 },
-        ]}
+    <>
+      <BottomSheetModal
+        ref={sheetRef}
+        snapPoints={snapPoints}
+        enablePanDownToClose
+        topInset={insets.top + 12}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
+        backdropComponent={renderBackdrop}
+        handleIndicatorStyle={styles.handle}
+        backgroundStyle={styles.sheetBackground}
       >
-        {/* HEADER */}
-        <View style={styles.header}>
-          <AppText style={styles.headerTitle}>Filter Elections</AppText>
+        <BottomSheetScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: insets.bottom + 24 },
+          ]}
+        >
+          {/* ── Header ── */}
+          <View style={styles.header}>
+            <AppText style={styles.headerTitle}>Filter Elections</AppText>
+            <Pressable onPress={closeSheet} style={styles.closeBtn}>
+              <Ionicons name="close" size={20} color={Theme.colors.textMuted} />
+            </Pressable>
+          </View>
 
-          <Pressable onPress={closeSheet} style={styles.closeBtn}>
-            <Ionicons
-              name="close"
-              size={20}
-              color={Theme.colors.textMuted}
-            />
-          </Pressable>
-        </View>
+          <View style={styles.divider} />
 
-        <View style={styles.divider} />
-
-        {/* DATE RANGE */}
-        <View style={styles.section}>
-          <AppText style={styles.sectionTitle}>Date Range</AppText>
-
-          <View style={styles.row}>
-            <View style={styles.half}>
-              <AppInput
-                label="From"
-                placeholder="dd/mm/yyyy"
-                value={value.fromDate}
-                onChangeText={(fromDate) =>
-                  onChange({ ...value, fromDate })
-                }
-                startIcon={
-                  <Ionicons
-                    name="calendar-outline"
-                    size={18}
-                    color={Theme.colors.textSoft}
-                  />
-                }
-              />
-            </View>
-
-            <View style={styles.half}>
-              <AppInput
-                label="To"
-                placeholder="dd/mm/yyyy"
-                value={value.toDate}
-                onChangeText={(toDate) =>
-                  onChange({ ...value, toDate })
-                }
-                startIcon={
-                  <Ionicons
-                    name="calendar-outline"
-                    size={18}
-                    color={Theme.colors.textSoft}
-                  />
-                }
-              />
+          {/* ── Date Range ── */}
+          <View style={styles.section}>
+            <AppText style={styles.sectionTitle}>Date Range</AppText>
+            <View style={styles.row}>
+              <View style={styles.half}>
+                <AppInput
+                  label="From"
+                  placeholder="dd/mm/yyyy"
+                  value={value.fromDate}
+                  onChangeText={(fromDate) => onChange({ ...value, fromDate })}
+                  startIcon={
+                    <Ionicons
+                      name="calendar-outline"
+                      size={18}
+                      color={Theme.colors.textSoft}
+                    />
+                  }
+                />
+              </View>
+              <View style={styles.half}>
+                <AppInput
+                  label="To"
+                  placeholder="dd/mm/yyyy"
+                  value={value.toDate}
+                  onChangeText={(toDate) => onChange({ ...value, toDate })}
+                  startIcon={
+                    <Ionicons
+                      name="calendar-outline"
+                      size={18}
+                      color={Theme.colors.textSoft}
+                    />
+                  }
+                />
+              </View>
             </View>
           </View>
-        </View>
 
-        {/* STATUS */}
-        <View style={styles.section}>
-          <AppSelectField
-            label="Election Status"
-            value={value.status === "all" ? "All" : value.status}
-            placeholder="Select status"
-            onPress={() => toggleExpanded("status")}
-          />
-
-          {expanded === "status" && (
-            <View style={styles.chipsWrap}>
+          {/* ── Election Status (pills) ── */}
+          <View style={styles.section}>
+            <AppText style={styles.sectionTitle}>Election Status</AppText>
+            <View style={styles.pillsWrap}>
               {electionStatusPills.map((status) => {
                 const selected = value.status === status;
-
                 return (
                   <Pressable
                     key={status}
                     onPress={() => onChange({ ...value, status })}
-                    style={[styles.chip, selected && styles.chipActive]}
+                    style={[styles.pill, selected && styles.pillActive]}
                   >
                     <AppText
                       style={[
-                        styles.chipText,
-                        selected && styles.chipTextActive,
+                        styles.pillText,
+                        selected && styles.pillTextActive,
                       ]}
                     >
-                      {status === "all"
-                        ? "All"
-                        : status.charAt(0).toUpperCase() +
-                          status.slice(1)}
+                      {statusLabel(status)}
                     </AppText>
                   </Pressable>
                 );
               })}
             </View>
-          )}
-        </View>
+          </View>
 
-        {/* TYPE */}
-        <View style={styles.section}>
-          <AppSelectField
-            label="Election Type"
-            value={
-              value.electionTypes.length > 0
-                ? `${value.electionTypes.length} selected`
-                : ""
-            }
-            placeholder="Select election type"
-            onPress={() => toggleExpanded("types")}
-          />
-
-          {expanded === "types" && (
-            <View style={styles.chipsWrap}>
+          {/* ── Election Type (pills, multi-select) ── */}
+          <View style={styles.section}>
+            <AppText style={styles.sectionTitle}>Election Type</AppText>
+            <View style={styles.pillsWrap}>
               {electionTypeOptions.map((type) => {
                 const selected = selectedTypeSet.has(type);
-
                 return (
                   <Pressable
                     key={type}
                     onPress={() => toggleType(type)}
-                    style={[styles.chip, selected && styles.chipActive]}
+                    style={[styles.pill, selected && styles.pillActive]}
                   >
                     <AppText
                       style={[
-                        styles.chipText,
-                        selected && styles.chipTextActive,
+                        styles.pillText,
+                        selected && styles.pillTextActive,
                       ]}
                     >
                       {type}
@@ -233,80 +197,68 @@ export default function ElectionFiltersBottomSheet({
                 );
               })}
             </View>
-          )}
-        </View>
+          </View>
 
-        {/* STATE */}
-        <View style={styles.section}>
-          <AppSelectField
-            label="State/Region"
-            value={value.state}
-            placeholder="All states"
-            onPress={() => toggleExpanded("state")}
-          />
+          {/* ── State / Region (select picker sheet) ── */}
+          <View style={styles.section}>
+            <AppText style={styles.sectionTitle}>State/Region</AppText>
+            <Pressable
+              style={styles.selectField}
+              onPress={() => stateSheetRef.current?.present()}
+            >
+              <AppText
+                style={[
+                  styles.selectFieldText,
+                  !value.state || value.state === "All states"
+                    ? styles.selectFieldPlaceholder
+                    : null,
+                ]}
+              >
+                {value.state && value.state !== "All states"
+                  ? value.state
+                  : "All states"}
+              </AppText>
+              <Ionicons
+                name="chevron-down"
+                size={18}
+                color={Theme.colors.textMuted}
+              />
+            </Pressable>
+          </View>
 
-          {expanded === "state" && (
-            <View style={styles.listWrap}>
-              {stateOptions.map((state) => {
-                const selected = value.state === state;
+          {/* ── Footer ── */}
+          <View style={styles.footerRow}>
+            <Pressable
+              onPress={() => onReset()}
+              style={styles.resetWrap}
+            >
+              <Ionicons name="refresh" size={18} color="#EA4335" />
+              <AppText style={styles.resetText}>Reset</AppText>
+            </Pressable>
 
-                return (
-                  <Pressable
-                    key={state}
-                    onPress={() => onChange({ ...value, state })}
-                    style={[
-                      styles.stateRow,
-                      selected && styles.stateRowActive,
-                    ]}
-                  >
-                    <AppText
-                      style={[
-                        styles.stateText,
-                        selected && styles.stateTextActive,
-                      ]}
-                    >
-                      {state}
-                    </AppText>
+            <AppButton
+              title="Apply Now"
+              onPress={() => {
+                onApply();
+                closeSheet();
+              }}
+              style={styles.applyButton}
+            />
+          </View>
+        </BottomSheetScrollView>
+      </BottomSheetModal>
 
-                    {selected && (
-                      <Ionicons
-                        name="checkmark"
-                        size={18}
-                        color={Theme.colors.primary}
-                      />
-                    )}
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
-        </View>
-
-        {/* FOOTER */}
-        <View style={styles.footerRow}>
-          <Pressable
-            onPress={() => {
-              onReset();
-              setExpanded("");
-            }}
-            style={styles.resetWrap}
-          >
-            <Ionicons name="refresh" size={18} color="#EA4335" />
-            <AppText style={styles.resetText}>Reset</AppText>
-          </Pressable>
-
-          <AppButton
-            title="Apply Now"
-            onPress={() => {
-              onApply();
-              setExpanded("");
-              closeSheet();
-            }}
-            style={styles.applyButton}
-          />
-        </View>
-      </BottomSheetScrollView>
-    </BottomSheetModal>
+      {/* State picker sheet */}
+      <SelectPickerSheet
+        ref={stateSheetRef}
+        title="State/Region"
+        options={stateOptions}
+        query={stateQuery}
+        onChangeQuery={setStateQuery}
+        selectedValue={value.state || "All states"}
+        onSelectValue={(state) => onChange({ ...value, state })}
+      />
+    </>
   );
 }
 
@@ -316,30 +268,25 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
   },
-
   handle: {
     backgroundColor: "rgba(17, 26, 50, 0.12)",
     width: 44,
   },
-
   content: {
     paddingHorizontal: 16,
     paddingTop: 8,
-    gap: 18,
+    gap: 20,
   },
-
   header: {
-    minHeight: 60,
+    minHeight: 56,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-
   headerTitle: {
     fontSize: 18,
     fontFamily: Theme.fonts.body.semibold,
   },
-
   closeBtn: {
     width: 36,
     height: 36,
@@ -348,109 +295,94 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
   divider: {
     height: 1,
     backgroundColor: "#DFE4EB",
     marginHorizontal: -16,
   },
-
   section: {
     gap: 10,
   },
-
   sectionTitle: {
     fontSize: 15,
     fontFamily: Theme.fonts.body.semibold,
+    color: Theme.colors.text,
   },
-
   row: {
     flexDirection: "row",
     gap: 10,
   },
-
   half: {
     flex: 1,
   },
 
-  chipsWrap: {
+  // ── Pills ──
+  pillsWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
   },
-
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+  pill: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "#D8DDE6",
+    backgroundColor: "rgba(255,255,255,0.6)",
   },
-
-  chipActive: {
+  pillActive: {
     borderColor: Theme.colors.primary,
     backgroundColor: "rgba(25,183,176,0.12)",
   },
-
-  chipText: {
+  pillText: {
     fontSize: 14,
+    lineHeight: 18,
     color: Theme.colors.textMuted,
+    fontFamily: Theme.fonts.body.medium,
   },
-
-  chipTextActive: {
+  pillTextActive: {
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.semibold,
   },
 
-  listWrap: {
+  // ── Select field ──
+  selectField: {
+    minHeight: 52,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "#D8DDE6",
-    borderRadius: 16,
-    overflow: "hidden",
-  },
-
-  stateRow: {
-    minHeight: 48,
+    backgroundColor: "#FFFFFF",
     paddingHorizontal: 14,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#ECEFF3",
+    justifyContent: "space-between",
+  },
+  selectFieldText: {
+    fontSize: 15,
+    lineHeight: 20,
+    color: Theme.colors.text,
+  },
+  selectFieldPlaceholder: {
+    color: Theme.colors.textSoft,
   },
 
-  stateRowActive: {
-    backgroundColor: "rgba(25,183,176,0.06)",
-  },
-
-  stateText: {
-    fontSize: 14,
-  },
-
-  stateTextActive: {
-    color: Theme.colors.primary,
-    fontFamily: Theme.fonts.body.semibold,
-  },
-
+  // ── Footer ──
   footerRow: {
     marginTop: 8,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-
   resetWrap: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
-
   resetText: {
     fontSize: 15,
     color: "#EA4335",
     fontFamily: Theme.fonts.body.semibold,
   },
-
   applyButton: {
     minHeight: 54,
     paddingHorizontal: 24,

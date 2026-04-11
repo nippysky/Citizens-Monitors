@@ -4,7 +4,7 @@ import {
   BottomSheetFlatList,
   BottomSheetModal,
 } from "@gorhom/bottom-sheet";
-import { forwardRef, useMemo } from "react";
+import { forwardRef, useCallback, useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import countries from "world-countries";
@@ -25,16 +25,20 @@ type WorldCountry = {
 };
 
 type Props = {
-  // Optional title — defaults to "Nationality"
+  /** Sheet heading — defaults to "Nationality" */
   title?: string;
   query: string;
   onChangeQuery: (value: string) => void;
-  selectedCountry: string;
-  onSelectCountry: (value: string) => void;
-  // If provided, renders these options instead of the full country list.
-  // Used by polling unit sheets.
+  selectedValue: string;
+  onSelectValue: (value: string) => void;
+  /**
+   * If provided, renders these string options instead of the
+   * built-in world-countries list.  Used by polling-unit sheets, etc.
+   */
   options?: string[];
 };
+
+/* ─── helpers ─────────────────────────────────────────────────────────────── */
 
 function flagFromCode(code: string): string {
   return code
@@ -54,53 +58,107 @@ const countryData: CountryItem[] = typedCountries
   }))
   .sort((a, b) => a.name.localeCompare(b.name));
 
-const NationalitySheet = forwardRef<BottomSheetModal, Props>(
-  function NationalitySheet(
-    { title = "Nationality", query, onChangeQuery, selectedCountry, onSelectCountry, options },
+/* ─── component ───────────────────────────────────────────────────────────── */
+
+const SelectPickerSheet = forwardRef<BottomSheetModal, Props>(
+  function SelectPickerSheet(
+    {
+      title = "Nationality",
+      query,
+      onChangeQuery,
+      selectedValue,
+      onSelectValue,
+      options,
+    },
     ref
   ) {
     const insets = useSafeAreaInsets();
 
-    // If custom options provided (polling unit mode), wrap them as simple items
+    /*
+     * FIX: Use fixed snap-points and disable dynamic sizing.
+     * Previously the sheet would collapse when a search filter reduced the
+     * list to only a few items. By keeping two fixed snap-points and always
+     * opening at the first one (55 %) the user never has to drag up manually.
+     */
+    const snapPoints = useMemo(() => ["55%", "92%"], []);
+
     const listData = useMemo(() => {
       if (options) {
         return options.map((o) => ({ name: o, code: o, flag: "" }));
       }
-
       const q = query.trim().toLowerCase();
       if (!q) return countryData;
       return countryData.filter((c) => c.name.toLowerCase().includes(q));
     }, [options, query]);
 
-    const dismiss = () => {
+    const dismiss = useCallback(() => {
       if (ref && typeof ref !== "function" && ref.current) {
         ref.current.dismiss();
       }
-    };
+    }, [ref]);
+
+    const renderBackdrop = useCallback(
+      (props: any) => (
+        <BottomSheetBackdrop
+          {...props}
+          appearsOnIndex={0}
+          disappearsOnIndex={-1}
+          opacity={0.32}
+        />
+      ),
+      []
+    );
+
+    const renderItem = useCallback(
+      ({ item }: { item: CountryItem }) => {
+        const selected = selectedValue === item.name;
+        return (
+          <Pressable
+            style={[styles.row, selected && styles.rowSelected]}
+            onPress={() => {
+              onSelectValue(item.name);
+              dismiss();
+            }}
+          >
+            {item.flag ? (
+              <AppText style={styles.flag}>{item.flag}</AppText>
+            ) : null}
+
+            <AppText
+              style={[styles.rowName, selected && styles.rowNameActive]}
+            >
+              {item.name}
+            </AppText>
+
+            {selected ? (
+              <Ionicons
+                name="checkmark"
+                size={18}
+                color={Theme.colors.primary}
+              />
+            ) : null}
+          </Pressable>
+        );
+      },
+      [selectedValue, onSelectValue, dismiss]
+    );
+
+    const keyExtractor = useCallback((item: CountryItem) => item.code, []);
 
     return (
       <BottomSheetModal
         ref={ref}
-        // Two snap points — full and mid.
-        // Sheet won't collapse to a tiny size when keyboard appears.
-        snapPoints={["60%", "92%"]}
+        snapPoints={snapPoints}
+        index={0}
+        enableDynamicSizing={false}
         topInset={insets.top + 12}
         enablePanDownToClose
-        // ← Keyboard fix: sheet extends upward when keyboard shows
-        // instead of snapping to a lower point
         keyboardBehavior="extend"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
         backgroundStyle={styles.sheetBgTransparent}
         handleIndicatorStyle={styles.sheetHandle}
-        backdropComponent={(props) => (
-          <BottomSheetBackdrop
-            {...props}
-            appearsOnIndex={0}
-            disappearsOnIndex={-1}
-            opacity={0.32}
-          />
-        )}
+        backdropComponent={renderBackdrop}
       >
         <View style={styles.sheetWrap}>
           {/* Header */}
@@ -116,14 +174,18 @@ const NationalitySheet = forwardRef<BottomSheetModal, Props>(
               />
             </View>
             <Pressable onPress={dismiss} style={styles.closeBtn}>
-              <Ionicons name="close" size={22} color={Theme.colors.textMuted} />
+              <Ionicons
+                name="close"
+                size={22}
+                color={Theme.colors.textMuted}
+              />
             </Pressable>
           </View>
 
           <View style={styles.divider} />
 
-          {/* Search input */}
-          <View style={styles.staticTop}>
+          {/* Search */}
+          <View style={styles.searchWrap}>
             <AppInput
               placeholder={options ? "Search…" : "Enter Country Name"}
               value={query}
@@ -142,50 +204,14 @@ const NationalitySheet = forwardRef<BottomSheetModal, Props>(
           <View style={styles.listWrap}>
             <BottomSheetFlatList
               data={listData}
-              keyExtractor={(item) => item.code}
+              keyExtractor={keyExtractor}
               showsVerticalScrollIndicator={false}
-              // ← Critical: keeps keyboard open when tapping a list item
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={[
                 styles.listContent,
                 { paddingBottom: Math.max(insets.bottom, 24) },
               ]}
-              renderItem={({ item }) => {
-                const selected = selectedCountry === item.name;
-                return (
-                  <Pressable
-                    style={[
-                      styles.countryRow,
-                      selected && styles.countryRowSelected,
-                    ]}
-                    onPress={() => {
-                      onSelectCountry(item.name);
-                      dismiss();
-                    }}
-                  >
-                    {item.flag ? (
-                      <AppText style={styles.flag}>{item.flag}</AppText>
-                    ) : null}
-
-                    <AppText
-                      style={[
-                        styles.countryName,
-                        selected && styles.countryNameActive,
-                      ]}
-                    >
-                      {item.name}
-                    </AppText>
-
-                    {selected ? (
-                      <Ionicons
-                        name="checkmark"
-                        size={18}
-                        color={Theme.colors.primary}
-                      />
-                    ) : null}
-                  </Pressable>
-                );
-              }}
+              renderItem={renderItem}
               ListEmptyComponent={
                 <View style={styles.emptyWrap}>
                   <AppText style={styles.emptyText}>
@@ -201,7 +227,9 @@ const NationalitySheet = forwardRef<BottomSheetModal, Props>(
   }
 );
 
-export default NationalitySheet;
+export default SelectPickerSheet;
+
+/* ─── styles ──────────────────────────────────────────────────────────────── */
 
 const styles = StyleSheet.create({
   sheetBgTransparent: {
@@ -248,7 +276,7 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: "#D9DEE8",
   },
-  staticTop: {
+  searchWrap: {
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 12,
@@ -259,7 +287,7 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 16,
   },
-  countryRow: {
+  row: {
     minHeight: 52,
     borderBottomWidth: 1,
     borderBottomColor: "#D9DEE8",
@@ -269,20 +297,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     backgroundColor: "transparent",
   },
-  countryRowSelected: {
+  rowSelected: {
     backgroundColor: "rgba(25, 183, 176, 0.04)",
   },
   flag: {
     fontSize: 22,
     lineHeight: 28,
   },
-  countryName: {
+  rowName: {
     flex: 1,
     fontSize: 16,
     lineHeight: 22,
     color: Theme.colors.text,
   },
-  countryNameActive: {
+  rowNameActive: {
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.medium,
   },

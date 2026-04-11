@@ -1,6 +1,9 @@
+import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
+import { Paths } from "@/constants/paths";
 import { Theme } from "@/theme";
 import { CalendarDayItem } from "@/types/home";
 
@@ -20,7 +23,13 @@ export default function HomeCalendarStrip({
   return (
     <View style={styles.wrap}>
       <View style={styles.headerRow}>
-        <AppText style={styles.sectionTitle}>Election Calendar</AppText>
+        <Pressable
+          style={styles.calendarLink}
+          onPress={() => router.push(Paths.appElectionCalendar)}
+        >
+          <AppText style={styles.calendarLinkText}>Election Calendar</AppText>
+          <Ionicons name="chevron-forward" size={14} color={Theme.colors.primary} />
+        </Pressable>
         <AppText style={styles.monthLabel}>{monthLabel}</AppText>
       </View>
 
@@ -34,16 +43,24 @@ export default function HomeCalendarStrip({
               style={[styles.dayWrap, selected && styles.dayWrapSelected]}
               onPress={() => onSelect(item)}
             >
-              <AppText style={[styles.weekday, selected && styles.weekdaySelected]}>
+              <AppText
+                style={[styles.weekday, selected && styles.weekdaySelected]}
+              >
                 {item.weekdayShort}
               </AppText>
-              <AppText style={[styles.dayNumber, selected && styles.dayNumberSelected]}>
+              <AppText
+                style={[styles.dayNumber, selected && styles.dayNumberSelected]}
+              >
                 {item.dayNumber}
               </AppText>
             </Pressable>
           );
         })}
       </View>
+
+      <AppText style={styles.statusText}>
+        See elections being monitored live right now.
+      </AppText>
     </View>
   );
 }
@@ -57,15 +74,21 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  sectionTitle: {
-    fontSize: 15,
-    lineHeight: 20,
+  calendarLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  calendarLinkText: {
+    fontSize: 14,
+    lineHeight: 18,
     fontFamily: Theme.fonts.body.semibold,
+    color: Theme.colors.primary,
   },
   monthLabel: {
     fontSize: 13,
     lineHeight: 18,
-    color: Theme.colors.primary,
+    color: Theme.colors.text,
     fontFamily: Theme.fonts.body.medium,
   },
   row: {
@@ -105,5 +128,11 @@ const styles = StyleSheet.create({
   },
   dayNumberSelected: {
     color: Theme.colors.primary,
+  },
+  statusText: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Theme.colors.textMuted,
+    marginTop: -2,
   },
 });
