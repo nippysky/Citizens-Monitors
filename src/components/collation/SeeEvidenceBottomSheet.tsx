@@ -1,3 +1,4 @@
+// ─── src/components/collation/SeeEvidenceBottomSheet.tsx ──────────────────────
 import {
   BottomSheetBackdrop,
   BottomSheetModal,
@@ -39,34 +40,27 @@ export type EvidencePayload = {
   electionName?: string;
 };
 
-type Props = {
-  evidence: EvidencePayload | null;
-};
+type Props = { evidence: EvidencePayload | null };
 
-const demoImage =
-  "https://images.unsplash.com/photo-1577563908411-5077b6dc7624?auto=format&fit=crop&w=1200&q=80";
-const demoVideo =
-  "https://www.w3schools.com/html/mov_bbb.mp4";
+const DEMO_IMG = "https://images.unsplash.com/photo-1577563908411-5077b6dc7624?auto=format&fit=crop&w=1200&q=80";
+const DEMO_VID = "https://www.w3schools.com/html/mov_bbb.mp4";
 
 const SeeEvidenceBottomSheet = forwardRef<BottomSheetModal, Props>(
   function SeeEvidenceBottomSheet({ evidence }, ref) {
     const insets = useSafeAreaInsets();
     const snapPoints = useMemo(() => ["90%"], []);
-    const [imageLoading, setImageLoading] = useState(true);
-    const [imageFailed, setImageFailed] = useState(false);
+    const [imgLoading, setImgLoading] = useState(true);
+    const [imgFailed, setImgFailed] = useState(false);
 
     if (!evidence) return null;
 
-    const imageUri = evidence.imageUri ?? demoImage;
-    const videoUri = evidence.videoUri ?? demoVideo;
+    const imageUri = evidence.imageUri ?? DEMO_IMG;
+    const videoUri = evidence.videoUri ?? DEMO_VID;
+    const status = evidence.verificationStatus ?? "verified";
+    const source = evidence.sourceType ?? "observer-upload";
 
-    const verificationStatus = evidence.verificationStatus ?? "verified";
-    const sourceType = evidence.sourceType ?? "observer-upload";
-
-    const handleClose = () => {
-      if (ref && typeof ref !== "function" && ref.current) {
-        ref.current.dismiss();
-      }
+    const close = () => {
+      if (ref && typeof ref !== "function" && ref.current) ref.current.dismiss();
     };
 
     return (
@@ -78,341 +72,152 @@ const SeeEvidenceBottomSheet = forwardRef<BottomSheetModal, Props>(
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
-        backdropComponent={(props) => (
-          <BottomSheetBackdrop
-            {...props}
-            appearsOnIndex={0}
-            disappearsOnIndex={-1}
-            opacity={0.32}
-            pressBehavior="close"
-          />
+        backdropComponent={(p) => (
+          <BottomSheetBackdrop {...p} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.32} pressBehavior="close" />
         )}
         handleIndicatorStyle={styles.handle}
-        backgroundStyle={styles.sheetBackground}
+        backgroundStyle={styles.bg}
       >
         <BottomSheetScrollView
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: insets.bottom + 22 },
-          ]}
+          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 22 }]}
         >
+          {/* header */}
           <View style={styles.header}>
             <AppText style={styles.headerTitle}>See Evidence</AppText>
-
-            <Pressable onPress={handleClose} hitSlop={8} style={styles.closeBtn}>
+            <Pressable onPress={close} hitSlop={8} style={styles.closeBtn}>
               <Ionicons name="close" size={22} color={Theme.colors.textMuted} />
             </Pressable>
           </View>
-
           <View style={styles.divider} />
 
+          {/* hero card */}
           <View style={styles.heroCard}>
             <View style={styles.heroTopRow}>
-              <View style={styles.heroTopLeft}>
-                <View style={styles.heroIconWrap}>
-                  <Ionicons
-                    name="shield-checkmark-outline"
-                    size={18}
-                    color={Theme.colors.primary}
-                  />
+              <View style={styles.heroLeft}>
+                <View style={styles.heroIcon}>
+                  <Ionicons name="shield-checkmark-outline" size={18} color={Theme.colors.primary} />
                 </View>
-
-                <View style={styles.heroTextWrap}>
-                  <AppText style={styles.heroTitle}>
-                    Verified Election Evidence
-                  </AppText>
-                  <AppText style={styles.heroSubtitle}>
-                    Submitted from polling unit evidence flow and stored with
-                    report metadata.
-                  </AppText>
+                <View style={{ flex: 1, gap: 3 }}>
+                  <AppText style={styles.heroTitle}>Verified Election Evidence</AppText>
+                  <AppText style={styles.heroSub}>Submitted from polling unit evidence flow and stored with report metadata.</AppText>
                 </View>
               </View>
-
-              <View
-                style={[
-                  styles.verificationPill,
-                  verificationStatus === "verified"
-                    ? styles.verificationPillVerified
-                    : styles.verificationPillPending,
-                ]}
-              >
-                <Ionicons
-                  name={
-                    verificationStatus === "verified"
-                      ? "checkmark-circle"
-                      : "time-outline"
-                  }
-                  size={14}
-                  color={
-                    verificationStatus === "verified"
-                      ? Theme.colors.primary
-                      : "#B45309"
-                  }
-                />
-                <AppText
-                  style={[
-                    styles.verificationPillText,
-                    verificationStatus === "verified"
-                      ? styles.verificationPillTextVerified
-                      : styles.verificationPillTextPending,
-                  ]}
-                >
-                  {verificationStatus === "verified" ? "Verified" : "Pending"}
+              <View style={[styles.vPill, status === "verified" ? styles.vPillOk : styles.vPillPend]}>
+                <Ionicons name={status === "verified" ? "checkmark-circle" : "time-outline"} size={14} color={status === "verified" ? Theme.colors.primary : "#B45309"} />
+                <AppText style={[styles.vPillText, { color: status === "verified" ? Theme.colors.primary : "#B45309" }]}>
+                  {status === "verified" ? "Verified" : "Pending"}
                 </AppText>
               </View>
             </View>
 
             <AppText style={styles.evidenceTitle}>{evidence.title}</AppText>
 
-            <View style={styles.heroMetaGrid}>
-              <MetaItem
-                icon="calendar-outline"
-                label="Submitted"
-                value={evidence.submittedAt ?? "15 Mar 2027 · 08:42 AM WAT"}
-              />
-              <MetaItem
-                icon="location-outline"
-                label="Polling Unit"
-                value={evidence.pollingUnitName ?? "Ikotun Primary School"}
-              />
-              <MetaItem
-                icon="qr-code-outline"
-                label="Unit Code"
-                value={evidence.pollingUnitCode ?? "PU LA/12/35"}
-              />
-              <MetaItem
-                icon="person-outline"
-                label="Observer"
-                value={evidence.observerHandle ?? "@IronEagle23"}
-              />
+            <View style={styles.metaGrid}>
+              <MetaCell icon="calendar-outline" label="Submitted" value={evidence.submittedAt ?? "15 Mar 2027 · 08:42 AM WAT"} />
+              <MetaCell icon="location-outline" label="Polling Unit" value={evidence.pollingUnitName ?? "Ikotun Primary School"} />
+              <MetaCell icon="qr-code-outline" label="Unit Code" value={evidence.pollingUnitCode ?? "PU LA/12/35"} />
+              <MetaCell icon="person-outline" label="Observer" value={evidence.observerHandle ?? "@IronEagle23"} />
             </View>
 
-            <View style={styles.sourcePill}>
-              <Ionicons
-                name="document-text-outline"
-                size={14}
-                color={Theme.colors.primary}
-              />
-              <AppText style={styles.sourcePillText}>
-                {sourceType === "observer-upload"
-                  ? "Observer submitted evidence"
-                  : "Community submitted report"}
+            <View style={styles.srcPill}>
+              <Ionicons name="document-text-outline" size={14} color={Theme.colors.primary} />
+              <AppText style={styles.srcPillText}>
+                {source === "observer-upload" ? "Observer submitted evidence" : "Community submitted report"}
               </AppText>
             </View>
           </View>
 
+          {/* image section */}
           <View style={styles.section}>
-            <View style={styles.sectionHeaderRow}>
-              <AppText style={styles.sectionTitle}>
-                Image of the Signed Result Sheet
-              </AppText>
-              <View style={styles.mediaBadge}>
-                <Ionicons
-                  name="image-outline"
-                  size={14}
-                  color={Theme.colors.primary}
-                />
-                <AppText style={styles.mediaBadgeText}>Image</AppText>
-              </View>
+            <View style={styles.secHeaderRow}>
+              <AppText style={styles.secTitle}>Image of the Signed Result Sheet</AppText>
+              <Badge icon="image-outline" text="Image" />
             </View>
-
             <View style={styles.mediaCard}>
-              {!imageFailed ? (
+              {!imgFailed ? (
                 <ImageBackground
                   source={{ uri: imageUri }}
-                  style={styles.image}
-                  imageStyle={styles.imageInner}
-                  onLoadStart={() => {
-                    setImageLoading(true);
-                    setImageFailed(false);
-                  }}
-                  onLoadEnd={() => setImageLoading(false)}
-                  onError={() => {
-                    setImageLoading(false);
-                    setImageFailed(true);
-                  }}
+                  style={styles.img}
+                  imageStyle={{ resizeMode: "cover" }}
+                  onLoadStart={() => { setImgLoading(true); setImgFailed(false); }}
+                  onLoadEnd={() => setImgLoading(false)}
+                  onError={() => { setImgLoading(false); setImgFailed(true); }}
                 >
-                  {imageLoading ? (
-                    <View style={styles.imageOverlay}>
+                  {imgLoading ? (
+                    <View style={styles.imgOverlay}>
                       <ActivityIndicator color={Theme.colors.primary} />
-                      <AppText style={styles.imageOverlayText}>
-                        Loading evidence image...
-                      </AppText>
+                      <AppText style={styles.imgOverlayText}>Loading evidence image...</AppText>
                     </View>
                   ) : null}
                 </ImageBackground>
               ) : (
-                <View style={styles.imageFallback}>
-                  <View style={styles.imageFallbackIcon}>
-                    <Ionicons
-                      name="image-outline"
-                      size={24}
-                      color={Theme.colors.textMuted}
-                    />
-                  </View>
-                  <AppText style={styles.imageFallbackTitle}>
-                    Evidence image unavailable
-                  </AppText>
-                  <AppText style={styles.imageFallbackText}>
-                    The uploaded image could not be loaded right now. Try again later
-                    or re-open the sheet.
-                  </AppText>
+                <View style={styles.imgFallback}>
+                  <Ionicons name="image-outline" size={24} color={Theme.colors.textMuted} />
+                  <AppText style={styles.imgFallbackTitle}>Evidence image unavailable</AppText>
                 </View>
               )}
             </View>
-
-            <View style={styles.infoStrip}>
-              <Ionicons
-                name="information-circle-outline"
-                size={14}
-                color="#B45309"
-              />
-              <AppText style={styles.infoStripText}>
-                The uploaded picture must show a signed polling unit result sheet
-                clearly enough for public review and verification.
-              </AppText>
-            </View>
+            <InfoStrip icon="information-circle-outline" text="The uploaded picture must show a signed polling unit result sheet clearly enough for public review and verification." />
           </View>
 
+          {/* video section */}
           <View style={styles.section}>
-            <View style={styles.sectionHeaderRow}>
-              <AppText style={styles.sectionTitle}>
-                Video of Cumulative Result Announcement
-              </AppText>
-              <View style={styles.mediaBadge}>
-                <Ionicons
-                  name="videocam-outline"
-                  size={14}
-                  color={Theme.colors.primary}
-                />
-                <AppText style={styles.mediaBadgeText}>Video</AppText>
-              </View>
+            <View style={styles.secHeaderRow}>
+              <AppText style={styles.secTitle}>Video of Cumulative Result Announcement</AppText>
+              <Badge icon="videocam-outline" text="Video" />
             </View>
-
             <View style={styles.mediaCard}>
-              <CollationVideoPlayer
-                uri={videoUri}
-                title="Cumulative result announcement"
-                subtitle="Tap to load the verified video evidence"
-                posterMode
-              />
+              <CollationVideoPlayer uri={videoUri} title="Cumulative result announcement" subtitle="Tap to load the verified video evidence" posterMode />
             </View>
-
-            <View style={styles.infoStrip}>
-              <Ionicons
-                name="mic-outline"
-                size={14}
-                color="#B45309"
-              />
-              <AppText style={styles.infoStripText}>
-                Video evidence should include voice proof of place and context so
-                the announcement remains authentic and verifiable.
-              </AppText>
-            </View>
+            <InfoStrip icon="mic-outline" text="Video evidence should include voice proof of place and context so the announcement remains authentic and verifiable." />
           </View>
 
+          {/* note */}
           <View style={styles.noteCard}>
             <View style={styles.noteHeader}>
-              <Ionicons
-                name="chatbubble-ellipses-outline"
-                size={16}
-                color={Theme.colors.primary}
-              />
+              <Ionicons name="chatbubble-ellipses-outline" size={16} color={Theme.colors.primary} />
               <AppText style={styles.noteTitle}>Observer Note</AppText>
             </View>
-
             <AppText style={styles.noteBody}>
-              {evidence.note ??
-                "Result sheet was captured immediately after collation at the polling unit. The announcement video was recorded after party agents and officials confirmed the figures on site."}
+              {evidence.note ?? "Result sheet was captured immediately after collation at the polling unit. The announcement video was recorded after party agents and officials confirmed the figures on site."}
             </AppText>
           </View>
 
-          <View style={styles.statsSection}>
-            <AppText style={styles.statsSectionTitle}>
-              Administrative Figures from EC8A Sheet
-            </AppText>
-            <AppText style={styles.statsSectionSubtitle}>
-              These figures were extracted from the polling unit result evidence
-              submitted for this election report.
-            </AppText>
-
+          {/* stats */}
+          <View style={styles.section}>
+            <AppText style={styles.secTitle}>Administrative Figures from EC8A Sheet</AppText>
+            <AppText style={styles.secSub}>These figures were extracted from the polling unit result evidence submitted for this election report.</AppText>
             <View style={styles.statsGrid}>
-              <StatCard
-                label="Accredited Voter"
-                value={evidence.accreditedVoter ?? "675,435"}
-              />
-              <StatCard
-                label="Rejected Votes"
-                value={evidence.rejectedVotes ?? "657"}
-              />
-              <StatCard
-                label="Spoiled Ballot Papers"
-                value={evidence.spoiledBallots ?? "320"}
-              />
-              <StatCard
-                label="Used Ballot Papers"
-                value={evidence.usedBallots ?? "601"}
-              />
-              <StatCard
-                label="Unused Ballot Papers"
-                value={evidence.unusedBallots ?? "87"}
-              />
+              <StatCell label="Accredited Voter" value={evidence.accreditedVoter ?? "675,435"} />
+              <StatCell label="Rejected Votes" value={evidence.rejectedVotes ?? "657"} />
+              <StatCell label="Spoiled Ballot Papers" value={evidence.spoiledBallots ?? "320"} />
+              <StatCell label="Used Ballot Papers" value={evidence.usedBallots ?? "601"} />
+              <StatCell label="Unused Ballot Papers" value={evidence.unusedBallots ?? "87"} />
             </View>
           </View>
 
-          <View style={styles.verifiedMetaCard}>
-            <View style={styles.verifiedMetaHeader}>
-              <View style={styles.verifiedMetaTitleWrap}>
-                <Ionicons
-                  name="navigate-outline"
-                  size={16}
-                  color={Theme.colors.primary}
-                />
-                <AppText style={styles.verifiedMetaTitle}>
-                  Verified Submission Metadata
-                </AppText>
+          {/* verified metadata */}
+          <View style={styles.vmCard}>
+            <View style={styles.vmHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+                <Ionicons name="navigate-outline" size={16} color={Theme.colors.primary} />
+                <AppText style={styles.vmTitle}>Verified Submission Metadata</AppText>
               </View>
-
-              <View style={styles.geoTag}>
-                <AppText style={styles.geoTagText}>GPS Tagged</AppText>
+              <View style={styles.gpsTag}>
+                <AppText style={styles.gpsTagText}>GPS Tagged</AppText>
               </View>
             </View>
-
-            <View style={styles.verifiedMetaBody}>
-              <VerifiedMetaRow
-                label="Election"
-                value={evidence.electionName ?? "Alimosho Local Government Election 2026"}
-              />
-              <VerifiedMetaRow
-                label="Submitted By"
-                value={
-                  evidence.observerName
-                    ? `${evidence.observerName} (${evidence.observerHandle ?? "@observer"})`
-                    : evidence.observerHandle ?? "@IronEagle23"
-                }
-              />
-              <VerifiedMetaRow
-                label="Submitted At"
-                value={evidence.submittedAt ?? "15 Mar 2027 · 08:42 AM WAT"}
-              />
-              <VerifiedMetaRow
-                label="Geo Address"
-                value={evidence.locationMeta ?? "No 20 Ao, Alimosho, Lagos State, Nigeria"}
-              />
+            <View style={styles.vmBody}>
+              <VmRow label="Election" value={evidence.electionName ?? "Alimosho Local Government Election 2026"} />
+              <VmRow label="Submitted By" value={evidence.observerHandle ?? "@IronEagle23"} />
+              <VmRow label="Submitted At" value={evidence.submittedAt ?? "15 Mar 2027 · 08:42 AM WAT"} />
+              <VmRow label="Geo Address" value={evidence.locationMeta ?? "No 20 Ao, Alimosho, Lagos State, Nigeria"} />
             </View>
-
-            <View style={styles.legalFootnote}>
-              <Ionicons
-                name="document-lock-outline"
-                size={14}
-                color={Theme.colors.primary}
-              />
-              <AppText style={styles.legalFootnoteText}>
-                Evidence metadata is stored with timestamp and verified location
-                context for transparency and audit review.
-              </AppText>
+            <View style={styles.legalRow}>
+              <Ionicons name="document-lock-outline" size={14} color={Theme.colors.primary} />
+              <AppText style={styles.legalText}>Evidence metadata is stored with timestamp and verified location context for transparency and audit review.</AppText>
             </View>
           </View>
         </BottomSheetScrollView>
@@ -423,526 +228,117 @@ const SeeEvidenceBottomSheet = forwardRef<BottomSheetModal, Props>(
 
 export default SeeEvidenceBottomSheet;
 
-function MetaItem({
-  icon,
-  label,
-  value,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  value: string;
-}) {
+/* ─── helpers ─── */
+
+function MetaCell({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string }) {
   return (
-    <View style={styles.metaItem}>
-      <View style={styles.metaItemTop}>
+    <View style={styles.metaCell}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
         <Ionicons name={icon} size={13} color={Theme.colors.textMuted} />
-        <AppText style={styles.metaItemLabel}>{label}</AppText>
+        <AppText style={{ fontSize: 11, color: Theme.colors.textMuted }}>{label}</AppText>
       </View>
-      <AppText style={styles.metaItemValue}>{value}</AppText>
+      <AppText style={{ fontSize: 13, lineHeight: 18, color: Theme.colors.text, fontFamily: Theme.fonts.body.semibold }}>{value}</AppText>
     </View>
   );
 }
 
-function StatCard({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function Badge({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: string }) {
   return (
-    <View style={styles.statCard}>
-      <AppText style={styles.statLabel}>{label}</AppText>
-      <AppText style={styles.statValue}>{value}</AppText>
+    <View style={styles.badge}>
+      <Ionicons name={icon} size={14} color={Theme.colors.primary} />
+      <AppText style={styles.badgeText}>{text}</AppText>
     </View>
   );
 }
 
-function VerifiedMetaRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function InfoStrip({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: string }) {
   return (
-    <View style={styles.verifiedMetaRow}>
-      <AppText style={styles.verifiedMetaRowLabel}>{label}</AppText>
-      <AppText style={styles.verifiedMetaRowValue}>{value}</AppText>
+    <View style={styles.infoStrip}>
+      <Ionicons name={icon} size={14} color="#B45309" />
+      <AppText style={styles.infoText}>{text}</AppText>
     </View>
   );
 }
+
+function StatCell({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.statCell}>
+      <AppText style={{ fontSize: 11, color: Theme.colors.textMuted }}>{label}</AppText>
+      <AppText style={{ fontSize: 26, lineHeight: 26, color: Theme.colors.text, fontFamily: Theme.fonts.heading.bold }}>{value}</AppText>
+    </View>
+  );
+}
+
+function VmRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={{ gap: 4 }}>
+      <AppText style={{ fontSize: 11, color: Theme.colors.textMuted }}>{label}</AppText>
+      <AppText style={{ fontSize: 13, lineHeight: 18, color: Theme.colors.text, fontFamily: Theme.fonts.body.semibold }}>{value}</AppText>
+    </View>
+  );
+}
+
+/* ─── styles ─── */
 
 const styles = StyleSheet.create({
-  sheetBackground: {
-    backgroundColor: Theme.colors.background,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-  },
-
-  handle: {
-    backgroundColor: "rgba(17, 26, 50, 0.12)",
-    width: 44,
-  },
-
-  content: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    gap: 18,
-  },
-
-  header: {
-    minHeight: 62,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  headerTitle: {
-    fontSize: 18,
-    lineHeight: 24,
-    fontFamily: Theme.fonts.heading.semibold,
-    color: Theme.colors.text,
-  },
-
-  closeBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "rgba(255,255,255,0.74)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  divider: {
-    height: 1,
-    backgroundColor: "#DFE4EB",
-    marginHorizontal: -16,
-  },
-
-  heroCard: {
-    borderRadius: 20,
-    backgroundColor: "#F4FBFA",
-    borderWidth: 1,
-    borderColor: "rgba(5,163,156,0.14)",
-    padding: 14,
-    gap: 14,
-  },
-
-  heroTopRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-
-  heroTopLeft: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    flex: 1,
-  },
-
-  heroIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "#EAFBF9",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-
-  heroTextWrap: {
-    flex: 1,
-    gap: 3,
-  },
-
-  heroTitle: {
-    fontSize: 15,
-    lineHeight: 19,
-    color: Theme.colors.text,
-    fontFamily: Theme.fonts.body.semibold,
-  },
-
-  heroSubtitle: {
-    fontSize: 12,
-    lineHeight: 17,
-    color: Theme.colors.textMuted,
-  },
-
-  verificationPill: {
-    minHeight: 30,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-
-  verificationPillVerified: {
-    backgroundColor: "#EAFBF9",
-  },
-
-  verificationPillPending: {
-    backgroundColor: "#FFF7E7",
-  },
-
-  verificationPillText: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontFamily: Theme.fonts.body.semibold,
-  },
-
-  verificationPillTextVerified: {
-    color: Theme.colors.primary,
-  },
-
-  verificationPillTextPending: {
-    color: "#B45309",
-  },
-
-  evidenceTitle: {
-    fontSize: 24,
-    lineHeight: 26,
-    color: Theme.colors.text,
-    fontFamily: Theme.fonts.heading.bold,
-  },
-
-  heroMetaGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-
-  metaItem: {
-    width: "47%",
-    borderRadius: 14,
-    backgroundColor: Theme.colors.surface,
-    borderWidth: 1,
-    borderColor: Theme.colors.borderSoft,
-    padding: 10,
-    gap: 6,
-  },
-
-  metaItemTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-
-  metaItemLabel: {
-    fontSize: 11,
-    lineHeight: 14,
-    color: Theme.colors.textMuted,
-  },
-
-  metaItemValue: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: Theme.colors.text,
-    fontFamily: Theme.fonts.body.semibold,
-  },
-
-  sourcePill: {
-    alignSelf: "flex-start",
-    minHeight: 32,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    backgroundColor: Theme.colors.surface,
-    borderWidth: 1,
-    borderColor: Theme.colors.borderSoft,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-
-  sourcePillText: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: Theme.colors.primary,
-    fontFamily: Theme.fonts.body.semibold,
-  },
-
-  section: {
-    gap: 10,
-  },
-
-  sectionHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-
-  sectionTitle: {
-    flex: 1,
-    fontSize: 15,
-    lineHeight: 20,
-    color: Theme.colors.text,
-    fontFamily: Theme.fonts.body.semibold,
-  },
-
-  mediaBadge: {
-    minHeight: 28,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    backgroundColor: "#EAFBF9",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-
-  mediaBadgeText: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: Theme.colors.primary,
-    fontFamily: Theme.fonts.body.semibold,
-  },
-
-  mediaCard: {
-    borderRadius: 18,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: Theme.colors.borderSoft,
-    backgroundColor: "#F8FAFC",
-  },
-
-  image: {
-    width: "100%",
-    height: 260,
-    backgroundColor: "#EEF2F6",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  imageInner: {
-    resizeMode: "cover",
-  },
-
-  imageOverlay: {
-    position: "absolute",
-    inset: 0,
-    backgroundColor: "rgba(248,250,252,0.82)",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-  },
-
-  imageOverlayText: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: Theme.colors.textMuted,
-    fontFamily: Theme.fonts.body.medium,
-  },
-
-  imageFallback: {
-    height: 260,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-    gap: 10,
-    backgroundColor: "#F8FAFC",
-  },
-
-  imageFallbackIcon: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: "#EEF2F6",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  imageFallbackTitle: {
-    fontSize: 16,
-    lineHeight: 20,
-    color: Theme.colors.text,
-    fontFamily: Theme.fonts.body.semibold,
-    textAlign: "center",
-  },
-
-  imageFallbackText: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: Theme.colors.textMuted,
-    textAlign: "center",
-    maxWidth: 260,
-  },
-
-  infoStrip: {
-    borderRadius: 14,
-    backgroundColor: "#FFF8EC",
-    borderWidth: 1,
-    borderColor: "#F6E1B7",
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-  },
-
-  infoStripText: {
-    flex: 1,
-    fontSize: 11,
-    lineHeight: 16,
-    color: "#9A6700",
-  },
-
-  noteCard: {
-    borderRadius: 18,
-    backgroundColor: Theme.colors.surface,
-    borderWidth: 1,
-    borderColor: Theme.colors.borderSoft,
-    padding: 14,
-    gap: 10,
-  },
-
-  noteHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-  },
-
-  noteTitle: {
-    fontSize: 14,
-    lineHeight: 18,
-    color: Theme.colors.text,
-    fontFamily: Theme.fonts.body.semibold,
-  },
-
-  noteBody: {
-    fontSize: 13,
-    lineHeight: 20,
-    color: Theme.colors.text,
-  },
-
-  statsSection: {
-    gap: 8,
-  },
-
-  statsSectionTitle: {
-    fontSize: 16,
-    lineHeight: 22,
-    color: Theme.colors.text,
-    fontFamily: Theme.fonts.body.semibold,
-  },
-
-  statsSectionSubtitle: {
-    fontSize: 12,
-    lineHeight: 17,
-    color: Theme.colors.textMuted,
-  },
-
-  statsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-
-  statCard: {
-    width: "47%",
-    minHeight: 92,
-    borderRadius: 16,
-    backgroundColor: Theme.colors.surface,
-    borderWidth: 1,
-    borderColor: Theme.colors.borderSoft,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    justifyContent: "space-between",
-  },
-
-  statLabel: {
-    fontSize: 11,
-    lineHeight: 15,
-    color: Theme.colors.textMuted,
-  },
-
-  statValue: {
-    fontSize: 28,
-    lineHeight: 28,
-    color: Theme.colors.text,
-    fontFamily: Theme.fonts.heading.bold,
-  },
-
-  verifiedMetaCard: {
-    borderRadius: 20,
-    backgroundColor: "#DFF7EB",
-    padding: 14,
-    gap: 12,
-  },
-
-  verifiedMetaHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-
-  verifiedMetaTitleWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flex: 1,
-  },
-
-  verifiedMetaTitle: {
-    fontSize: 15,
-    lineHeight: 20,
-    color: Theme.colors.text,
-    fontFamily: Theme.fonts.body.semibold,
-  },
-
-  geoTag: {
-    minHeight: 28,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    backgroundColor: "rgba(255,255,255,0.72)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  geoTagText: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: Theme.colors.primary,
-    fontFamily: Theme.fonts.body.semibold,
-  },
-
-  verifiedMetaBody: {
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.72)",
-    padding: 12,
-    gap: 10,
-  },
-
-  verifiedMetaRow: {
-    gap: 4,
-  },
-
-  verifiedMetaRowLabel: {
-    fontSize: 11,
-    lineHeight: 14,
-    color: Theme.colors.textMuted,
-  },
-
-  verifiedMetaRowValue: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: Theme.colors.text,
-    fontFamily: Theme.fonts.body.semibold,
-  },
-
-  legalFootnote: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-  },
-
-  legalFootnoteText: {
-    flex: 1,
-    fontSize: 11,
-    lineHeight: 16,
-    color: Theme.colors.text,
-  },
+  bg: { backgroundColor: Theme.colors.background, borderTopLeftRadius: 28, borderTopRightRadius: 28 },
+  handle: { backgroundColor: "rgba(17,26,50,0.12)", width: 44 },
+  content: { paddingHorizontal: 16, paddingTop: 8, gap: 18 },
+  header: { minHeight: 58, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  headerTitle: { fontSize: 18, lineHeight: 24, fontFamily: Theme.fonts.heading.semibold, color: Theme.colors.text },
+  closeBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(255,255,255,0.74)", alignItems: "center", justifyContent: "center" },
+  divider: { height: 1, backgroundColor: "#DFE4EB", marginHorizontal: -16 },
+
+  heroCard: { borderRadius: 20, backgroundColor: "#F4FBFA", borderWidth: 1, borderColor: "rgba(5,163,156,0.14)", padding: 14, gap: 14 },
+  heroTopRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10 },
+  heroLeft: { flexDirection: "row", alignItems: "flex-start", gap: 10, flex: 1 },
+  heroIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: "#EAFBF9", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  heroTitle: { fontSize: 14, lineHeight: 18, color: Theme.colors.text, fontFamily: Theme.fonts.body.semibold },
+  heroSub: { fontSize: 12, lineHeight: 17, color: Theme.colors.textMuted },
+  vPill: { minHeight: 28, borderRadius: 999, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 6 },
+  vPillOk: { backgroundColor: "#EAFBF9" },
+  vPillPend: { backgroundColor: "#FFF7E7" },
+  vPillText: { fontSize: 12, lineHeight: 16, fontFamily: Theme.fonts.body.semibold },
+  evidenceTitle: { fontSize: 22, lineHeight: 25, color: Theme.colors.text, fontFamily: Theme.fonts.heading.bold },
+
+  metaGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  metaCell: { width: "47%", borderRadius: 14, backgroundColor: Theme.colors.surface, borderWidth: 1, borderColor: Theme.colors.border, padding: 10, gap: 6 },
+
+  srcPill: { alignSelf: "flex-start", minHeight: 30, borderRadius: 999, paddingHorizontal: 12, backgroundColor: Theme.colors.surface, borderWidth: 1, borderColor: Theme.colors.border, flexDirection: "row", alignItems: "center", gap: 6 },
+  srcPillText: { fontSize: 12, lineHeight: 16, color: Theme.colors.primary, fontFamily: Theme.fonts.body.semibold },
+
+  section: { gap: 10 },
+  secHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  secTitle: { flex: 1, fontSize: 14, lineHeight: 18, color: Theme.colors.text, fontFamily: Theme.fonts.body.semibold },
+  secSub: { fontSize: 12, lineHeight: 17, color: Theme.colors.textMuted },
+
+  badge: { minHeight: 26, borderRadius: 999, paddingHorizontal: 10, backgroundColor: "#EAFBF9", flexDirection: "row", alignItems: "center", gap: 6 },
+  badgeText: { fontSize: 12, lineHeight: 16, color: Theme.colors.primary, fontFamily: Theme.fonts.body.semibold },
+
+  mediaCard: { borderRadius: 18, overflow: "hidden", borderWidth: 1, borderColor: Theme.colors.border, backgroundColor: "#F8FAFC" },
+  img: { width: "100%", height: 240, backgroundColor: "#EEF2F6", justifyContent: "center", alignItems: "center" },
+  imgOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(248,250,252,0.82)", alignItems: "center", justifyContent: "center", gap: 10 },
+  imgOverlayText: { fontSize: 13, color: Theme.colors.textMuted, fontFamily: Theme.fonts.body.medium },
+  imgFallback: { height: 200, alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: "#F8FAFC" },
+  imgFallbackTitle: { fontSize: 14, color: Theme.colors.text, fontFamily: Theme.fonts.body.semibold, textAlign: "center" },
+
+  infoStrip: { borderRadius: 14, backgroundColor: "#FFF8EC", borderWidth: 1, borderColor: "#F6E1B7", paddingHorizontal: 10, paddingVertical: 10, flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  infoText: { flex: 1, fontSize: 11, lineHeight: 16, color: "#9A6700" },
+
+  noteCard: { borderRadius: 18, backgroundColor: Theme.colors.surface, borderWidth: 1, borderColor: Theme.colors.border, padding: 14, gap: 10 },
+  noteHeader: { flexDirection: "row", alignItems: "center", gap: 7 },
+  noteTitle: { fontSize: 14, lineHeight: 18, color: Theme.colors.text, fontFamily: Theme.fonts.body.semibold },
+  noteBody: { fontSize: 13, lineHeight: 20, color: Theme.colors.text },
+
+  statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  statCell: { width: "47%", minHeight: 88, borderRadius: 16, backgroundColor: Theme.colors.surface, borderWidth: 1, borderColor: Theme.colors.border, paddingHorizontal: 12, paddingVertical: 12, justifyContent: "space-between" },
+
+  vmCard: { borderRadius: 20, backgroundColor: "#DFF7EB", padding: 14, gap: 12 },
+  vmHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  vmTitle: { fontSize: 14, lineHeight: 18, color: Theme.colors.text, fontFamily: Theme.fonts.body.semibold },
+  gpsTag: { minHeight: 26, borderRadius: 999, paddingHorizontal: 10, backgroundColor: "rgba(255,255,255,0.72)", alignItems: "center", justifyContent: "center" },
+  gpsTagText: { fontSize: 12, lineHeight: 16, color: Theme.colors.primary, fontFamily: Theme.fonts.body.semibold },
+  vmBody: { borderRadius: 16, backgroundColor: "rgba(255,255,255,0.72)", padding: 12, gap: 10 },
+  legalRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  legalText: { flex: 1, fontSize: 11, lineHeight: 16, color: Theme.colors.text },
 });

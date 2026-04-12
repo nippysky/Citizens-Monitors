@@ -1,3 +1,4 @@
+// ─── src/components/feedback/LiveNoticeProvider.tsx ───────────────────────────
 import GlobalLiveNotice from "@/components/feedback/GlobalLiveNotice";
 import {
   createContext,
@@ -34,10 +35,7 @@ export function LiveNoticeProvider({ children }: { children: ReactNode }) {
       setActionLabel(actionLabel);
       setActionHandler(() => onPress);
       setRendered(true);
-
-      requestAnimationFrame(() => {
-        setVisible(true);
-      });
+      requestAnimationFrame(() => setVisible(true));
     },
     []
   );
@@ -46,18 +44,11 @@ export function LiveNoticeProvider({ children }: { children: ReactNode }) {
     setVisible(false);
   }, []);
 
-  const value = useMemo(
-    () => ({
-      showNotice,
-      hideNotice,
-    }),
-    [showNotice, hideNotice]
-  );
+  const value = useMemo(() => ({ showNotice, hideNotice }), [showNotice, hideNotice]);
 
   return (
     <LiveNoticeContext.Provider value={value}>
       {children}
-
       {rendered ? (
         <GlobalLiveNotice
           visible={visible}
@@ -72,11 +63,7 @@ export function LiveNoticeProvider({ children }: { children: ReactNode }) {
 }
 
 export function useLiveNotice() {
-  const context = useContext(LiveNoticeContext);
-
-  if (!context) {
-    throw new Error("useLiveNotice must be used within LiveNoticeProvider");
-  }
-
-  return context;
+  const ctx = useContext(LiveNoticeContext);
+  if (!ctx) throw new Error("useLiveNotice must be used within LiveNoticeProvider");
+  return ctx;
 }

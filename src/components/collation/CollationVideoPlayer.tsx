@@ -1,7 +1,8 @@
-import { Ionicons } from "@expo/vector-icons";
-import { useMemo, useState } from "react";
+// ─── src/components/collation/CollationVideoPlayer.tsx ────────────────────────
+import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { VideoView, useVideoPlayer } from "expo-video";
+import { Ionicons } from "@expo/vector-icons";
+import { useVideoPlayer, VideoView } from "expo-video";
 
 import AppText from "@/components/ui/AppText";
 import { Theme } from "@/theme";
@@ -15,123 +16,79 @@ type Props = {
 
 export default function CollationVideoPlayer({
   uri,
-  title = "Video evidence ready",
-  subtitle = "Tap to load and play this video",
-  posterMode = true,
+  title,
+  subtitle,
+  posterMode = false,
 }: Props) {
-  const [isActivated, setIsActivated] = useState(!posterMode);
+  const [activated, setActivated] = useState(false);
 
-  const player = useVideoPlayer(
-    useMemo(() => ({ uri }), [uri]),
-    (instance) => {
-      instance.loop = false;
-    }
-  );
-
-  if (!isActivated) {
+  if (posterMode && !activated) {
     return (
-      <Pressable onPress={() => setIsActivated(true)} style={styles.previewCard}>
-        <View style={styles.previewIconWrap}>
-          <Ionicons name="play" size={24} color={Theme.colors.primary} />
-        </View>
-
-        <View style={styles.previewTextWrap}>
-          <AppText style={styles.previewTitle}>{title}</AppText>
-          <AppText style={styles.previewSubtitle}>{subtitle}</AppText>
-        </View>
-
-        <View style={styles.previewPill}>
-          <AppText style={styles.previewPillText}>Load video</AppText>
+      <Pressable onPress={() => setActivated(true)} style={styles.posterWrap}>
+        <View style={styles.posterContent}>
+          <View style={styles.playCircle}>
+            <Ionicons name="play" size={24} color={Theme.colors.primary} />
+          </View>
+          {title ? <AppText style={styles.posterTitle}>{title}</AppText> : null}
+          {subtitle ? <AppText style={styles.posterSubtitle}>{subtitle}</AppText> : null}
         </View>
       </Pressable>
     );
   }
 
+  return <ActivePlayer uri={uri} />;
+}
+
+function ActivePlayer({ uri }: { uri: string }) {
+  const player = useVideoPlayer(uri, (p) => {
+    p.loop = false;
+  });
+
   return (
-    <View style={styles.wrap}>
+    <View style={styles.videoWrap}>
       <VideoView
-        style={styles.video}
         player={player}
+        style={styles.video}
+        allowsPictureInPicture
         nativeControls
-        contentFit="cover"
-        allowsPictureInPicture={false}
-        fullscreenOptions={{
-          enable: true,
-        }}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    width: "100%",
-    height: 220,
-    borderRadius: 18,
-    overflow: "hidden",
-    backgroundColor: "#EDEFF3",
-  },
-
-  video: {
-    width: "100%",
-    height: "100%",
-  },
-
-  previewCard: {
-    minHeight: 220,
-    borderRadius: 18,
-    backgroundColor: "#F7FAFC",
-    borderWidth: 1,
-    borderColor: "#E5EAF1",
+  posterWrap: {
+    minHeight: 180,
+    backgroundColor: "#F0F4F8",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 20,
-    gap: 14,
+    gap: 10,
+    padding: 20,
   },
-
-  previewIconWrap: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#EAFBF9",
+  posterContent: { alignItems: "center", gap: 8 },
+  playCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "rgba(5,163,156,0.12)",
     alignItems: "center",
     justifyContent: "center",
+    paddingLeft: 3,
   },
-
-  previewTextWrap: {
-    alignItems: "center",
-    gap: 4,
-  },
-
-  previewTitle: {
-    fontSize: 16,
-    lineHeight: 20,
+  posterTitle: {
+    fontSize: 14,
+    lineHeight: 18,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
     textAlign: "center",
   },
-
-  previewSubtitle: {
-    fontSize: 13,
-    lineHeight: 18,
+  posterSubtitle: {
+    fontSize: 12,
+    lineHeight: 17,
     color: Theme.colors.textMuted,
     textAlign: "center",
-    maxWidth: 240,
+    maxWidth: 220,
   },
-
-  previewPill: {
-    minHeight: 34,
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    backgroundColor: Theme.colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  previewPillText: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: Theme.colors.white,
-    fontFamily: Theme.fonts.body.semibold,
-  },
+  videoWrap: { width: "100%", aspectRatio: 16 / 9 },
+  video: { flex: 1 },
 });

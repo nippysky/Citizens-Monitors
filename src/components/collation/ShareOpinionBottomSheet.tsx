@@ -1,3 +1,4 @@
+// ─── src/components/collation/ShareOpinionBottomSheet.tsx ─────────────────────
 import {
   BottomSheetBackdrop,
   BottomSheetModal,
@@ -5,13 +6,7 @@ import {
 } from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
 import { forwardRef, useMemo, useState } from "react";
-import {
-  Image,
-  Pressable,
-  StyleSheet,
-  Switch,
-  View,
-} from "react-native";
+import { Image, Pressable, StyleSheet, Switch, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AppButton from "@/components/ui/AppButton";
@@ -21,205 +16,231 @@ import { PickedMedia, useCollationMedia } from "@/hooks/useCollationMedia";
 import { useAppToast } from "@/hooks/useAppToast";
 import { Theme } from "@/theme";
 
+type Audience = "my-polling-unit" | "my-world" | "my-state";
+
 type Props = {
-  onSubmitted?: (payload: {
+  onSubmitted?: () => void;
+  /** Called with the actual payload so parent can add to local list */
+  onPayload?: (payload: {
     opinion: string;
-    audience: "my-polling-unit" | "my-world" | "my-state";
+    audience: Audience;
     shareToSocial: boolean;
-    image?: PickedMedia | null;
   }) => void;
 };
 
-type Audience = "my-polling-unit" | "my-world" | "my-state";
-
 const ShareOpinionBottomSheet = forwardRef<BottomSheetModal, Props>(
-  function ShareOpinionBottomSheet({ onSubmitted }, ref) {
+  function ShareOpinionBottomSheet({ onSubmitted, onPayload }, ref) {
     const insets = useSafeAreaInsets();
     const { showToast } = useAppToast();
-    const { pickImageFromGallery, busy } = useCollationMedia();
-
+    const { pickImageFromGallery, pickVideoFromGallery, busy } =
+      useCollationMedia();
     const [opinion, setOpinion] = useState("");
     const [audience, setAudience] = useState<Audience>("my-polling-unit");
-    const [shareToSocial, setShareToSocial] = useState(true);
-    const [imageAsset, setImageAsset] = useState<PickedMedia | null>(null);
+    const [social, setSocial] = useState(true);
+    const [imgAsset, setImgAsset] = useState<PickedMedia | null>(null);
+    const [vidAsset, setVidAsset] = useState<PickedMedia | null>(null);
+    const snaps = useMemo(() => ["88%"], []);
+    const ok = opinion.trim().length > 6;
 
-    const snapPoints = useMemo(() => ["88%"], []);
-    const canSubmit = useMemo(() => opinion.trim().length > 6, [opinion]);
-
-    const handleClose = () => {
-      if (ref && typeof ref !== "function" && ref.current) {
-        ref.current.dismiss();
-      }
+    const close = () => {
+      if (ref && typeof ref !== "function" && ref.current) ref.current.dismiss();
     };
 
-    const handleAttach = async () => {
-      const result = await pickImageFromGallery();
+    const attachImage = async () => {
+      const r = await pickImageFromGallery();
+      if (!r.ok) {
+        showToast({ type: "error", message: r.error });
+        return;
+      }
+      if (r.data) setImgAsset(r.data);
+    };
 
-      if (!result.ok) {
-        showToast({
-          type: "error",
-          message: result.error,
-        });
+    const attachVideo = async () => {
+      const r = await pickVideoFromGallery();
+      if (!r.ok) {
+        showToast({ type: "error", message: r.error });
+        return;
+      }
+      if (r.data) setVidAsset(r.data);
+    };
+
+    const submit = () => {
+      if (!ok) {
+        showToast({ type: "error", message: "Write your opinion first." });
         return;
       }
 
-      if (!result.data) return;
-
-      setImageAsset(result.data);
-    };
-
-    const handleSubmit = () => {
-      if (!canSubmit) {
-        showToast({
-          type: "error",
-          message: "Please write your opinion before submitting.",
-        });
-        return;
-      }
-
-      onSubmitted?.({
+      // Send payload to parent for local list insertion
+      onPayload?.({
         opinion: opinion.trim(),
         audience,
-        shareToSocial,
-        image: imageAsset,
+        shareToSocial: social,
       });
 
-      showToast({
-        type: "success",
-        message: "Your opinion has been posted successfully.",
-      });
+      onSubmitted?.();
 
+      // Reset
       setOpinion("");
       setAudience("my-polling-unit");
-      setShareToSocial(true);
-      setImageAsset(null);
-      handleClose();
+      setSocial(true);
+      setImgAsset(null);
+      setVidAsset(null);
+      close();
     };
 
     return (
       <BottomSheetModal
         ref={ref}
-        snapPoints={snapPoints}
+        snapPoints={snaps}
         enablePanDownToClose
         topInset={insets.top + 12}
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
-        backdropComponent={(props) => (
+        backdropComponent={(p) => (
           <BottomSheetBackdrop
-            {...props}
+            {...p}
             appearsOnIndex={0}
             disappearsOnIndex={-1}
             opacity={0.3}
             pressBehavior="close"
           />
         )}
-        handleIndicatorStyle={styles.handle}
-        backgroundStyle={styles.sheetBackground}
+        handleIndicatorStyle={st.handle}
+        backgroundStyle={st.bg}
       >
         <BottomSheetScrollView
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={[
-            styles.scrollContent,
+            st.content,
             { paddingBottom: insets.bottom + 18 },
           ]}
         >
-          <View style={styles.header}>
-            <AppText style={styles.headerTitle}>Share Your Opinion</AppText>
-
-            <Pressable onPress={handleClose} hitSlop={8} style={styles.closeBtn}>
-              <Ionicons name="close" size={22} color={Theme.colors.textMuted} />
+          <View style={st.header}>
+            <AppText style={st.headerTitle}>Share Your Opinion</AppText>
+            <Pressable onPress={close} hitSlop={8} style={st.closeBtn}>
+              <Ionicons
+                name="close"
+                size={22}
+                color={Theme.colors.textMuted}
+              />
             </Pressable>
           </View>
 
-          <View style={styles.guidelineBox}>
-            <View style={styles.guidelineIconWrap}>
+          <View style={st.guideBox}>
+            <View style={st.guideIcon}>
               <Ionicons
                 name="information-circle"
                 size={18}
                 color={Theme.colors.primary}
               />
             </View>
-
-            <AppText style={styles.guidelineText}>
+            <AppText style={st.guideText}>
               Be factual. Be respectful. The Electoral Act protects free
               expression but prohibits hate speech and incitement. — Citizen
               Monitors Community Guidelines
             </AppText>
           </View>
 
-          <View style={styles.section}>
-            <AppText style={styles.label}>Your Opinion</AppText>
-
+          <View style={st.sec}>
+            <AppText style={st.label}>Your Opinion</AppText>
             <AppInput
               placeholder="Share what you have in mind about this election..."
               value={opinion}
               onChangeText={setOpinion}
               multiline
-              inputWrapperStyle={styles.textAreaWrap}
-              style={styles.textArea}
+              inputWrapperStyle={st.taWrap}
+              style={st.ta}
             />
           </View>
 
-          <View style={styles.section}>
-            <Pressable onPress={handleAttach} style={styles.attachButton}>
-              <Ionicons
-                name="camera-outline"
-                size={18}
-                color={Theme.colors.primary}
-              />
-              <AppText style={styles.attachText}>Attach image</AppText>
-            </Pressable>
-
-            {imageAsset?.uri ? (
-              <Image source={{ uri: imageAsset.uri }} style={styles.previewImage} />
+          <View style={st.sec}>
+            <View style={st.attachRow}>
+              <Pressable onPress={attachImage} style={st.attachBtn}>
+                <Ionicons
+                  name="camera-outline"
+                  size={18}
+                  color={Theme.colors.primary}
+                />
+                <AppText style={st.attachText}>Attach image</AppText>
+              </Pressable>
+              <Pressable onPress={attachVideo} style={st.attachBtn}>
+                <Ionicons
+                  name="videocam-outline"
+                  size={18}
+                  color={Theme.colors.primary}
+                />
+                <AppText style={st.attachText}>Attach Video</AppText>
+              </Pressable>
+            </View>
+            {imgAsset?.uri ? (
+              <Image source={{ uri: imgAsset.uri }} style={st.preview} />
+            ) : null}
+            {vidAsset?.uri ? (
+              <View style={st.vidTag}>
+                <Ionicons
+                  name="videocam"
+                  size={16}
+                  color={Theme.colors.primary}
+                />
+                <AppText style={st.vidTagText}>Video attached</AppText>
+                <Pressable onPress={() => setVidAsset(null)} hitSlop={8}>
+                  <Ionicons
+                    name="close-circle"
+                    size={16}
+                    color={Theme.colors.textMuted}
+                  />
+                </Pressable>
+              </View>
             ) : null}
           </View>
 
-          <View style={styles.section}>
-            <AppText style={styles.label}>Who can see this discussion?</AppText>
-
-            <View style={styles.audienceWrap}>
-              <AudienceChip
-                label="My polling unit"
-                active={audience === "my-polling-unit"}
-                onPress={() => setAudience("my-polling-unit")}
-              />
-              <AudienceChip
-                label="My world"
-                active={audience === "my-world"}
-                onPress={() => setAudience("my-world")}
-              />
-              <AudienceChip
-                label="Within my state"
-                active={audience === "my-state"}
-                onPress={() => setAudience("my-state")}
-              />
+          <View style={st.sec}>
+            <AppText style={st.label}>Who can see this discussion?</AppText>
+            <View style={st.audWrap}>
+              {(["my-polling-unit", "my-world", "my-state"] as Audience[]).map(
+                (a) => (
+                  <Pressable
+                    key={a}
+                    onPress={() => setAudience(a)}
+                    style={[st.chip, audience === a && st.chipOn]}
+                  >
+                    <AppText
+                      style={[st.chipText, audience === a && st.chipTextOn]}
+                    >
+                      {a === "my-polling-unit"
+                        ? "My polling unit"
+                        : a === "my-world"
+                          ? "My world"
+                          : "Within my state"}
+                    </AppText>
+                  </Pressable>
+                )
+              )}
             </View>
           </View>
 
-          <View style={styles.switchRow}>
-            <AppText style={styles.switchLabel}>
+          <View style={st.switchRow}>
+            <AppText style={st.switchLabel}>
               Give permission to share on social media.
             </AppText>
-
             <Switch
-              value={shareToSocial}
-              onValueChange={setShareToSocial}
+              value={social}
+              onValueChange={setSocial}
               trackColor={{ false: "#D7DDE5", true: "#AEE7E1" }}
-              thumbColor={shareToSocial ? Theme.colors.primary : "#FFFFFF"}
+              thumbColor={social ? Theme.colors.primary : "#FFF"}
               ios_backgroundColor="#D7DDE5"
             />
           </View>
 
-          <View style={styles.footer}>
+          <View style={{ paddingTop: 6 }}>
             <AppButton
               title="Submit Post"
-              onPress={handleSubmit}
-              disabled={!canSubmit}
+              onPress={submit}
+              disabled={!ok}
               loading={busy}
-              style={styles.submitButton}
+              style={{ marginVertical: 0 }}
             />
           </View>
         </BottomSheetScrollView>
@@ -230,59 +251,26 @@ const ShareOpinionBottomSheet = forwardRef<BottomSheetModal, Props>(
 
 export default ShareOpinionBottomSheet;
 
-function AudienceChip({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={[styles.chip, active && styles.chipActive]}
-    >
-      <AppText style={[styles.chipText, active && styles.chipTextActive]}>
-        {label}
-      </AppText>
-    </Pressable>
-  );
-}
-
-const styles = StyleSheet.create({
-  sheetBackground: {
-     backgroundColor: Theme.colors.background,
+const st = StyleSheet.create({
+  bg: {
+    backgroundColor: Theme.colors.background,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
   },
-
-  handle: {
-    backgroundColor: "rgba(17, 26, 50, 0.12)",
-    width: 44,
-  },
-
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    gap: 18,
-  },
-
+  handle: { backgroundColor: "rgba(17,26,50,0.12)", width: 44 },
+  content: { paddingHorizontal: 16, paddingTop: 8, gap: 18 },
   header: {
-    minHeight: 62,
+    minHeight: 58,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-
   headerTitle: {
     fontSize: 18,
     lineHeight: 24,
     fontFamily: Theme.fonts.heading.semibold,
     color: Theme.colors.text,
   },
-
   closeBtn: {
     width: 38,
     height: 38,
@@ -291,8 +279,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
-  guidelineBox: {
+  guideBox: {
     borderRadius: 18,
     backgroundColor: "#CDEFE4",
     paddingHorizontal: 14,
@@ -301,8 +288,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: 10,
   },
-
-  guidelineIconWrap: {
+  guideIcon: {
     width: 30,
     height: 30,
     borderRadius: 15,
@@ -311,37 +297,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 1,
   },
-
-  guidelineText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 19,
-    color: Theme.colors.text,
-  },
-
-  section: {
-    gap: 10,
-  },
-
+  guideText: { flex: 1, fontSize: 13, lineHeight: 19, color: Theme.colors.text },
+  sec: { gap: 10 },
   label: {
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: 15,
+    lineHeight: 20,
     fontFamily: Theme.fonts.body.medium,
     color: Theme.colors.text,
   },
-
-  textAreaWrap: {
-    minHeight: 170,
-    alignItems: "flex-start",
-    paddingTop: 14,
-  },
-
-  textArea: {
-    minHeight: 128,
-    textAlignVertical: "top",
-  },
-
-  attachButton: {
+  taWrap: { minHeight: 160, alignItems: "flex-start", paddingTop: 14 },
+  ta: { minHeight: 120, textAlignVertical: "top" },
+  attachRow: { flexDirection: "row", gap: 10 },
+  attachBtn: {
+    flex: 1,
     minHeight: 44,
     borderRadius: 16,
     backgroundColor: "#DFF3F1",
@@ -350,28 +318,34 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
-
   attachText: {
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: 14,
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.semibold,
   },
-
-  previewImage: {
+  preview: {
     width: "100%",
     height: 160,
     borderRadius: 16,
     resizeMode: "cover",
     marginTop: 2,
   },
-
-  audienceWrap: {
+  vidTag: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "#EAFBF9",
+    borderRadius: 12,
   },
-
+  vidTagText: {
+    flex: 1,
+    fontSize: 13,
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.body.medium,
+  },
+  audWrap: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   chip: {
     minHeight: 42,
     borderRadius: 16,
@@ -382,24 +356,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
-  chipActive: {
-    backgroundColor: "#F3FFFD",
-    borderColor: Theme.colors.primary,
-  },
-
+  chipOn: { backgroundColor: "#F3FFFD", borderColor: Theme.colors.primary },
   chipText: {
     fontSize: 14,
-    lineHeight: 20,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.medium,
   },
-
-  chipTextActive: {
+  chipTextOn: {
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.semibold,
   },
-
   switchRow: {
     minHeight: 52,
     flexDirection: "row",
@@ -407,19 +373,5 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
   },
-
-  switchLabel: {
-    flex: 1,
-    fontSize: 16,
-    lineHeight: 22,
-    color: Theme.colors.text,
-  },
-
-  footer: {
-    paddingTop: 6,
-  },
-
-  submitButton: {
-    marginVertical: 0,
-  },
+  switchLabel: { flex: 1, fontSize: 15, lineHeight: 20, color: Theme.colors.text },
 });

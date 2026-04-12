@@ -1,13 +1,13 @@
-import { Ionicons } from "@expo/vector-icons";
-import { useEffect, useRef } from "react";
-import {
-  Animated,
+// ─── src/components/feedback/GlobalLiveNotice.tsx ─────────────────────────────
+import { useEffect } from "react";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
   Easing,
-  Pressable,
-  StyleSheet,
-  View,
-} from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+  runOnJS,
+} from "react-native-reanimated";
 
 import AppText from "@/components/ui/AppText";
 import { Theme } from "@/theme";
@@ -17,8 +17,10 @@ type Props = {
   message: string;
   actionLabel?: string;
   onPressAction?: () => void;
-  onHide: () => void;
+  onHide?: () => void;
 };
+
+const TAB_BAR_HEIGHT = Platform.OS === "ios" ? 96 : 80;
 
 export default function GlobalLiveNotice({
   visible,
@@ -27,66 +29,36 @@ export default function GlobalLiveNotice({
   onPressAction,
   onHide,
 }: Props) {
-  const insets = useSafeAreaInsets();
-
-  const translateY = useRef(new Animated.Value(40)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useSharedValue(100);
+  const opacity = useSharedValue(0);
 
   useEffect(() => {
     if (visible) {
-      Animated.parallel([
-        Animated.timing(translateY, {
-          toValue: 0,
-          duration: 280,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 240,
-          useNativeDriver: true,
-        }),
-      ]).start();
-      return;
+      translateY.value = withTiming(0, { duration: 360, easing: Easing.out(Easing.cubic) });
+      opacity.value = withTiming(1, { duration: 360 });
+    } else {
+      translateY.value = withTiming(100, { duration: 240, easing: Easing.in(Easing.cubic) });
+      opacity.value = withTiming(0, { duration: 240 }, (done) => {
+        if (done && onHide) runOnJS(onHide)();
+      });
     }
-
-    Animated.parallel([
-      Animated.timing(translateY, {
-        toValue: 40,
-        duration: 220,
-        easing: Easing.in(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: 180,
-        useNativeDriver: true,
-      }),
-    ]).start(onHide);
   }, [visible, translateY, opacity, onHide]);
 
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+    opacity: opacity.value,
+  }));
+
   return (
-    <Animated.View
-      pointerEvents={visible ? "auto" : "none"}
-      style={[
-        styles.wrap,
-        {
-          bottom: Math.max(insets.bottom + 78, 92),
-          opacity,
-          transform: [{ translateY }],
-        },
-      ]}
-    >
-      <View style={styles.notice}>
+    <Animated.View style={[styles.wrap, { bottom: TAB_BAR_HEIGHT + 10 }, animStyle]} pointerEvents={visible ? "auto" : "none"}>
+      <View style={styles.card}>
         <View style={styles.iconWrap}>
-          <Ionicons name="megaphone-outline" size={18} color="#F59E0B" />
+          <View style={styles.liveDot} />
         </View>
-
-        <View style={styles.content}>
-          <AppText style={styles.message}>{message}</AppText>
-
+        <View style={styles.textWrap}>
+          <AppText style={styles.message} numberOfLines={2}>{message}</AppText>
           {actionLabel ? (
-            <Pressable onPress={onPressAction} hitSlop={8}>
+            <Pressable onPress={onPressAction} hitSlop={6}>
               <AppText style={styles.action}>{actionLabel} &gt;</AppText>
             </Pressable>
           ) : null}
@@ -97,56 +69,19 @@ export default function GlobalLiveNotice({
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    position: "absolute",
-    left: 12,
-    right: 12,
-    zIndex: 9998,
+  wrap: { position: "absolute", left: 16, right: 16, zIndex: 999 },
+  card: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    borderRadius: 18, backgroundColor: "#FFF8E6", borderWidth: 1, borderColor: "#F0DFA5",
+    paddingHorizontal: 14, paddingVertical: 12,
+    ...Platform.select({
+      ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12 },
+      android: { elevation: 6 },
+    }),
   },
-
-  notice: {
-    borderRadius: 22,
-    backgroundColor: "#FFF9EA",
-    borderWidth: 1,
-    borderColor: "#E9D8A6",
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    shadowColor: "#0F172A",
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 5,
-  },
-
-  iconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "#FFF1C7",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-
-  content: {
-    flex: 1,
-    gap: 6,
-  },
-
-  message: {
-    fontSize: 14,
-    lineHeight: 21,
-    color: Theme.colors.text,
-    fontFamily: Theme.fonts.body.medium,
-  },
-
-  action: {
-    fontSize: 15,
-    lineHeight: 20,
-    color: Theme.colors.primary,
-    fontFamily: Theme.fonts.body.semibold,
-  },
+  iconWrap: { width: 28, height: 28, borderRadius: 14, backgroundColor: "rgba(239,68,68,0.12)", alignItems: "center", justifyContent: "center" },
+  liveDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#EF4444" },
+  textWrap: { flex: 1, gap: 4 },
+  message: { fontSize: 12, lineHeight: 17, color: Theme.colors.text, fontFamily: Theme.fonts.body.medium },
+  action: { fontSize: 12, lineHeight: 16, color: Theme.colors.primary, fontFamily: Theme.fonts.body.semibold },
 });

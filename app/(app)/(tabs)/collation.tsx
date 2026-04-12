@@ -1,9 +1,9 @@
+// ─── src/app/(app)/(tabs)/collation.tsx ───────────────────────────────────────
 import { useEffect, useMemo, useState } from "react";
 import { router } from "expo-router";
 import { StyleSheet, View } from "react-native";
 
 import AppGradientScreen from "@/components/app/AppGradientScreen";
-import ElectionsHeader from "@/components/elections/ElectionsHeader";
 import CollationContextTabs, {
   CollationTabKey,
 } from "@/components/collation/CollationContextTabs";
@@ -16,8 +16,9 @@ import {
   getCollationNotificationText,
 } from "@/data/collation";
 import { Theme } from "@/theme";
-import CollationDiscussionsTab from "@/components/collation/CollationDiscussionTab";
 import { useLiveNotice } from "@/components/feedback/LiveNoticeProvider";
+import ScreenHeader from "@/components/elections/ScreenHeader";
+import CollationDiscussionsTab from "@/components/collation/CollationDiscussionTab";
 
 export default function CollationScreen() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -33,24 +34,22 @@ export default function CollationScreen() {
     if (activeCollation.status === "live") {
       showNotice({
         message: getCollationNotificationText(activeCollation),
-        actionLabel: "Report Incidents",
+        actionLabel: "Submit Election Report",
         onPress: () => setActiveTab("review-reports"),
       });
     } else {
       hideNotice();
     }
-
-    return () => {
-      hideNotice();
-    };
+    return () => { hideNotice(); };
   }, [activeCollation, showNotice, hideNotice]);
 
   return (
     <AppGradientScreen scroll={false}>
       <View style={styles.container}>
         <View style={styles.topSection}>
-          <ElectionsHeader
-            title="Collations"
+          <ScreenHeader
+            title="Collation"
+            subtitle={activeCollation.electionDateLabel}
             onNotifications={() => router.push(Paths.appNotifications)}
           />
 
@@ -67,17 +66,15 @@ export default function CollationScreen() {
         </View>
 
         <View style={styles.body}>
-          {activeTab === "overview" ? (
+          {activeTab === "overview" && (
             <CollationOverviewTab collation={activeCollation} />
-          ) : null}
-
-          {activeTab === "review-reports" ? (
+          )}
+          {activeTab === "review-reports" && (
             <CollationReviewReportsTab collation={activeCollation} />
-          ) : null}
-
-          {activeTab === "discussions" ? (
+          )}
+          {activeTab === "discussions" && (
             <CollationDiscussionsTab collation={activeCollation} />
-          ) : null}
+          )}
         </View>
       </View>
     </AppGradientScreen>
@@ -85,16 +82,8 @@ export default function CollationScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-
-  topSection: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    gap: 16,
-  },
-
+  container: { flex: 1 },
+  topSection: { paddingHorizontal: 16, paddingTop: 8, gap: 14 },
   body: {
     flex: 1,
     backgroundColor: Theme.colors.surface,

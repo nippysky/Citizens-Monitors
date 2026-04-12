@@ -6,7 +6,7 @@ import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
 import type { MeUser } from "@/data/me";
 import CitizenIcon from "@/svgs/app/CitizenIcon";
-import ProfilePhoto from "@/svgs/profile/ProfilePhoto";
+import ProfilePhoto from "@/svgs/app/profile/ProfilePhoto";
 import { Theme } from "@/theme";
 
 type Props = {

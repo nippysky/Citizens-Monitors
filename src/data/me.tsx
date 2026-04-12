@@ -1,11 +1,11 @@
 import { View } from "react-native";
 
-import Feedback from "@/svgs/profile/Feedback";
-import Notification from "@/svgs/profile/Notification";
-import Profile from "@/svgs/profile/Profile";
-import PUCheck from "@/svgs/profile/PUCheck";
-import Security from "@/svgs/profile/Security";
-import Support from "@/svgs/profile/Support";
+import Feedback from "@/svgs/app/profile/Feedback";
+import Notification from "@/svgs/app/profile/Notification";
+import Profile from "@/svgs/app/profile/Profile";
+import PUCheck from "@/svgs/app/profile/PUCheck";
+import Security from "@/svgs/app/profile/Security";
+import Support from "@/svgs/app/profile/Support";
 import { ReactNode } from "react";
 
 export type MeUser = {

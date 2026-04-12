@@ -1,11 +1,19 @@
+// ─── src/data/collation.ts ───────────────────────────────────────────────────
+// Enriched dummy data simulating real production collation behaviour.
+// Swap `collationDummyData` for an API response — every consumer already
+// works with `CollationItem`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/* ───── types ───── */
+
 export type PartyResult = {
   id: string;
   name: string;
-  shortName: string;
+  shortName: string; // e.g. "APC" – also used for the SVG logo key
   votes: number;
   percent: number;
   color: string;
-  logoKey: string;
+  logoKey: string; // matches component name in @/svgs/parties/*
 };
 
 export type SentimentLegendItem = {
@@ -53,6 +61,13 @@ export type DiscussionItem = {
   shares: number;
 };
 
+export type MonitoringActivityItem = {
+  label: string;
+  value: string;
+  icon: string; // Ionicons name
+  color: string;
+};
+
 export type CollationItem = {
   id: string;
   status: "live" | "ended";
@@ -94,12 +109,39 @@ export type CollationItem = {
     };
     intimidationBarPercent: number;
   };
+  monitoringActivity: MonitoringActivityItem[];
   geoBreakdown: GeoBreakdownItem[];
   reviewReports: ReviewReportItem[];
   discussions: DiscussionItem[];
 };
 
+/* ───── helpers ───── */
+
+export function formatCompactNumber(value: number): string {
+  return new Intl.NumberFormat("en-NG").format(value);
+}
+
+export function getCollationNotificationText(item: CollationItem): string {
+  if (item.isAssignedToPollingUnit) {
+    return `${item.fullTitle} is Live! Submit result & incident reports as our observer.`;
+  }
+  return `${item.fullTitle} is Live! Join public collation updates and follow reports.`;
+}
+
+/* ───── party colours (canonical) ───── */
+
+export const PARTY_COLORS: Record<string, string> = {
+  APC: "#E84C3D",
+  LP: "#17A34A",
+  PDP: "#3C63E5",
+  NNPP: "#F29B2F",
+  OTHERS: "#C8CDD7",
+};
+
+/* ───── dummy data ───── */
+
 export const collationDummyData: CollationItem[] = [
+  // ── 1. Observer / assigned polling unit ───────────────────────────────
   {
     id: "alimosho-lg-2026",
     status: "live",
@@ -111,16 +153,17 @@ export const collationDummyData: CollationItem[] = [
     lastSyncLabel: "Feb 23, 2026 · 02:14 PM",
     fullTitle: "Alimosho Local Government Election 2026",
     location: "Lagos State, Alimosho District",
-    dateRange: "Jun. 15th - Jun 16th, 2026",
+    dateRange: "Jun. 15th – Jun 16th, 2026",
     description:
       "See the vote result from 14 Polling Units in Alimosho reported by our observer.",
     resultsUploaded: 14,
     incidentsReported: 24,
     observersCount: 56,
-    totalVotesLabel: "675690 Votes",
+    totalVotesLabel: "675,690 Votes",
     canReviewReports: true,
     canJoinDiscussion: true,
     isAssignedToPollingUnit: true,
+
     parties: [
       {
         id: "apc",
@@ -144,7 +187,7 @@ export const collationDummyData: CollationItem[] = [
         id: "pdp",
         name: "People's Democratic Party",
         shortName: "PDP",
-        votes: 856,
+        votes: 1856,
         percent: 10,
         color: "#3C63E5",
         logoKey: "PDP",
@@ -161,13 +204,14 @@ export const collationDummyData: CollationItem[] = [
       {
         id: "others",
         name: "Other Parties",
-        shortName: "Other Parties",
+        shortName: "Others",
         votes: 0,
         percent: 0,
         color: "#C8CDD7",
         logoKey: "OTHERS",
       },
     ],
+
     officialSummary: {
       accreditedVoters: 675435,
       rejectedVotes: 657,
@@ -176,37 +220,27 @@ export const collationDummyData: CollationItem[] = [
       unusedBallots: 87,
       aggregateVoters: "8,570,298",
     },
+
     sentiment: {
       score: 63,
       legend: [
-        {
-          label: "Good",
-          value: 64,
-          count: 112,
-          color: "#16B3AA",
-        },
-        {
-          label: "Manageable",
-          value: 20,
-          count: 76,
-          color: "#4377F0",
-        },
-        {
-          label: "Poor",
-          value: 6,
-          count: 32,
-          color: "#F04A1D",
-        },
+        { label: "Good", value: 64, count: 112, color: "#16B3AA" },
+        { label: "Manageable", value: 20, count: 76, color: "#4377F0" },
+        { label: "Poor", value: 6, count: 32, color: "#F04A1D" },
       ],
       voteBuyingSubmitted: 15,
       voteBuyingObserverSubmitted: 5,
-      intimidation: {
-        total: 20,
-        occurred: 15,
-        notOccurred: 5,
-      },
+      intimidation: { total: 20, occurred: 15, notOccurred: 5 },
       intimidationBarPercent: 75,
     },
+
+    monitoringActivity: [
+      { label: "Active Volunteer", value: "56/79", icon: "people-outline", color: "#16B3AA" },
+      { label: "PVC Verified", value: "89%", icon: "shield-checkmark-outline", color: "#4377F0" },
+      { label: "Active Observers", value: "15/19", icon: "binoculars-outline", color: "#F29B2F" },
+      { label: "Avg. submission time", value: "14 min", icon: "time-outline", color: "#F04A1D" },
+    ],
+
     geoBreakdown: [
       {
         id: "alimosho-south",
@@ -269,6 +303,7 @@ export const collationDummyData: CollationItem[] = [
         ],
       },
     ],
+
     reviewReports: [
       {
         id: "report-1",
@@ -276,8 +311,7 @@ export const collationDummyData: CollationItem[] = [
         title: "Result Report — EC8A",
         author: "@IronEagle23",
         createdAgo: "2 min ago",
-        body:
-          "Confirm what's accurate, and flag what's false. See evidence attached for your polling unit result.",
+        body: "Confirm what's accurate, and flag what's false. See evidence attached for your polling unit result.",
         reviewCount: 4,
       },
       {
@@ -287,8 +321,7 @@ export const collationDummyData: CollationItem[] = [
         author: "Incident",
         createdAgo: "Feb 12, 2026 · 1:43 PM",
         tag: "VOTER INTIMIDATION",
-        body:
-          "Three men in black shirts arrived at the polling unit entrance and were turning away voters. INEC officials told them to leave but they ignored. Police called and few since arrived. Situation calming.",
+        body: "Three men in black shirts arrived at the polling unit entrance and were turning away voters. INEC officials told them to leave but they ignored. Police called and have since arrived. Situation calming.",
         reviewCount: 0,
       },
       {
@@ -298,8 +331,7 @@ export const collationDummyData: CollationItem[] = [
         author: "Incident",
         createdAgo: "Feb 12, 2026 · 1:43 PM",
         tag: "MISSING MATERIALS",
-        body:
-          "Result sheets (Form EC8A) not yet distributed to this polling unit as of 10am. INEC supervising officer informed. Voters waiting.",
+        body: "Result sheets (Form EC8A) not yet distributed to this polling unit as of 10am. INEC supervising officer informed. Voters waiting.",
         reviewCount: 0,
       },
       {
@@ -309,8 +341,7 @@ export const collationDummyData: CollationItem[] = [
         author: "Incident",
         createdAgo: "Feb 12, 2026 · 1:43 PM",
         tag: "MISSING MATERIALS",
-        body:
-          "Result sheets (Form EC8A) not yet distributed to this polling unit as of 10am. INEC supervising officer informed. Voters waiting.",
+        body: "Result sheets (Form EC8A) not yet distributed to this polling unit as of 10am. INEC supervising officer informed. Voters waiting.",
         reviewCount: 2,
         isConfirmed: true,
       },
@@ -321,18 +352,17 @@ export const collationDummyData: CollationItem[] = [
         author: "Incident",
         createdAgo: "Feb 12, 2026 · 1:43 PM",
         tag: "MISSING MATERIALS",
-        body:
-          "Result sheets (Form EC8A) not yet distributed to this polling unit as of 10am. INEC supervising officer informed. Voters waiting.",
+        body: "Result sheets (Form EC8A) not yet distributed to this polling unit as of 10am. INEC supervising officer informed. Voters waiting.",
         reviewCount: 14,
         flagged: true,
       },
     ],
+
     discussions: [
       {
         id: "discussion-1",
         author: "@IronEagle23",
-        body:
-          "Here is the latest verified election result from Alimosho Ward 4. The process was peaceful and orderly throughout the morning.",
+        body: "Here is the latest verified election result from Alimosho Ward 4. The process was peaceful and orderly throughout the morning.",
         minutesAgo: 2,
         likes: 14,
         commentCount: 12,
@@ -341,9 +371,8 @@ export const collationDummyData: CollationItem[] = [
       {
         id: "discussion-2",
         author: "@SilverKing65",
-        body:
-          "Here is the latest verified election result from Alimosho Ward 4. The process was peaceful and orderly throughout the morning.",
-        minutesAgo: 2,
+        body: "The process was calm in my area too, officials arrived early enough. Material distribution was smooth and orderly at our unit.",
+        minutesAgo: 5,
         likes: 14,
         commentCount: 12,
         shares: 3,
@@ -351,9 +380,8 @@ export const collationDummyData: CollationItem[] = [
       {
         id: "discussion-3",
         author: "@Fishtank89",
-        body:
-          "Here is the latest verified election result from Alimosho Ward 4. The process was peaceful and orderly throughout the morning.",
-        minutesAgo: 2,
+        body: "Crowd control improved later in the morning and things became easier. Youth corpers handled the accreditation well at our booth.",
+        minutesAgo: 8,
         likes: 14,
         commentCount: 12,
         shares: 3,
@@ -361,6 +389,7 @@ export const collationDummyData: CollationItem[] = [
     ],
   },
 
+  // ── 2. Public viewer / not assigned ──────────────────────────────────
   {
     id: "alimosho-lg-public",
     status: "live",
@@ -372,23 +401,24 @@ export const collationDummyData: CollationItem[] = [
     lastSyncLabel: "Feb 23, 2026 · 02:14 PM",
     fullTitle: "Alimosho Local Government Election 2026",
     location: "Lagos State, Alimosho District",
-    dateRange: "Jun. 15th - Jun 16th, 2026",
+    dateRange: "Jun. 15th – Jun 16th, 2026",
     description:
       "See the vote result from 14 Polling Units in Alimosho reported by our observer.",
     resultsUploaded: 0,
     incidentsReported: 0,
     observersCount: 56,
-    totalVotesLabel: "Votes",
+    totalVotesLabel: "— Votes",
     canReviewReports: false,
     canJoinDiscussion: false,
     isAssignedToPollingUnit: false,
+
     parties: [
       {
         id: "apc-2",
         name: "All Progressives Congress",
         shortName: "APC",
-        votes: 123450,
-        percent: 65,
+        votes: 0,
+        percent: 0,
         color: "#E84C3D",
         logoKey: "APC",
       },
@@ -396,8 +426,8 @@ export const collationDummyData: CollationItem[] = [
         id: "lp-2",
         name: "Labour Party",
         shortName: "LP",
-        votes: 62345,
-        percent: 20,
+        votes: 0,
+        percent: 0,
         color: "#17A34A",
         logoKey: "LP",
       },
@@ -405,8 +435,8 @@ export const collationDummyData: CollationItem[] = [
         id: "pdp-2",
         name: "People's Democratic Party",
         shortName: "PDP",
-        votes: 856,
-        percent: 10,
+        votes: 0,
+        percent: 0,
         color: "#3C63E5",
         logoKey: "PDP",
       },
@@ -414,62 +444,49 @@ export const collationDummyData: CollationItem[] = [
         id: "nnpp-2",
         name: "New Nigeria People's Party",
         shortName: "NNPP",
-        votes: 201,
-        percent: 5,
+        votes: 0,
+        percent: 0,
         color: "#F29B2F",
         logoKey: "NNPP",
       },
       {
         id: "others-2",
         name: "Other Parties",
-        shortName: "Other Parties",
+        shortName: "Others",
         votes: 0,
         percent: 0,
         color: "#C8CDD7",
         logoKey: "OTHERS",
       },
     ],
+
     officialSummary: {
-      accreditedVoters: 675435,
-      rejectedVotes: 657,
-      spoiledBallots: 320,
-      usedBallots: 601,
-      unusedBallots: 87,
+      accreditedVoters: 0,
+      rejectedVotes: 0,
+      spoiledBallots: 0,
+      usedBallots: 0,
+      unusedBallots: 0,
       aggregateVoters: "Not recorded yet",
     },
+
     sentiment: {
       score: 100,
-      legend: [
-        {
-          label: "Good",
-          value: 100,
-          count: 1,
-          color: "#4377F0",
-        },
-      ],
+      legend: [{ label: "Good", value: 100, count: 1, color: "#4377F0" }],
       voteBuyingSubmitted: 0,
       voteBuyingObserverSubmitted: 1,
-      intimidation: {
-        total: 15,
-        occurred: 15,
-        notOccurred: 0,
-      },
+      intimidation: { total: 15, occurred: 15, notOccurred: 0 },
       intimidationBarPercent: 100,
     },
+
+    monitoringActivity: [
+      { label: "Active Volunteer", value: "0/0", icon: "people-outline", color: "#16B3AA" },
+      { label: "PVC Verified", value: "—", icon: "shield-checkmark-outline", color: "#4377F0" },
+      { label: "Active Observers", value: "0/0", icon: "binoculars-outline", color: "#F29B2F" },
+      { label: "Avg. submission time", value: "—", icon: "time-outline", color: "#F04A1D" },
+    ],
+
     geoBreakdown: [],
     reviewReports: [],
     discussions: [],
   },
 ];
-
-export function getCollationNotificationText(item: CollationItem) {
-  if (item.isAssignedToPollingUnit) {
-    return `${item.fullTitle} is Live! Submit result & incident reports as our observer.`;
-  }
-
-  return `${item.fullTitle} is Live! Join public collation updates and follow reports.`;
-}
-
-export function formatCompactNumber(value: number) {
-  return new Intl.NumberFormat("en-NG").format(value);
-}

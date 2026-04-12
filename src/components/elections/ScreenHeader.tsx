@@ -1,3 +1,8 @@
+// ─── src/components/app/ScreenHeader.tsx ─────────────────────────────────────
+// Generic top-bar used across Elections, Collation, and future screens.
+// Drop-in replacement for the old ElectionsHeader — just rename imports.
+// ─────────────────────────────────────────────────────────────────────────────
+
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -6,19 +11,26 @@ import { Theme } from "@/theme";
 
 type Props = {
   title?: string;
+  subtitle?: string;
   onHelp?: () => void;
   onNotifications?: () => void;
 };
 
-export default function ElectionsHeader({
+export default function ScreenHeader({
   title = "Elections",
+  subtitle,
   onHelp,
   onNotifications,
 }: Props) {
   return (
     <View style={styles.wrap}>
       <View style={styles.topRow}>
-        <AppText style={styles.title}>{title}</AppText>
+        <View style={styles.titleWrap}>
+          <AppText style={styles.title}>{title}</AppText>
+          {subtitle ? (
+            <AppText style={styles.subtitle}>{subtitle}</AppText>
+          ) : null}
+        </View>
 
         <View style={styles.actions}>
           <Pressable onPress={onHelp} hitSlop={10} style={styles.iconButton}>
@@ -48,7 +60,7 @@ export default function ElectionsHeader({
 
 const styles = StyleSheet.create({
   wrap: {
-    gap: 12,
+    gap: 4,
   },
 
   topRow: {
@@ -57,11 +69,22 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
 
+  titleWrap: {
+    flex: 1,
+    gap: 2,
+  },
+
   title: {
-    fontSize: 28,
-    lineHeight: 31,
+    fontSize: 26,
+    lineHeight: 30,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.heading.bold,
+  },
+
+  subtitle: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Theme.colors.textMuted,
   },
 
   actions: {

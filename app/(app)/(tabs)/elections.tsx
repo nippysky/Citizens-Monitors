@@ -12,7 +12,6 @@ import {
 import { useEffect, useMemo, useRef } from "react";
 
 import AppGradientScreen from "@/components/app/AppGradientScreen";
-import ElectionsHeader from "@/components/elections/ElectionsHeader";
 import ElectionCard from "@/components/elections/ElectionCard";
 import ElectionFiltersBottomSheet from "@/components/elections/ElectionFiltersBottomSheet";
 import ElectionStatusPill from "@/components/elections/ElectionStatusPill";
@@ -32,6 +31,7 @@ import {
 } from "@/data/elections";
 import { Theme } from "@/theme";
 import ElectionScopeTabs from "@/components/elections/ElectionScopeTab";
+import ScreenHeader from "@/components/elections/ScreenHeader";
 
 export default function ElectionsScreen() {
   const filterSheetRef = useRef<BottomSheetModal>(null);
@@ -145,7 +145,7 @@ export default function ElectionsScreen() {
     <AppGradientScreen>
       <View style={styles.container}>
         <View style={styles.topSection}>
-          <ElectionsHeader
+          <ScreenHeader
             onNotifications={() => router.push(Paths.appNotifications)}
           />
 
