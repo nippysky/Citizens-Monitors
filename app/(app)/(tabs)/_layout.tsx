@@ -1,4 +1,4 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { AntDesign, Ionicons, MaterialCommunityIcons, Octicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import { Platform, StyleSheet, View } from "react-native";
 
@@ -57,7 +57,11 @@ export default function TabsLayout() {
             <TabIcon
               focused={focused}
               label="Home"
-              icon={(c) => <Ionicons name="home-outline" size={21} color={c} />}
+              icon={(c) => (
+                <>
+                  <AntDesign name="home" size={21} color={c} />
+                </>
+              )}
             />
           ),
         }}
@@ -72,7 +76,7 @@ export default function TabsLayout() {
               focused={focused}
               label="Elections"
               icon={(c) => (
-                <MaterialCommunityIcons name="vote-outline" size={22} color={c} />
+                <MaterialCommunityIcons name="vote-outline" size={24} color={c} />
               )}
             />
           ),
@@ -102,11 +106,10 @@ export default function TabsLayout() {
               focused={focused}
               label="Pulse"
               icon={(c) => (
-                <MaterialCommunityIcons
-                  name="chat-processing-outline"
-                  size={22}
+                  <Octicons name="megaphone"
+                     size={20}
                   color={c}
-                />
+                  />
               )}
             />
           ),

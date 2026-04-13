@@ -1,3 +1,5 @@
+// ─── src/constants/paths.ts ───────────────────────────────────────────────────
+
 export const Paths = {
   welcome: "/(public)/welcome",
   signIn: "/(public)/sign-in",
@@ -11,10 +13,12 @@ export const Paths = {
   appCollation: "/(app)/(tabs)/collation",
   appPulse: "/(app)/(tabs)/pulse",
   appMe: "/(app)/(tabs)/me",
-  appProfile: "/(app)/(tabs)/profile",
   appNotifications: "/(app)/notifications",
   appMyReports: "/(app)/my-reports",
+  appArchiveReports: "/(app)/archive-reports",
   appElectionCalendar: "/(app)/elections-calendar",
+  appLearningFeed: "/(app)/learning-feed",
+  appSubmitReport: "/(app)/submit-report",
 
   // Voter essentials
   voterCitizenAcademy: "/(app)/voter-essentials/CitizenAcademy",
@@ -38,6 +42,12 @@ export const Paths = {
   newsDetails: (id: string) =>
     ({
       pathname: "/(app)/news/[id]" as const,
+      params: { id },
+    }),
+
+  learningFeedDetails: (id: string) =>
+    ({
+      pathname: "/(app)/learning-feed" as const,
       params: { id },
     }),
 } as const;

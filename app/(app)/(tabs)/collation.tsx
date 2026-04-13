@@ -1,6 +1,10 @@
 // ─── src/app/(app)/(tabs)/collation.tsx ───────────────────────────────────────
+// Updated: accepts `tab` param from navigation so Pulse can deep-link to
+// the discussions tab of a specific election.
+// ─────────────────────────────────────────────────────────────────────────────
+
 import { useEffect, useMemo, useState } from "react";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { StyleSheet, View } from "react-native";
 
 import AppGradientScreen from "@/components/app/AppGradientScreen";
@@ -17,13 +21,41 @@ import {
 } from "@/data/collation";
 import { Theme } from "@/theme";
 import { useLiveNotice } from "@/components/feedback/LiveNoticeProvider";
-import ScreenHeader from "@/components/elections/ScreenHeader";
 import CollationDiscussionsTab from "@/components/collation/CollationDiscussionTab";
+import ScreenHeader from "@/components/elections/ScreenHeader";
 
 export default function CollationScreen() {
+  // ── Read incoming params (e.g. from Pulse "Join Discussion") ──
+  const params = useLocalSearchParams<{ tab?: string; collationId?: string }>();
+
   const [activeIndex, setActiveIndex] = useState(0);
   const [activeTab, setActiveTab] = useState<CollationTabKey>("overview");
   const { showNotice, hideNotice } = useLiveNotice();
+
+  // ── Apply incoming tab param on mount / when params change ──
+  useEffect(() => {
+    if (params.tab) {
+      const validTabs: CollationTabKey[] = [
+        "overview",
+        "review-reports",
+        "discussions",
+      ];
+      const incoming = params.tab as CollationTabKey;
+      if (validTabs.includes(incoming)) {
+        setActiveTab(incoming);
+      }
+    }
+
+    // If a specific collation ID was passed, find its index
+    if (params.collationId) {
+      const idx = collationDummyData.findIndex(
+        (c) => c.id === params.collationId
+      );
+      if (idx >= 0) {
+        setActiveIndex(idx);
+      }
+    }
+  }, [params.tab, params.collationId]);
 
   const activeCollation = useMemo(
     () => collationDummyData[activeIndex] ?? collationDummyData[0],
@@ -40,7 +72,9 @@ export default function CollationScreen() {
     } else {
       hideNotice();
     }
-    return () => { hideNotice(); };
+    return () => {
+      hideNotice();
+    };
   }, [activeCollation, showNotice, hideNotice]);
 
   return (

@@ -1,8 +1,5 @@
-import {
-  BottomSheetModal,
-  BottomSheetScrollView,
-} from "@gorhom/bottom-sheet";
-import { forwardRef, useMemo } from "react";
+import { BottomSheetModal } from "@gorhom/bottom-sheet";
+import { forwardRef } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
@@ -17,8 +14,6 @@ type Props = {
 
 const MeOptionsSheet = forwardRef<BottomSheetModal, Props>(
   function MeOptionsSheet({ title, options, selectedValue, onSelect }, ref) {
-    const snapPoints = useMemo(() => ["50%", "75%"], []);
-
     const handleSelect = (value: string) => {
       onSelect(value);
       if (ref && typeof ref !== "function" && ref.current) {
@@ -29,40 +24,33 @@ const MeOptionsSheet = forwardRef<BottomSheetModal, Props>(
     return (
       <BottomSheetModal
         ref={ref}
-        snapPoints={snapPoints}
+        enableDynamicSizing // ✅ THIS replaces CONTENT_HEIGHT
+        enablePanDownToClose
         backgroundStyle={styles.sheetBg}
         handleIndicatorStyle={styles.handle}
       >
         <View style={styles.container}>
           <AppText style={styles.title}>{title}</AppText>
 
-          <BottomSheetScrollView showsVerticalScrollIndicator={false}>
-            <View style={styles.wrap}>
-              {options.map((option, index) => {
-                const isActive = selectedValue === option;
+          <View style={styles.wrap}>
+            {options.map((option) => {
+              const isActive = selectedValue === option;
 
-                return (
-                  <Pressable
-                    key={option}
-                    onPress={() => handleSelect(option)}
-                    style={[
-                      styles.row,
-                      isActive && styles.rowActive,
-                    ]}
+              return (
+                <Pressable
+                  key={option}
+                  onPress={() => handleSelect(option)}
+                  style={[styles.row, isActive && styles.rowActive]}
+                >
+                  <AppText
+                    style={[styles.label, isActive && styles.labelActive]}
                   >
-                    <AppText
-                      style={[
-                        styles.label,
-                        isActive && styles.labelActive,
-                      ]}
-                    >
-                      {option}
-                    </AppText>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </BottomSheetScrollView>
+                    {option}
+                  </AppText>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
       </BottomSheetModal>
     );
@@ -81,9 +69,9 @@ const styles = StyleSheet.create({
     width: 40,
   },
   container: {
-    flex: 1,
     paddingHorizontal: 16,
-    paddingBottom: 24,
+    paddingBottom: 32,
+    paddingTop: 8,
   },
   title: {
     fontSize: 17,
@@ -97,7 +85,7 @@ const styles = StyleSheet.create({
     borderColor: "#E5E7EB",
   },
   row: {
-    minHeight: 54,
+    minHeight: 56,
     justifyContent: "center",
     paddingHorizontal: 16,
     backgroundColor: "#FFFFFF",

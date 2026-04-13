@@ -1,3 +1,4 @@
+// ─── src/components/me/MeSectionItem.tsx ──────────────────────────────────────
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -7,21 +8,12 @@ import { Theme } from "@/theme";
 
 type Props = {
   item: MeMenuItem;
-  isLast?: boolean;
-  onPress?: () => void;
+  isLast: boolean;
+  onPress: () => void;
 };
 
-export default function MeSectionItem({
-  item,
-  isLast = false,
-  onPress,
-}: Props) {
+export default function MeSectionItem({ item, isLast, onPress }: Props) {
   const isDanger = item.tone === "danger";
-
-  const titleColor = isDanger ? "#F15A24" : Theme.colors.text;
-  const subtitleColor = isDanger
-    ? "rgba(241,90,36,0.86)"
-    : "rgba(17,26,50,0.70)";
 
   return (
     <Pressable
@@ -32,83 +24,73 @@ export default function MeSectionItem({
         pressed && styles.pressed,
       ]}
     >
-      <View style={styles.leading}>
-        {isDanger ? (
-          <View style={styles.dangerIconWrap}>
-            <Ionicons name="log-out-outline" size={20} color="#F15A24" />
-          </View>
-        ) : (
-          item.icon
-        )}
-      </View>
+      {/* Icon */}
+      <View style={styles.iconWrap}>{item.icon}</View>
 
+      {/* Text */}
       <View style={styles.textWrap}>
-        <AppText style={[styles.title, { color: titleColor }]}>
+        <AppText
+          style={[styles.title, isDanger && styles.titleDanger]}
+        >
           {item.title}
         </AppText>
-        <AppText style={[styles.subtitle, { color: subtitleColor }]}>
-          {item.subtitle}
-        </AppText>
+        <AppText style={styles.subtitle}>{item.subtitle}</AppText>
       </View>
 
+      {/* Chevron */}
       {!isDanger ? (
         <Ionicons
           name="chevron-forward"
-          size={17}
-          color="rgba(17,26,50,0.62)"
+          size={18}
+          color={Theme.colors.textMuted}
         />
-      ) : null}
+      ) : (
+        <Ionicons
+          name="log-out-outline"
+          size={18}
+          color="#DC2626"
+        />
+      )}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   row: {
-    minHeight: 78,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     paddingVertical: 12,
   },
-
   rowBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(17,26,50,0.08)",
+    borderBottomColor: "rgba(17,26,50,0.06)",
   },
-
   pressed: {
-    opacity: 0.88,
+    opacity: 0.85,
   },
-
-  leading: {
-    width: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  dangerIconWrap: {
+  iconWrap: {
     width: 42,
     height: 42,
-    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FDEAE5",
   },
-
   textWrap: {
     flex: 1,
     gap: 2,
   },
-
   title: {
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: 15,
+    lineHeight: 20,
+    color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
   },
-
+  titleDanger: {
+    color: "#DC2626",
+  },
   subtitle: {
-    fontSize: 13.5,
-    lineHeight: 19,
-    fontFamily: Theme.fonts.body.medium,
+    fontSize: 13,
+    lineHeight: 18,
+    color: Theme.colors.textMuted,
   },
 });

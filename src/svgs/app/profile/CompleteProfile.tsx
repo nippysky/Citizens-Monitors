@@ -8,7 +8,7 @@ import Svg, {
   Stop,
   Image,
 } from "react-native-svg";
-const Observer = (props:any) => (
+const CompleteProfile = (props:any) => (
   <Svg
     width={68}
     height={68}
@@ -67,4 +67,4 @@ const Observer = (props:any) => (
     </Defs>
   </Svg>
 );
-export default Observer;
+export default CompleteProfile;

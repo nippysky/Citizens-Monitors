@@ -1,61 +1,126 @@
-import { useMemo } from "react";
+// ─── src/app/(app)/(tabs)/pulse.tsx ───────────────────────────────────────────
+import { BottomSheetModal } from "@gorhom/bottom-sheet";
+import { router } from "expo-router";
+import { useCallback, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import AppGradientScreen from "@/components/app/AppGradientScreen";
-import EmptyNewsState from "@/components/news/EmptyNewsState";
-import NewsFeedList from "@/components/news/NewsFeedList";
-import NewsHeader from "@/components/news/NewsHeader";
-import { mockNewsFeed } from "@/data/news";
+import AppText from "@/components/ui/AppText";
+import PulseScopeTabs, {
+  PulseTabKey,
+} from "@/components/pulse/PulseScopeTabs";
+import PulseForYouTab from "@/components/pulse/PulseForYouTab";
+import PulsePostButton from "@/components/pulse/PulsePostButton";
+import SharePulseOpinionSheet from "@/components/pulse/SharePulseOpinionSheet";
+import { Paths } from "@/constants/paths";
+import { pulseReviewReports, PulseDiscussionPost } from "@/data/pulse";
+import { Theme } from "@/theme";
+import ScreenHeader from "@/components/elections/ScreenHeader";
+import PulseReviewCollationTab from "@/components/pulse/PulseReviewCollaborationTab";
 
-export default function NewsScreen() {
-  const newsItems = useMemo(() => mockNewsFeed, []);
-  const hasNews = newsItems.length > 0;
+export default function PulseScreen() {
+  const [activeTab, setActiveTab] = useState<PulseTabKey>("for-you");
+  const [scrolling, setScrolling] = useState(false);
+  const shareSheetRef = useRef<BottomSheetModal>(null);
+
+  // User-created posts — kept in parent so they persist across tab switches
+  const [userPosts, setUserPosts] = useState<PulseDiscussionPost[]>([]);
+
+  const handleOpenShareSheet = useCallback(() => {
+    requestAnimationFrame(() => shareSheetRef.current?.present());
+  }, []);
+
+  const handleOpinionPayload = useCallback(
+    (payload: { body: string; audience: string; imageUri?: string }) => {
+      const newPost: PulseDiscussionPost = {
+        id: `user-${Date.now()}`,
+        author: "@You",
+        electionLabel: "Your Polling Unit",
+        scopeLabel:
+          payload.audience === "my-lga"
+            ? "Post Within LGA"
+            : "Post Within My Ward",
+        body: payload.body,
+        imageUri: payload.imageUri,
+        minutesAgo: 0,
+        likes: 0,
+        commentCount: 0,
+        shares: 0,
+      };
+      setUserPosts((prev) => [newPost, ...prev]);
+    },
+    []
+  );
 
   return (
     <AppGradientScreen scroll={false}>
       <View style={styles.container}>
+        {/* ── Top section ── */}
         <View style={styles.topSection}>
-          <NewsHeader />
+          <ScreenHeader
+            title="Pulse"
+            onNotifications={() => router.push(Paths.appNotifications)}
+          />
+
+          <PulseScopeTabs
+            value={activeTab}
+            onChange={setActiveTab}
+            reviewCount={pulseReviewReports.length}
+          />
+
+          <AppText style={styles.subtitle}>
+            Stay informed. Stay vigilant. Every update matters.
+          </AppText>
         </View>
 
-        <View style={styles.feedSection}>
-          {hasNews ? (
-            <NewsFeedList items={newsItems} />
-          ) : (
-            <View style={styles.emptyWrap}>
-              <EmptyNewsState />
-            </View>
+        {/* ── Body ── */}
+        <View style={styles.body}>
+          {activeTab === "for-you" && (
+            <PulseForYouTab
+              onScrollStateChange={setScrolling}
+              injectedPosts={userPosts}
+            />
           )}
+
+          {activeTab === "review-collation" && <PulseReviewCollationTab />}
         </View>
+
+        {/* ── Floating post button (For You only) ── */}
+        {activeTab === "for-you" ? (
+          <PulsePostButton
+            onPress={handleOpenShareSheet}
+            collapsed={scrolling}
+          />
+        ) : null}
       </View>
+
+      <SharePulseOpinionSheet
+        ref={shareSheetRef}
+        onSubmitted={() => {}}
+        onPayload={handleOpinionPayload}
+      />
     </AppGradientScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-
+  container: { flex: 1 },
   topSection: {
     paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 14,
+    paddingTop: 8,
+    gap: 10,
   },
-
-  feedSection: {
+  subtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Theme.colors.textMuted,
+  },
+  body: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: Theme.colors.surface,
     marginTop: 10,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     overflow: "hidden",
-  },
-
-  emptyWrap: {
-    flex: 1,
-    paddingHorizontal: 20,
-    justifyContent: "center",
-    alignItems: "center",
   },
 });

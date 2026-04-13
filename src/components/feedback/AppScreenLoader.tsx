@@ -1,17 +1,14 @@
+// ─── src/components/feedback/AppScreenLoader.tsx ──────────────────────────────
+// Branded loader: Citizen icon + smooth multi-color bar animation.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { useEffect, useRef } from "react";
+import { Animated, Easing, Modal, StyleSheet, View } from "react-native";
+
 import CitizenIcon from "@/svgs/app/CitizenIcon";
 import { Theme } from "@/theme";
-import { useEffect, useRef } from "react";
-import {
-  Animated,
-  Easing,
-  Modal,
-  StyleSheet,
-  View,
-} from "react-native";
 
-type Props = {
-  visible: boolean;
-};
+type Props = { visible: boolean };
 
 export default function AppScreenLoader({ visible }: Props) {
   const translateX = useRef(new Animated.Value(-120)).current;
@@ -20,12 +17,19 @@ export default function AppScreenLoader({ visible }: Props) {
     if (!visible) return;
 
     const loop = Animated.loop(
-      Animated.timing(translateX, {
-        toValue: 120,
-        duration: 1200,
-        easing: Easing.inOut(Easing.ease),
-        useNativeDriver: true,
-      })
+      Animated.sequence([
+        Animated.timing(translateX, {
+          toValue: 120,
+          duration: 1000,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(translateX, {
+          toValue: -120,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ])
     );
 
     loop.start();
@@ -43,20 +47,17 @@ export default function AppScreenLoader({ visible }: Props) {
       <View style={styles.overlay}>
         <View style={styles.card}>
           <View style={styles.logoWrap}>
-            <CitizenIcon width={52} height={52} />
+            <CitizenIcon width={48} height={48} />
           </View>
 
           <View style={styles.lineTrack}>
             <Animated.View
-              style={[
-                styles.lineRunner,
-                { transform: [{ translateX }] },
-              ]}
+              style={[styles.lineRunner, { transform: [{ translateX }] }]}
             >
-              <View style={[styles.segment, styles.red]} />
-              <View style={[styles.segment, styles.blue]} />
-              <View style={[styles.segment, styles.green]} />
-              <View style={[styles.segment, styles.yellow]} />
+              <View style={[styles.segment, { backgroundColor: Theme.colors.primary }]} />
+              <View style={[styles.segment, { backgroundColor: "#F29B2F" }]} />
+              <View style={[styles.segment, { backgroundColor: "#E84C3D" }]} />
+              <View style={[styles.segment, { backgroundColor: "#3C63E5" }]} />
             </Animated.View>
           </View>
         </View>
@@ -73,55 +74,41 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 24,
   },
- card: {
-  width: 104,
-  height: 96,
-  borderRadius: 18,
-  backgroundColor: Theme.colors.white,
-  alignItems: "center",
-  justifyContent: "center",
-
-  shadowColor: "#000",
-  shadowOpacity: 0.1,
-  shadowRadius: 16,
-  shadowOffset: { width: 0, height: 6 },
-  elevation: 5,
-
-  overflow: "hidden",
-},
+  card: {
+    width: 100,
+    height: 92,
+    borderRadius: 18,
+    backgroundColor: Theme.colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 5,
+    overflow: "hidden",
+  },
   logoWrap: {
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 18,
+    marginBottom: 16,
   },
   lineTrack: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    height: 6,
+    height: 5,
     overflow: "hidden",
     backgroundColor: "#F3F4F6",
   },
   lineRunner: {
     width: 120,
-    height: 6,
+    height: 5,
     flexDirection: "row",
   },
   segment: {
     flex: 1,
-    height: 6,
-  },
-  red: {
-    backgroundColor: "#EA4335",
-  },
-  blue: {
-    backgroundColor: "#4285F4",
-  },
-  green: {
-    backgroundColor: "#34A853",
-  },
-  yellow: {
-    backgroundColor: "#FBBC05",
+    height: 5,
   },
 });
