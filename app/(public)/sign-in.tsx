@@ -101,7 +101,7 @@ export default function SignInScreen() {
             actionLabel="Reset Password"
             underline
             stacked
-            onPress={() => {}}
+            onPress={() => router.push(Paths.resetPassword)}
           />
         </View>
       </View>

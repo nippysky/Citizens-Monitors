@@ -1,17 +1,9 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useRef, useState } from "react";
-import Animated, {
-  FadeIn,
-  FadeOut,
-} from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 
 import OnboardingHeader from "@/components/onboarding/OnboardingHeader";
 import OnboardingReady from "@/components/onboarding/OnboardingReady";
-import OnboardingStepFour from "@/components/onboarding/OnboardingStepFour";
-import OnboardingStepOne from "@/components/onboarding/OnboardingStepOne";
-import OnboardingStepThree from "@/components/onboarding/OnboardingStepThree";
-import OnboardingStepTwo from "@/components/onboarding/OnboardingStepTwo";
-import OnboardingVerifyIdetity from "@/components/onboarding/OnboardingVerifyIdetity";
 import AppButton from "@/components/ui/AppButton";
 import AppPageShell from "@/components/ui/AppPageShell";
 import {
@@ -21,23 +13,61 @@ import {
   StepOneForm,
   StepThreeForm,
 } from "@/types/onboarding";
+import OnboardingStepFourVerifyIdentity from "@/components/onboarding/OnboardingStepFourVerifyIdentity";
+import OnboardingStepOnePersonal from "@/components/onboarding/OnboardingStepOnePersonal";
+import OnboardingStepOnePollingUnit from "@/components/onboarding/OnboardingStepOnePollingUnit";
+import OnboardingStepThreeCitizenType from "@/components/onboarding/OnboardingStepThreeCitizenType";
+import OnboardingStepTwoCoverage from "@/components/onboarding/OnboardingStepTwoCoverage";
 
 const DURATION = 260;
 const EXIT_DURATION = 160;
 const OFFSET = 18;
 
+type ScreenKey = 1 | 2 | 3 | 4 | 5;
+
+function buildPollingUnitKey(stepFour: StepFourForm): string {
+  return [
+    stepFour.pollingState,
+    stepFour.localGovernmentArea,
+    stepFour.ward,
+    stepFour.pollingUnit,
+  ]
+    .map((item) => item.trim())
+    .join("|");
+}
+
+const TAKEN_OBSERVER_SLOTS = new Set<string>([
+  "Lagos|Ikeja|Ward A|PU 001",
+]);
+
+function getProgressStep(screen: ScreenKey): number {
+  switch (screen) {
+    case 1:
+    case 2:
+      return 1;
+    case 3:
+      return 2;
+    case 4:
+      return 3;
+    case 5:
+      return 4;
+    default:
+      return 1;
+  }
+}
+
 export default function OnboardingIndexScreen() {
   useLocalSearchParams<{ email?: string }>();
 
-  const [step, setStep] = useState<number>(1);
-  const [showReady, setShowReady] = useState<boolean>(false);
+  const [screen, setScreen] = useState<ScreenKey>(1);
+  const [showReady, setShowReady] = useState(false);
 
   const directionRef = useRef<"forward" | "back">("forward");
   const [animKey, setAnimKey] = useState<{
-    step: number;
+    screen: ScreenKey;
     dir: "forward" | "back";
   }>({
-    step: 1,
+    screen: 1,
     dir: "forward",
   });
 
@@ -69,22 +99,27 @@ export default function OnboardingIndexScreen() {
     },
   });
 
-  const isObserver = draft.citizenType === "observer";
-  const totalVisibleSteps = isObserver ? 5 : 4;
+  const observerSlotTaken = useMemo(() => {
+    const key = buildPollingUnitKey(draft.stepFour);
+    return TAKEN_OBSERVER_SLOTS.has(key);
+  }, [draft.stepFour]);
 
-  const canContinueStep1 = useMemo((): boolean => {
+  const isObserver = draft.citizenType === "observer";
+  const progressStep = getProgressStep(screen);
+  const progressTotal = 4;
+
+  const canContinuePersonal = useMemo(() => {
     const { stepOne } = draft;
     return (
       stepOne.firstName.trim().length > 0 &&
       stepOne.lastName.trim().length > 0 &&
       stepOne.birthday.trim().length > 0 &&
       stepOne.gender.trim().length > 0 &&
-      stepOne.nationality.trim().length > 0 &&
-      stepOne.cityCountry.trim().length > 0
+      stepOne.nationality.trim().length > 0
     );
   }, [draft]);
 
-  const canContinuePollingUnit = useMemo((): boolean => {
+  const canContinuePollingUnit = useMemo(() => {
     const { stepFour } = draft;
     return (
       stepFour.pollingState.trim().length > 0 &&
@@ -94,81 +129,93 @@ export default function OnboardingIndexScreen() {
     );
   }, [draft]);
 
-  const canContinueCitizenType = useMemo((): boolean => {
-    return draft.citizenType !== "";
-  }, [draft.citizenType]);
-
-  const canContinueCoverage = useMemo((): boolean => {
-    const { citizenType, stepThree } = draft;
-    const isPublicViewer = citizenType === "public-viewer";
-    const baseValid =
-      stepThree.registeredVoter !== "" &&
-      stepThree.firstElection !== "" &&
-      stepThree.interestedInSurveys !== "" &&
-      stepThree.joinReasons.length > 0;
-
-    if (isPublicViewer) return baseValid;
+  const canContinueCoverage = useMemo(() => {
+    const { stepThree } = draft;
     return (
-      baseValid &&
-      stepThree.monitoringExperience !== "" &&
-      stepThree.willingToTestify !== ""
+      stepThree.registeredVoter !== "" &&
+      stepThree.willingToTestify !== "" &&
+      stepThree.interestedInSurveys !== "" &&
+      stepThree.joinReasons.length > 0
     );
   }, [draft]);
 
-  // ─── Navigation ────────────────────────────────────────────────────────────
-  const goToStep = (nextStep: number, dir: "forward" | "back") => {
+  const canContinueCitizenType = useMemo(() => {
+    if (draft.citizenType === "observer" && observerSlotTaken) {
+      return false;
+    }
+    return draft.citizenType !== "";
+  }, [draft.citizenType, observerSlotTaken]);
+
+  const goToScreen = (nextScreen: ScreenKey, dir: "forward" | "back") => {
     directionRef.current = dir;
-    setStep(nextStep);
-    setAnimKey({ step: nextStep, dir });
+    setScreen(nextScreen);
+    setAnimKey({ screen: nextScreen, dir });
   };
 
   const handleBack = (): void => {
     if (showReady) {
       setShowReady(false);
-      goToStep(isObserver ? 5 : 4, "back");
+      goToScreen(isObserver ? 5 : 4, "back");
       return;
     }
-    if (step === 1) {
+
+    if (screen === 1) {
       router.back();
       return;
     }
-    goToStep(Math.max(1, step - 1), "back");
+
+    goToScreen((screen - 1) as ScreenKey, "back");
   };
 
   const handleContinue = (): void => {
-    if (step === 1 && canContinueStep1) {
-      goToStep(2, "forward");
+    if (screen === 1 && canContinuePersonal) {
+      goToScreen(2, "forward");
       return;
     }
-    if (step === 2 && canContinuePollingUnit) {
-      goToStep(3, "forward");
+
+    if (screen === 2 && canContinuePollingUnit) {
+      goToScreen(3, "forward");
       return;
     }
-    if (step === 3 && canContinueCitizenType) {
-      goToStep(4, "forward");
+
+    if (screen === 3 && canContinueCoverage) {
+      goToScreen(4, "forward");
       return;
     }
-    if (step === 4 && canContinueCoverage) {
+
+    if (screen === 4 && canContinueCitizenType) {
       if (isObserver) {
-        goToStep(5, "forward");
+        goToScreen(5, "forward");
         return;
       }
+
       setShowReady(true);
     }
   };
 
-  const handleStepOneChange = (v: StepOneForm) =>
-    setDraft((d) => ({ ...d, stepOne: v }));
-  const handleCitizenTypeChange = (v: CitizenType) =>
-    setDraft((d) => ({ ...d, citizenType: v }));
-  const handleStepThreeChange = (v: StepThreeForm) =>
-    setDraft((d) => ({ ...d, stepThree: v }));
-  const handleStepFourChange = (v: StepFourForm) =>
-    setDraft((d) => ({ ...d, stepFour: v }));
+  const handleStepOneChange = (value: StepOneForm) =>
+    setDraft((prev) => ({ ...prev, stepOne: value }));
+
+  const handleStepFourChange = (value: StepFourForm) =>
+    setDraft((prev) => ({
+      ...prev,
+      stepFour: value,
+      citizenType:
+        prev.citizenType === "observer" &&
+        TAKEN_OBSERVER_SLOTS.has(buildPollingUnitKey(value))
+          ? ""
+          : prev.citizenType,
+    }));
+
+  const handleStepThreeChange = (value: StepThreeForm) =>
+    setDraft((prev) => ({ ...prev, stepThree: value }));
+
+  const handleCitizenTypeChange = (value: CitizenType) =>
+    setDraft((prev) => ({ ...prev, citizenType: value }));
+
   const handleVerifyComplete = () => setShowReady(true);
   const handleVerifySkip = () => setShowReady(true);
 
-  // ─── Ready screen ──────────────────────────────────────────────────────────
   if (showReady) {
     return (
       <Animated.View
@@ -183,13 +230,12 @@ export default function OnboardingIndexScreen() {
   }
 
   const continueDisabled =
-    (step === 1 && !canContinueStep1) ||
-    (step === 2 && !canContinuePollingUnit) ||
-    (step === 3 && !canContinueCitizenType) ||
-    (step === 4 && !canContinueCoverage);
+    (screen === 1 && !canContinuePersonal) ||
+    (screen === 2 && !canContinuePollingUnit) ||
+    (screen === 3 && !canContinueCoverage) ||
+    (screen === 4 && !canContinueCitizenType);
 
-  const shouldShowFooterButton = step !== 5;
-
+  const shouldShowFooterButton = screen !== 5;
   const isForward = animKey.dir === "forward";
 
   const enteringAnimation = FadeIn.duration(DURATION).withInitialValues({
@@ -197,44 +243,49 @@ export default function OnboardingIndexScreen() {
     transform: [{ translateX: isForward ? OFFSET : -OFFSET }],
   });
 
-  const renderStep = () => {
-    switch (step) {
+  const renderScreen = () => {
+    switch (screen) {
       case 1:
         return (
-          <OnboardingStepOne
+          <OnboardingStepOnePersonal
             value={draft.stepOne}
             onChange={handleStepOneChange}
           />
         );
+
       case 2:
         return (
-          <OnboardingStepFour
+          <OnboardingStepOnePollingUnit
             value={draft.stepFour}
             onChange={handleStepFourChange}
           />
         );
+
       case 3:
         return (
-          <OnboardingStepTwo
-            value={draft.citizenType}
-            onChange={handleCitizenTypeChange}
-          />
-        );
-      case 4:
-        return (
-          <OnboardingStepThree
-            citizenType={draft.citizenType}
+          <OnboardingStepTwoCoverage
             value={draft.stepThree}
             onChange={handleStepThreeChange}
           />
         );
+
+      case 4:
+        return (
+          <OnboardingStepThreeCitizenType
+            value={draft.citizenType}
+            onChange={handleCitizenTypeChange}
+            observerSlotTaken={observerSlotTaken}
+          />
+        );
+
       case 5:
         return (
-          <OnboardingVerifyIdetity
+          <OnboardingStepFourVerifyIdentity
             onComplete={handleVerifyComplete}
             onSkip={handleVerifySkip}
           />
         );
+
       default:
         return null;
     }
@@ -242,7 +293,7 @@ export default function OnboardingIndexScreen() {
 
   return (
     <AppPageShell
-      scrollKey={`step-${step}`}
+      scrollKey={`onboarding-screen-${screen}`}
       footer={
         shouldShowFooterButton ? (
           <AppButton
@@ -254,21 +305,21 @@ export default function OnboardingIndexScreen() {
       }
     >
       <OnboardingHeader
-        step={step}
-        total={totalVisibleSteps}
-        leading={step === 1 ? "logo" : "back"}
+        step={progressStep}
+        total={progressTotal}
+        leading={screen === 1 ? "logo" : "back"}
         onBack={handleBack}
         onHelp={() => {}}
       />
 
       <Animated.View
-        key={`step-${animKey.step}-${animKey.dir}`}
+        key={`screen-${animKey.screen}-${animKey.dir}`}
         entering={enteringAnimation}
         exiting={FadeOut.duration(EXIT_DURATION)}
         style={{ flex: 1 }}
         collapsable={false}
       >
-        {renderStep()}
+        {renderScreen()}
       </Animated.View>
     </AppPageShell>
   );

@@ -6,11 +6,11 @@ import EmptyNotificationState from "@/components/notifications/EmptyNotification
 import NotificationList from "@/components/notifications/NotificationList";
 import AppText from "@/components/ui/AppText";
 import BackButton from "@/components/ui/BackButton";
-import { mockNotifications } from "@/data/notifications";
+import { getDevNotifications, USE_EMPTY_NOTIFICATIONS_DEV } from "@/data/notifications";
 import { Theme } from "@/theme";
 
 export default function NotificationsScreen() {
-  const notifications = useMemo(() => mockNotifications, []);
+  const notifications = useMemo(() => getDevNotifications(), []);
   const hasNotifications = notifications.length > 0;
 
   return (
@@ -30,6 +30,12 @@ export default function NotificationsScreen() {
           </View>
 
           <AppText style={styles.subtitle}>Don’t miss any message.</AppText>
+
+          {__DEV__ ? (
+            <AppText style={styles.devNote}>
+              Dev mode: {USE_EMPTY_NOTIFICATIONS_DEV ? "Empty state" : "Data state"}
+            </AppText>
+          ) : null}
         </View>
 
         <View style={styles.bodySection}>
@@ -90,6 +96,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
     color: "rgba(17, 26, 50, 0.82)",
+    fontFamily: Theme.fonts.body.medium,
+  },
+
+  devNote: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: Theme.colors.textSoft,
     fontFamily: Theme.fonts.body.medium,
   },
 

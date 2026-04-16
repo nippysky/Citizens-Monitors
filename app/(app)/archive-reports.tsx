@@ -1,6 +1,6 @@
 // ─── src/app/(app)/archive-reports.tsx ────────────────────────────────────────
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -16,6 +16,7 @@ import SenatorElection from "@/svgs/app/SenatorElection";
 import HouseOfRepsElection from "@/svgs/app/HouseOfRepsElection";
 import Incident from "@/svgs/app/collation/Incident";
 import { Paths } from "@/constants/paths";
+import ElectionNotification from "@/svgs/app/profile/ElectionNotification";
 
 type FilterKey = "all" | "results" | "incidents";
 
@@ -120,7 +121,7 @@ export default function ArchiveReportsScreen() {
                   >
                     <View style={styles.reportIconWrap}>
                       {report.type === "result" ? (
-                        <MaterialCommunityIcons name="file-document-outline" size={20} color={Theme.colors.primary} />
+                       <ElectionNotification width={28} height={28} />
                       ) : (
                         <Incident width={28} height={28} />
                       )}

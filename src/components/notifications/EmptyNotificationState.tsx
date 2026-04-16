@@ -7,7 +7,7 @@ import { Theme } from "@/theme";
 export default function EmptyNotificationState() {
   return (
     <View style={styles.wrap}>
-      <NoNotification width={220} height={220} />
+      <NoNotification />
 
       <View style={styles.textBlock}>
         <AppText style={styles.title}>No Notification</AppText>

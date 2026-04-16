@@ -4,6 +4,7 @@ export const Paths = {
   welcome: "/(public)/welcome",
   signIn: "/(public)/sign-in",
   signUp: "/(public)/sign-up",
+  resetPassword: "/(public)/reset-password",
   setPassword: "/(public)/set-password",
   verifyEmail: "/(public)/verify-email",
   onboarding: "/(public)/onboarding",
@@ -20,7 +21,16 @@ export const Paths = {
   appLearningFeed: "/(app)/learning-feed",
   appSubmitReport: "/(app)/submit-report",
 
-  // Voter essentials
+  appNotificationDetails: (id: string) =>
+    ({
+      pathname: "/(app)/notification/[id]" as const,
+      params: { id },
+    }),
+
+  submitElectionReport: "/(app)/reporting/submit-election-report",
+  reportIncident: "/(app)/reporting/report-incident",
+  reportIncidentLive: "/(app)/reporting/report-incident-live",
+
   voterCitizenAcademy: "/(app)/voter-essentials/CitizenAcademy",
   voterDigitalElectionVault: "/(app)/voter-essentials/DigitalElectionVault",
   voterDonateSupport: "/(app)/voter-essentials/DonateSupport",

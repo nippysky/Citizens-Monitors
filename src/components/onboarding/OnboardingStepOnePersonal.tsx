@@ -7,7 +7,6 @@ import BirthdaySheet from "@/components/ui/sheets/BirthdaySheet";
 import GenderSheet from "@/components/ui/sheets/GenderSheet";
 import SelectPickerSheet from "@/components/ui/sheets/SelectPickerSheet";
 import TutorialBanner from "@/components/onboarding/TutorialBanner";
-
 import AppInput from "@/components/ui/AppInput";
 import AppSelectField from "@/components/ui/AppSelectField";
 import AppText from "@/components/ui/AppText";
@@ -19,7 +18,7 @@ type Props = {
   onChange: (value: StepOneForm) => void;
 };
 
-export default function OnboardingStepOne({ value, onChange }: Props) {
+export default function OnboardingStepOnePersonal({ value, onChange }: Props) {
   const birthdaySheetRef = useRef<BottomSheetModal>(null);
   const genderSheetRef = useRef<BottomSheetModal>(null);
   const nationalitySheetRef = useRef<BottomSheetModal>(null);
@@ -35,18 +34,6 @@ export default function OnboardingStepOne({ value, onChange }: Props) {
     year: 2000,
     formatted: value.birthday || "1 January, 2000",
   });
-
-  const handleFirstNameChange = (text: string): void => {
-    onChange({ ...value, firstName: text });
-  };
-
-  const handleLastNameChange = (text: string): void => {
-    onChange({ ...value, lastName: text });
-  };
-
-  const handleCityCountryChange = (text: string): void => {
-    onChange({ ...value, cityCountry: text });
-  };
 
   const handleConfirmBirthday = (): void => {
     onChange({ ...value, birthday: birthdayTemp.formatted });
@@ -77,14 +64,14 @@ export default function OnboardingStepOne({ value, onChange }: Props) {
             label="Your First Name"
             placeholder="First Name"
             value={value.firstName}
-            onChangeText={handleFirstNameChange}
+            onChangeText={(firstName) => onChange({ ...value, firstName })}
           />
 
           <AppInput
             label="Your Last Name"
             placeholder="Surname"
             value={value.lastName}
-            onChangeText={handleLastNameChange}
+            onChangeText={(lastName) => onChange({ ...value, lastName })}
           />
 
           <AppSelectField
@@ -119,13 +106,6 @@ export default function OnboardingStepOne({ value, onChange }: Props) {
               setCountryQuery("");
               nationalitySheetRef.current?.present();
             }}
-          />
-
-          <AppInput
-            label="Current Residence City / Country"
-            placeholder="e.g. Lagos, Nigeria"
-            value={value.cityCountry}
-            onChangeText={handleCityCountryChange}
           />
         </View>
       </View>

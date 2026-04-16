@@ -1,21 +1,27 @@
-import { router } from "expo-router";
 import { StyleSheet, View } from "react-native";
 
 import AuthShell from "@/components/auth/AuthShell";
 import AppButton from "@/components/ui/AppButton";
 import AppText from "@/components/ui/AppText";
-import { Paths } from "@/constants/paths";
-import { useAuth } from "@/context/AuthContext";
 import CheckIcon from "@/svgs/app/CheckIcon";
 import CitizenIcon from "@/svgs/app/CitizenIcon";
 import { Theme } from "@/theme";
-import { OnboardingDraft } from "@/types/onboarding";
+
+type Variant = "success" | "warning" | "error";
 
 type Props = {
-  draft: OnboardingDraft;
+  variant?: Variant;
+  title: string;
+  subtitle: string;
+  primaryActionLabel: string;
+  onPrimaryAction: () => void;
+  secondaryActionLabel?: string;
+  onSecondaryAction?: () => void;
+  infoCardText?: string;
+  showConfetti?: boolean;
 };
 
-function ReadySprinkles() {
+function OutcomeSprinkles() {
   return (
     <View pointerEvents="none" style={styles.sprinklesWrap}>
       <View style={[styles.sprinkle, styles.sprinkleOne]} />
@@ -30,42 +36,65 @@ function ReadySprinkles() {
   );
 }
 
-export default function OnboardingReady({ draft }: Props) {
-  const { completeOnboarding } = useAuth();
-
-  const firstName = draft.stepOne.firstName || "Citizen";
-
-  const handleOpen = async (): Promise<void> => {
-    completeOnboarding({
-      firstName: draft.stepOne.firstName,
-    });
-
-    console.log("Final onboarding payload:", draft);
-
-    router.replace(Paths.appHome);
-  };
+export default function ReportingOutcomeState({
+  variant = "success",
+  title,
+  subtitle,
+  primaryActionLabel,
+  onPrimaryAction,
+  secondaryActionLabel,
+  onSecondaryAction,
+  infoCardText,
+  showConfetti = false,
+}: Props) {
+  const isSuccess = variant === "success";
+  const isError = variant === "error";
 
   return (
     <AuthShell topSlot={<CitizenIcon width={28} height={28} />} scroll={false}>
-      <ReadySprinkles />
+      {showConfetti ? <OutcomeSprinkles /> : null}
 
       <View style={styles.container}>
         <View style={styles.centerContent}>
-          <CheckIcon width={58} height={58} />
+          {isSuccess ? (
+            <CheckIcon width={58} height={58} />
+          ) : (
+            <View
+              style={[
+                styles.fallbackIconWrap,
+                isError ? styles.fallbackIconWrapError : styles.fallbackIconWrapWarning,
+              ]}
+            >
+              <AppText style={styles.fallbackIconText}>!</AppText>
+            </View>
+          )}
 
           <View style={styles.textWrap}>
             <AppText variant="heading" style={styles.title}>
-              You&apos;re Ready, {firstName}!
+              {title}
             </AppText>
 
-            <AppText style={styles.subtitle}>
-              Your profile is complete. Time to protect democracy — your
-              polling unit is watching.
-            </AppText>
+            <AppText style={styles.subtitle}>{subtitle}</AppText>
           </View>
+
+          {infoCardText ? (
+            <View style={styles.infoCard}>
+              <AppText style={styles.infoCardText}>{infoCardText}</AppText>
+            </View>
+          ) : null}
         </View>
 
-        <AppButton title="Open Citizen Monitor" onPress={handleOpen} />
+        <View style={styles.actionsWrap}>
+          {secondaryActionLabel && onSecondaryAction ? (
+            <AppButton
+              title={secondaryActionLabel}
+              variant="secondary"
+              onPress={onSecondaryAction}
+            />
+          ) : null}
+
+          <AppButton title={primaryActionLabel} onPress={onPrimaryAction} />
+        </View>
       </View>
     </AuthShell>
   );
@@ -75,7 +104,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: "space-between",
-    paddingTop: 120,
+    paddingTop: 110,
     paddingBottom: 8,
   },
 
@@ -87,23 +116,66 @@ const styles = StyleSheet.create({
   },
 
   textWrap: {
-    gap: 8,
+    gap: 10,
     alignItems: "center",
   },
 
   title: {
     textAlign: "center",
-    fontSize: 26,
-    lineHeight: 32,
+    fontSize: 28,
+    lineHeight: 34,
     color: Theme.colors.text,
   },
 
   subtitle: {
     textAlign: "center",
     fontSize: 17,
-    lineHeight: 25,
+    lineHeight: 26,
     color: Theme.colors.textMuted,
-    maxWidth: 320,
+    maxWidth: 330,
+  },
+
+  actionsWrap: {
+    gap: 12,
+  },
+
+  fallbackIconWrap: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  fallbackIconWrapError: {
+    backgroundColor: "#FFE9E4",
+  },
+
+  fallbackIconWrapWarning: {
+    backgroundColor: "#FFF3D9",
+  },
+
+  fallbackIconText: {
+    fontSize: 32,
+    lineHeight: 34,
+    color: "#E4572E",
+    fontFamily: Theme.fonts.heading.bold,
+  },
+
+  infoCard: {
+    marginTop: 6,
+    width: "100%",
+    borderRadius: 16,
+    backgroundColor: "#F7ECE7",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+
+  infoCardText: {
+    textAlign: "left",
+    fontSize: 14,
+    lineHeight: 21,
+    color: Theme.colors.textMuted,
   },
 
   sprinklesWrap: {
@@ -111,7 +183,7 @@ const styles = StyleSheet.create({
     top: 10,
     left: 0,
     right: 0,
-    height: 70,
+    height: 72,
   },
 
   sprinkle: {

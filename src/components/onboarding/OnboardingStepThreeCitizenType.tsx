@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import TutorialBanner from "@/components/onboarding/TutorialBanner";
@@ -13,6 +13,7 @@ import { CitizenType } from "@/types/onboarding";
 type Props = {
   value: CitizenType;
   onChange: (value: CitizenType) => void;
+  observerSlotTaken?: boolean;
 };
 
 type OptionConfig = {
@@ -52,7 +53,7 @@ const OPTIONS: OptionConfig[] = [
       "Upvote & flag observer reports",
       "Report irregularities & incidents at PU",
       "Give opinion on elections in your PU",
-      "Access observer briefings on all elections.",
+      "Access observer briefings on all elections",
     ],
     note:
       "Anyone with a valid PVC and a polling unit in Nigeria can volunteer.",
@@ -66,8 +67,8 @@ const OPTIONS: OptionConfig[] = [
     strengthTitle: "Stay Informed, Stay Empowered",
     bullets: [
       "View all elections & live results",
-      "Can’t upvote & flag observer reports",
-      "Can’t give opinion on any election",
+      "Cannot upvote & flag observer reports",
+      "Cannot give opinion on any election",
       "Cannot submit reports or flag content",
     ],
     note: "Open to everyone — no PVC or polling unit needed.",
@@ -75,49 +76,73 @@ const OPTIONS: OptionConfig[] = [
   },
 ];
 
-function StepTwoOptionCard({
+function CitizenTypeCard({
   option,
   selected,
   expanded,
+  disabled,
   onSelect,
   onToggleExpand,
 }: {
   option: OptionConfig;
   selected: boolean;
   expanded: boolean;
+  disabled?: boolean;
   onSelect: () => void;
   onToggleExpand: () => void;
 }) {
   return (
     <View style={styles.optionGroup}>
       <Pressable
+        disabled={disabled}
         onPress={onSelect}
         style={[
           styles.card,
           selected && styles.cardSelected,
           expanded && styles.cardExpanded,
+          disabled && styles.cardDisabled,
         ]}
       >
+        {disabled ? (
+          <View style={styles.slotTakenBadge}>
+            <AppText style={styles.slotTakenText}>SLOT TAKEN</AppText>
+          </View>
+        ) : null}
+
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderLeft}>
             <View style={styles.iconCircle}>{option.icon}</View>
 
             <View style={styles.textBlock}>
-              <AppText style={styles.cardTitle}>{option.title}</AppText>
-              <AppText style={styles.cardDescription}>
+              <AppText style={[styles.cardTitle, disabled && styles.disabledText]}>
+                {option.title}
+              </AppText>
+              <AppText
+                style={[styles.cardDescription, disabled && styles.disabledTextSoft]}
+              >
                 {option.description}
               </AppText>
             </View>
           </View>
 
-          <View style={[styles.radio, selected && styles.radioSelected]}>
+          <View
+            style={[
+              styles.radio,
+              selected && styles.radioSelected,
+              disabled && styles.radioDisabled,
+            ]}
+          >
             {selected ? (
               <Ionicons name="checkmark" size={15} color="#FFFFFF" />
             ) : null}
           </View>
         </View>
 
-        <Pressable onPress={onToggleExpand} hitSlop={8} style={styles.learnMoreWrap}>
+        <Pressable
+          onPress={onToggleExpand}
+          hitSlop={8}
+          style={styles.learnMoreWrap}
+        >
           <AppText style={styles.learnMoreText}>Learn More</AppText>
           <Ionicons
             name={expanded ? "chevron-up" : "chevron-down"}
@@ -128,7 +153,7 @@ function StepTwoOptionCard({
 
         {expanded ? (
           <View style={styles.expandedBlock}>
-            <AppText style={styles.strengthTitle}>
+            <AppText style={[styles.strengthTitle, disabled && styles.disabledText]}>
               {option.strengthTitle}
             </AppText>
 
@@ -141,7 +166,11 @@ function StepTwoOptionCard({
                     color={Theme.colors.primary}
                     style={styles.bulletIcon}
                   />
-                  <AppText style={styles.bulletText}>{bullet}</AppText>
+                  <AppText
+                    style={[styles.bulletText, disabled && styles.disabledTextSoft]}
+                  >
+                    {bullet}
+                  </AppText>
                 </View>
               ))}
             </View>
@@ -150,25 +179,26 @@ function StepTwoOptionCard({
       </Pressable>
 
       {expanded ? (
-        <View style={styles.noteCard}>
-          <AppText style={styles.noteText}>{option.note}</AppText>
+        <View style={[styles.noteCard, disabled && styles.noteCardDisabled]}>
+          <AppText style={[styles.noteText, disabled && styles.disabledTextSoft]}>
+            {option.note}
+          </AppText>
         </View>
       ) : null}
     </View>
   );
 }
 
-export default function OnboardingStepTwo({ value, onChange }: Props) {
+export default function OnboardingStepThreeCitizenType({
+  value,
+  onChange,
+  observerSlotTaken = false,
+}: Props) {
   const [expandedKey, setExpandedKey] = useState<CitizenType>("");
 
-  const selectedOption = useMemo(
-    () => OPTIONS.find((option) => option.key === value),
-    [value]
-  );
-
   const handleSelect = (key: Exclude<CitizenType, "">) => {
+    if (key === "observer" && observerSlotTaken) return;
     onChange(key);
-
     setExpandedKey((prev) => (prev === key ? prev : key));
   };
 
@@ -191,20 +221,23 @@ export default function OnboardingStepTwo({ value, onChange }: Props) {
         <TutorialBanner />
 
         <View style={styles.optionsWrap}>
-          {OPTIONS.map((option) => (
-            <StepTwoOptionCard
-              key={option.key}
-              option={option}
-              selected={value === option.key}
-              expanded={expandedKey === option.key}
-              onSelect={() => handleSelect(option.key)}
-              onToggleExpand={() => handleToggleExpand(option.key)}
-            />
-          ))}
+          {OPTIONS.map((option) => {
+            const disabled = option.key === "observer" && observerSlotTaken;
+
+            return (
+              <CitizenTypeCard
+                key={option.key}
+                option={option}
+                selected={value === option.key}
+                expanded={expandedKey === option.key}
+                disabled={disabled}
+                onSelect={() => handleSelect(option.key)}
+                onToggleExpand={() => handleToggleExpand(option.key)}
+              />
+            );
+          })}
         </View>
       </View>
-
-      {selectedOption ? null : null}
     </View>
   );
 }
@@ -220,7 +253,7 @@ const styles = StyleSheet.create({
   },
 
   headerBlock: {
-    gap: 6,
+    gap: 8,
     marginTop: 22,
   },
 
@@ -251,15 +284,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 14,
     gap: 10,
+    position: "relative",
   },
 
   cardSelected: {
     borderColor: Theme.colors.primary,
-    backgroundColor: "rgba(255,255,255,0.62)",
+    backgroundColor: "rgba(255,255,255,0.66)",
   },
 
   cardExpanded: {
     paddingBottom: 12,
+  },
+
+  cardDisabled: {
+    opacity: 0.54,
+  },
+
+  slotTakenBadge: {
+    position: "absolute",
+    top: -10,
+    right: 12,
+    zIndex: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#FFF3CC",
+    borderWidth: 1,
+    borderColor: "#E8D597",
+  },
+
+  slotTakenText: {
+    color: Theme.colors.primary,
+    fontSize: 11,
+    lineHeight: 14,
+    fontFamily: Theme.fonts.body.semibold,
   },
 
   cardHeader: {
@@ -281,7 +339,7 @@ const styles = StyleSheet.create({
     borderRadius: 27,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "linear-gradient(180deg, #FFF8E6 0%, #F4F8FF 100%)",
+    backgroundColor: "#FFF7E8",
   },
 
   textBlock: {
@@ -316,6 +374,10 @@ const styles = StyleSheet.create({
   radioSelected: {
     backgroundColor: Theme.colors.primary,
     borderColor: Theme.colors.primary,
+  },
+
+  radioDisabled: {
+    borderColor: "#D8DDE6",
   },
 
   learnMoreWrap: {
@@ -375,9 +437,21 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
 
+  noteCardDisabled: {
+    opacity: 0.75,
+  },
+
   noteText: {
     fontSize: 14,
     lineHeight: 21,
     color: Theme.colors.textMuted,
+  },
+
+  disabledText: {
+    color: "#9CA3AF",
+  },
+
+  disabledTextSoft: {
+    color: "#B0B8C4",
   },
 });

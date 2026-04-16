@@ -11,8 +11,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.citizenmonitors",
       "infoPlist": {
-        "NSCameraUsageDescription": "Citizen Monitor uses your camera so you can capture election evidence and submit incident reports.",
-        "NSPhotoLibraryUsageDescription": "Citizen Monitor uses your photo library so you can attach election evidence from your gallery.",
+        "NSCameraUsageDescription": "Citizen Monitor uses your camera so you can capture election evidence, signed result sheets, and incident reports.",
+        "NSPhotoLibraryUsageDescription": "Citizen Monitor uses your photo library so you can attach election photos and videos from your gallery.",
+        "NSMicrophoneUsageDescription": "Citizen Monitor uses your microphone when recording live incident videos and cumulative result announcement videos.",
         "NSLocationWhenInUseUsageDescription": "Citizen Monitor uses your location to verify that reports and evidence are submitted from the correct polling area."
       }
     },
@@ -27,6 +28,7 @@
       "package": "com.anonymous.citizenmonitors",
       "permissions": [
         "CAMERA",
+        "RECORD_AUDIO",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "READ_MEDIA_IMAGES",
@@ -49,10 +51,18 @@
         }
       ],
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Citizen Monitor accesses your camera so you can capture signed result sheets, incident evidence, and record live election reports.",
+          "microphonePermission": "Citizen Monitor accesses your microphone so audio is included when recording live incident and result videos."
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "Citizen Monitor accesses your photos so you can attach election evidence from your gallery.",
-          "cameraPermission": "Citizen Monitor accesses your camera so you can capture live election evidence."
+          "cameraPermission": "Citizen Monitor accesses your camera so you can capture live election evidence.",
+          "microphonePermission": "Citizen Monitor accesses your microphone so recorded election videos can include audio."
         }
       ],
       [

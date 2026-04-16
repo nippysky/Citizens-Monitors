@@ -17,29 +17,33 @@ import AppText from "@/components/ui/AppText";
 import { useNetwork } from "@/context/NetworkContext";
 import NotifyPopupBell from "@/svgs/app/NotifyPopupBell";
 import { Theme } from "@/theme";
+import { handlePermissionAction } from "@/lib/permissions";
 
 export default function ToastNotification() {
   const { activeToast, dismissToast } = useNetwork();
 
-  const bellScale = useSharedValue(1);
+  const scale = useSharedValue(1);
 
   useEffect(() => {
     if (activeToast) {
-      bellScale.value = withDelay(
-        600,
+      scale.value = withDelay(
+        400,
         withRepeat(
-          withTiming(1.04, { duration: 1800, easing: Easing.inOut(Easing.ease) }),
+          withTiming(1.04, {
+            duration: 1600,
+            easing: Easing.inOut(Easing.ease),
+          }),
           -1,
           true
         )
       );
     } else {
-      bellScale.value = 1;
+      scale.value = 1;
     }
-  }, [activeToast, bellScale]);
+  }, [activeToast, scale]);
 
-  const bellStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: bellScale.value }],
+  const animatedIcon = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
   }));
 
   if (!activeToast) return null;
@@ -54,10 +58,10 @@ export default function ToastNotification() {
       : "#FFFBEB";
 
   const borderColor = isOffline
-    ? "rgba(220, 38, 38, 0.2)"
+    ? "rgba(220,38,38,0.2)"
     : isOnline
-      ? "rgba(16, 185, 129, 0.2)"
-      : "rgba(25, 183, 176, 0.18)";
+      ? "rgba(16,185,129,0.2)"
+      : "rgba(25,183,176,0.18)";
 
   const iconColor = isOffline
     ? Theme.colors.danger
@@ -65,21 +69,22 @@ export default function ToastNotification() {
       ? Theme.colors.success
       : Theme.colors.primary;
 
-  // Tab bar height + some padding
-  const tabBarH = Platform.OS === "ios" ? 88 : 72;
-  const bottomOffset = tabBarH + 10;
+  const bottomOffset = (Platform.OS === "ios" ? 88 : 72) + 10;
 
   const handleAction = () => {
-    if (activeToast.actionRoute) {
+    if (activeToast.actionRoute === "__open_settings__") {
+      handlePermissionAction(activeToast.actionRoute);
+    } else if (activeToast.actionRoute) {
       router.push(activeToast.actionRoute as any);
     }
+
     dismissToast();
   };
 
   return (
     <Animated.View
-      entering={FadeIn.duration(380).easing(Easing.out(Easing.cubic)).withInitialValues({ opacity: 0, transform: [{ translateY: 40 }] })}
-      exiting={FadeOut.duration(260).easing(Easing.in(Easing.cubic)).withInitialValues({ opacity: 1, transform: [{ translateY: 0 }] })}
+      entering={FadeIn.duration(320).easing(Easing.out(Easing.cubic))}
+      exiting={FadeOut.duration(220)}
       style={[
         styles.container,
         {
@@ -88,50 +93,42 @@ export default function ToastNotification() {
           borderColor,
         },
       ]}
-      collapsable={false}
     >
       <Pressable
         style={styles.inner}
         onPress={activeToast.actionRoute ? handleAction : dismissToast}
       >
-        {/* Icon */}
-        <Animated.View style={[styles.iconWrap, bellStyle]}>
+        {/* ICON */}
+        <Animated.View style={[styles.iconWrap, animatedIcon]}>
           {isOffline ? (
             <Ionicons name="cloud-offline-outline" size={22} color={iconColor} />
           ) : isOnline ? (
             <Ionicons name="cloud-done-outline" size={22} color={iconColor} />
           ) : (
-            <NotifyPopupBell width={28} height={28} />
+            <NotifyPopupBell width={26} height={26} />
           )}
         </Animated.View>
 
-        {/* Text */}
+        {/* TEXT */}
         <View style={styles.textWrap}>
-          <AppText style={styles.title} numberOfLines={2}>
-            {activeToast.title}
-          </AppText>
-          {activeToast.subtitle ? (
-            <AppText style={styles.subtitle} numberOfLines={1}>
+          <AppText style={styles.title}>{activeToast.title}</AppText>
+
+          {activeToast.subtitle && (
+            <AppText style={styles.subtitle}>
               {activeToast.subtitle}
             </AppText>
-          ) : null}
-          {activeToast.actionLabel ? (
-            <Pressable onPress={handleAction}>
-              <AppText style={styles.actionLabel}>
-                {activeToast.actionLabel}{" "}
-                <Ionicons name="chevron-forward" size={12} color={Theme.colors.primary} />
-              </AppText>
-            </Pressable>
-          ) : null}
+          )}
+
+          {activeToast.actionLabel && (
+            <AppText style={styles.actionLabel}>
+              {activeToast.actionLabel} →
+            </AppText>
+          )}
         </View>
 
-        {/* Dismiss */}
+        {/* CLOSE */}
         {!isOffline && (
-          <Pressable
-            onPress={dismissToast}
-            hitSlop={12}
-            style={styles.closeBtn}
-          >
+          <Pressable onPress={dismissToast} hitSlop={12}>
             <Ionicons name="close" size={16} color={Theme.colors.textMuted} />
           </Pressable>
         )}
@@ -147,18 +144,13 @@ const styles = StyleSheet.create({
     right: 16,
     borderRadius: 16,
     borderWidth: 1,
-    shadowColor: "#0F172A",
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
+    elevation: 10,
     zIndex: 9999,
   },
   inner: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    padding: 14,
     gap: 12,
   },
   iconWrap: {
@@ -171,31 +163,20 @@ const styles = StyleSheet.create({
   },
   textWrap: {
     flex: 1,
-    gap: 2,
   },
   title: {
     fontSize: 13,
-    lineHeight: 18,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
   },
   subtitle: {
     fontSize: 12,
-    lineHeight: 16,
     color: Theme.colors.textMuted,
   },
   actionLabel: {
-    fontSize: 13,
-    lineHeight: 18,
+    marginTop: 4,
+    fontSize: 12,
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.semibold,
-    marginTop: 2,
-  },
-  closeBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
   },
 });

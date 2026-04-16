@@ -1,5 +1,6 @@
 // ─── src/components/me/ProfileBottomSheet.tsx ────────────────────────────────
 // Revamped: avatar change via gallery+crop, regenerate public name with 5 trials.
+// Updated: avatar picker now uses centralized media-library permission helper.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { Ionicons } from "@expo/vector-icons";
@@ -13,16 +14,18 @@ import { forwardRef, RefObject, useCallback, useMemo, useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import BirthdaySheet from "@/components/ui/sheets/BirthdaySheet";
+import GenderSheet from "@/components/ui/sheets/GenderSheet";
+import SelectPickerSheet from "@/components/ui/sheets/SelectPickerSheet";
 import AppButton from "@/components/ui/AppButton";
 import AppInput from "@/components/ui/AppInput";
 import AppSelectField from "@/components/ui/AppSelectField";
 import AppText from "@/components/ui/AppText";
+import { useAppToast } from "@/hooks/useAppToast";
+import { ensureMediaLibraryPermission } from "@/lib/permissions";
 import ProfilePhoto from "@/svgs/app/profile/ProfilePhoto";
 import { Theme } from "@/theme";
 import { BirthdayValue, Gender } from "@/types/onboarding";
-import BirthdaySheet from "@/components/ui/sheets/BirthdaySheet";
-import GenderSheet from "@/components/ui/sheets/GenderSheet";
-import SelectPickerSheet from "@/components/ui/sheets/SelectPickerSheet";
 
 export type ProfileFormState = {
   firstName: string;
@@ -44,25 +47,58 @@ type Props = {
 };
 
 const PUBLIC_NAME_PREFIXES = [
-  "Iron", "Silver", "Golden", "Shadow", "Storm", "Brave", "Swift", "Noble", "Crystal", "Thunder",
+  "Iron",
+  "Silver",
+  "Golden",
+  "Shadow",
+  "Storm",
+  "Brave",
+  "Swift",
+  "Noble",
+  "Crystal",
+  "Thunder",
 ];
+
 const PUBLIC_NAME_SUFFIXES = [
-  "Eagle", "Wolf", "Lion", "Hawk", "Bear", "Fox", "Panther", "Falcon", "Titan", "Phoenix",
+  "Eagle",
+  "Wolf",
+  "Lion",
+  "Hawk",
+  "Bear",
+  "Fox",
+  "Panther",
+  "Falcon",
+  "Titan",
+  "Phoenix",
 ];
 
 function generatePublicName(): string {
-  const prefix = PUBLIC_NAME_PREFIXES[Math.floor(Math.random() * PUBLIC_NAME_PREFIXES.length)];
-  const suffix = PUBLIC_NAME_SUFFIXES[Math.floor(Math.random() * PUBLIC_NAME_SUFFIXES.length)];
+  const prefix =
+    PUBLIC_NAME_PREFIXES[
+      Math.floor(Math.random() * PUBLIC_NAME_PREFIXES.length)
+    ];
+  const suffix =
+    PUBLIC_NAME_SUFFIXES[
+      Math.floor(Math.random() * PUBLIC_NAME_SUFFIXES.length)
+    ];
   const num = Math.floor(Math.random() * 99) + 1;
   return `${prefix}${suffix}${num}`;
 }
 
 const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
   function ProfileBottomSheet(
-    { value, onChange, onSave, birthdaySheetRef, nationalitySheetRef, genderSheetRef },
+    {
+      value,
+      onChange,
+      onSave,
+      birthdaySheetRef,
+      nationalitySheetRef,
+      genderSheetRef,
+    },
     ref
   ) {
     const insets = useSafeAreaInsets();
+    const { showToast } = useAppToast();
     const snapPoints = useMemo(() => ["92%"], []);
 
     const [avatarUri, setAvatarUri] = useState<string | null>(null);
@@ -70,24 +106,38 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
     const [trialsLeft, setTrialsLeft] = useState(5);
 
     const close = () => {
-      if (ref && typeof ref !== "function" && ref.current) ref.current.dismiss();
+      if (ref && typeof ref !== "function" && ref.current) {
+        ref.current.dismiss();
+      }
     };
 
     const handleChangeAvatar = useCallback(async () => {
-      const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!granted) return;
+      const allowed = await ensureMediaLibraryPermission();
+      if (!allowed) return;
 
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.85,
-      });
+      try {
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ["images"],
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.85,
+        });
 
-      if (!result.canceled && result.assets?.length) {
-        setAvatarUri(result.assets[0].uri);
+        if (!result.canceled && result.assets?.length) {
+          setAvatarUri(result.assets[0].uri);
+
+          showToast({
+            type: "success",
+            message: "Profile photo updated.",
+          });
+        }
+      } catch {
+        showToast({
+          type: "error",
+          message: "Could not open gallery. Try again.",
+        });
       }
-    }, []);
+    }, [showToast]);
 
     const handleRegenerateName = useCallback(() => {
       if (trialsLeft <= 0) return;
@@ -106,7 +156,13 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
           keyboardBlurBehavior="restore"
           android_keyboardInputMode="adjustResize"
           backdropComponent={(p) => (
-            <BottomSheetBackdrop {...p} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.32} pressBehavior="close" />
+            <BottomSheetBackdrop
+              {...p}
+              appearsOnIndex={0}
+              disappearsOnIndex={-1}
+              opacity={0.32}
+              pressBehavior="close"
+            />
           )}
           handleIndicatorStyle={styles.handle}
           backgroundStyle={styles.bg}
@@ -114,13 +170,22 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
           <BottomSheetScrollView
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 22 }]}
+            contentContainerStyle={[
+              styles.content,
+              { paddingBottom: insets.bottom + 22 },
+            ]}
           >
             {/* Header */}
             <View style={styles.header}>
-              <AppText style={styles.headerTitle}>Update Personal Profile</AppText>
+              <AppText style={styles.headerTitle}>
+                Update Personal Profile
+              </AppText>
               <Pressable onPress={close} hitSlop={8} style={styles.closeBtn}>
-                <Ionicons name="close" size={22} color={Theme.colors.textMuted} />
+                <Ionicons
+                  name="close"
+                  size={22}
+                  color={Theme.colors.textMuted}
+                />
               </Pressable>
             </View>
 
@@ -135,7 +200,10 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
                   <ProfilePhoto width={72} height={72} />
                 )}
               </View>
-              <Pressable onPress={handleChangeAvatar} style={styles.changeAvatarBtn}>
+              <Pressable
+                onPress={handleChangeAvatar}
+                style={styles.changeAvatarBtn}
+              >
                 <AppText style={styles.changeAvatarText}>Change Avatar</AppText>
               </Pressable>
             </View>
@@ -166,7 +234,13 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
               value={value.birthday.formatted}
               placeholder="Select birthday"
               onPress={() => birthdaySheetRef.current?.present()}
-              leftIcon={<Ionicons name="calendar-outline" size={18} color={Theme.colors.textSoft} />}
+              leftIcon={
+                <Ionicons
+                  name="calendar-outline"
+                  size={18}
+                  color={Theme.colors.textSoft}
+                />
+              }
             />
 
             {/* Gender */}
@@ -205,14 +279,19 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
             {/* ── Regenerate Public Name ── */}
             <View style={styles.publicNameSection}>
               <View style={styles.publicNameHeader}>
-                <AppText style={styles.publicNameTitle}>Regenerate Your Public Name</AppText>
+                <AppText style={styles.publicNameTitle}>
+                  Regenerate Your Public Name
+                </AppText>
               </View>
               <AppText style={styles.publicNameDesc}>
-                To protect you on this app, your real name is never shown publicly. All reports and discussions are tied to this identity.
+                To protect you on this app, your real name is never shown
+                publicly. All reports and discussions are tied to this identity.
               </AppText>
 
               <View style={styles.publicNameCard}>
-                <AppText style={styles.publicNameLabel}>Your anonymous identity</AppText>
+                <AppText style={styles.publicNameLabel}>
+                  Your anonymous identity
+                </AppText>
                 <AppText style={styles.publicNameValue}>{publicName}</AppText>
               </View>
 
@@ -220,10 +299,26 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
                 <Pressable
                   onPress={handleRegenerateName}
                   disabled={trialsLeft <= 0}
-                  style={[styles.tryAnotherBtn, trialsLeft <= 0 && styles.tryAnotherBtnDisabled]}
+                  style={[
+                    styles.tryAnotherBtn,
+                    trialsLeft <= 0 && styles.tryAnotherBtnDisabled,
+                  ]}
                 >
-                  <Ionicons name="refresh-outline" size={14} color={trialsLeft > 0 ? Theme.colors.primary : Theme.colors.textMuted} />
-                  <AppText style={[styles.tryAnotherText, trialsLeft <= 0 && { color: Theme.colors.textMuted }]}>
+                  <Ionicons
+                    name="refresh-outline"
+                    size={14}
+                    color={
+                      trialsLeft > 0
+                        ? Theme.colors.primary
+                        : Theme.colors.textMuted
+                    }
+                  />
+                  <AppText
+                    style={[
+                      styles.tryAnotherText,
+                      trialsLeft <= 0 && { color: Theme.colors.textMuted },
+                    ]}
+                  >
                     Try another ({trialsLeft} Left)
                   </AppText>
                 </Pressable>
@@ -235,7 +330,11 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
             </View>
 
             {/* Save */}
-            <AppButton title="Save Changes" onPress={onSave} style={styles.saveButton} />
+            <AppButton
+              title="Save Changes"
+              onPress={onSave}
+              style={styles.saveButton}
+            />
           </BottomSheetScrollView>
         </BottomSheetModal>
 
@@ -257,7 +356,9 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
           query={value.nationalityQuery}
           onChangeQuery={(q) => onChange({ ...value, nationalityQuery: q })}
           selectedValue={value.nationality}
-          onSelectValue={(nationality) => onChange({ ...value, nationality, nationalityQuery: "" })}
+          onSelectValue={(nationality) =>
+            onChange({ ...value, nationality, nationalityQuery: "" })
+          }
         />
       </>
     );
@@ -267,57 +368,184 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
 export default ProfileBottomSheet;
 
 const styles = StyleSheet.create({
-  bg: { backgroundColor: Theme.colors.background, borderTopLeftRadius: 28, borderTopRightRadius: 28 },
-  handle: { backgroundColor: "rgba(17,26,50,0.12)", width: 44 },
-  content: { paddingHorizontal: 16, paddingTop: 8, gap: 16 },
+  bg: {
+    backgroundColor: Theme.colors.background,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+  },
+  handle: {
+    backgroundColor: "rgba(17,26,50,0.12)",
+    width: 44,
+  },
+  content: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    gap: 16,
+  },
 
-  header: { minHeight: 58, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  headerTitle: { fontSize: 18, lineHeight: 24, fontFamily: Theme.fonts.heading.semibold, color: Theme.colors.text },
-  closeBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(255,255,255,0.74)", alignItems: "center", justifyContent: "center" },
-  divider: { height: 1, backgroundColor: "#DFE4EB", marginHorizontal: -16 },
+  header: {
+    minHeight: 58,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  headerTitle: {
+    fontSize: 18,
+    lineHeight: 24,
+    fontFamily: Theme.fonts.heading.semibold,
+    color: Theme.colors.text,
+  },
+  closeBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(255,255,255,0.74)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "#DFE4EB",
+    marginHorizontal: -16,
+  },
 
   /* Avatar */
-  avatarSection: { alignItems: "center", gap: 10, paddingVertical: 4 },
-  avatarWrap: { width: 72, height: 72, borderRadius: 36, overflow: "hidden", backgroundColor: "#EEF2F6", alignItems: "center", justifyContent: "center" },
-  avatarImg: { width: 72, height: 72, borderRadius: 36 },
-  changeAvatarBtn: {
-    minHeight: 30, borderRadius: 10, paddingHorizontal: 14,
-    backgroundColor: "rgba(5,163,156,0.06)", borderWidth: 1.2, borderColor: Theme.colors.primary,
-    alignItems: "center", justifyContent: "center",
+  avatarSection: {
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 4,
   },
-  changeAvatarText: { fontSize: 12, lineHeight: 16, color: Theme.colors.primary, fontFamily: Theme.fonts.body.semibold },
+  avatarWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    overflow: "hidden",
+    backgroundColor: "#EEF2F6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarImg: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+  },
+  changeAvatarBtn: {
+    minHeight: 30,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    backgroundColor: "rgba(5,163,156,0.06)",
+    borderWidth: 1.2,
+    borderColor: Theme.colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  changeAvatarText: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.body.semibold,
+  },
 
   /* Name row */
-  nameRow: { flexDirection: "row", gap: 12 },
-  nameCol: { flex: 1 },
+  nameRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  nameCol: {
+    flex: 1,
+  },
 
   /* Public name */
   publicNameSection: {
-    borderRadius: 18, borderWidth: 1, borderColor: Theme.colors.border,
-    backgroundColor: Theme.colors.surface, padding: 14, gap: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+    backgroundColor: Theme.colors.surface,
+    padding: 14,
+    gap: 12,
   },
-  publicNameHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
-  publicNameTitle: { fontSize: 15, lineHeight: 20, color: Theme.colors.text, fontFamily: Theme.fonts.body.semibold },
-  publicNameDesc: { fontSize: 13, lineHeight: 19, color: Theme.colors.textMuted },
+  publicNameHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  publicNameTitle: {
+    fontSize: 15,
+    lineHeight: 20,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+  publicNameDesc: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: Theme.colors.textMuted,
+  },
   publicNameCard: {
-    borderRadius: 14, backgroundColor: "#F4FFFE", borderWidth: 1, borderColor: "rgba(5,163,156,0.15)",
-    paddingHorizontal: 14, paddingVertical: 14, alignItems: "center", gap: 6,
+    borderRadius: 14,
+    backgroundColor: "#F4FFFE",
+    borderWidth: 1,
+    borderColor: "rgba(5,163,156,0.15)",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+    gap: 6,
   },
-  publicNameLabel: { fontSize: 12, lineHeight: 16, color: Theme.colors.primary, fontFamily: Theme.fonts.body.medium },
-  publicNameValue: { fontSize: 22, lineHeight: 26, color: Theme.colors.text, fontFamily: Theme.fonts.heading.bold },
+  publicNameLabel: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.body.medium,
+  },
+  publicNameValue: {
+    fontSize: 22,
+    lineHeight: 26,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.heading.bold,
+  },
 
-  publicNameActions: { flexDirection: "row", alignItems: "center", gap: 10 },
-  tryAnotherBtn: {
-    flex: 1, minHeight: 40, borderRadius: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
-    backgroundColor: "transparent", borderWidth: 1.2, borderColor: Theme.colors.primary,
+  publicNameActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
-  tryAnotherBtnDisabled: { borderColor: Theme.colors.border, opacity: 0.5 },
-  tryAnotherText: { fontSize: 13, lineHeight: 18, color: Theme.colors.primary, fontFamily: Theme.fonts.body.semibold },
+  tryAnotherBtn: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "transparent",
+    borderWidth: 1.2,
+    borderColor: Theme.colors.primary,
+  },
+  tryAnotherBtnDisabled: {
+    borderColor: Theme.colors.border,
+    opacity: 0.5,
+  },
+  tryAnotherText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.body.semibold,
+  },
   keepNameBtn: {
-    flex: 1, minHeight: 40, borderRadius: 12, alignItems: "center", justifyContent: "center",
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: Theme.colors.primary,
   },
-  keepNameText: { fontSize: 13, lineHeight: 18, color: Theme.colors.white, fontFamily: Theme.fonts.body.semibold },
+  keepNameText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Theme.colors.white,
+    fontFamily: Theme.fonts.body.semibold,
+  },
 
-  saveButton: { marginVertical: 0 },
+  saveButton: {
+    marginVertical: 0,
+  },
 });

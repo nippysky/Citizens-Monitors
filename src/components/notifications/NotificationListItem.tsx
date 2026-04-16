@@ -1,39 +1,51 @@
+import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
+import { Paths } from "@/constants/paths";
 import { NotificationItem } from "@/data/notifications";
 import { Theme } from "@/theme";
 
 type Props = {
   item: NotificationItem;
   isLast?: boolean;
-  onPress?: (item: NotificationItem) => void;
 };
 
-export default function NotificationListItem({
-  item,
-  isLast = false,
-  onPress,
-}: Props) {
+function getIconName(kind: NotificationItem["kind"]): keyof typeof Ionicons.glyphMap {
+  switch (kind) {
+    case "incident":
+      return "warning-outline";
+    case "announcement":
+      return "megaphone-outline";
+    case "update":
+      return "notifications-outline";
+    case "result":
+    default:
+      return "checkmark-done-outline";
+  }
+}
+
+export default function NotificationListItem({ item, isLast = false }: Props) {
+  const handlePress = () => {
+    router.push(Paths.appNotificationDetails(item.id));
+  };
+
   return (
-    <Pressable
-      onPress={() => onPress?.(item)}
-      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-    >
+    <Pressable onPress={handlePress} style={[styles.row, isLast && styles.rowLast]}>
       <View style={styles.leftRail}>
         <View style={styles.iconWrap}>
-          <Ionicons name="notifications-outline" size={16} color="#FFFFFF" />
+          <Ionicons name={getIconName(item.kind)} size={18} color="#FFFFFF" />
         </View>
 
-        {!isLast ? <View style={styles.line} /> : <View style={styles.lineSpacer} />}
+        {!isLast ? <View style={styles.connector} /> : <View style={styles.connectorSpacer} />}
       </View>
 
-      <View style={styles.content}>
-        <AppText style={styles.time}>{item.timeAgo}</AppText>
+      <View style={styles.contentWrap}>
+        <AppText style={styles.timeText}>{item.timeAgo}</AppText>
 
         <View style={styles.titleRow}>
-          <AppText style={styles.title} numberOfLines={2}>
+          <AppText numberOfLines={2} style={styles.title}>
             {item.title}
           </AppText>
 
@@ -44,10 +56,17 @@ export default function NotificationListItem({
           />
         </View>
 
-        <View style={styles.metaRow}>
-          <AppText style={styles.actor}>{item.actorLabel}</AppText>
-          <AppText style={styles.location}>{item.location}</AppText>
-        </View>
+        {item.actorLabel || item.location ? (
+          <View style={styles.metaRow}>
+            {item.actorLabel ? (
+              <AppText style={styles.actorLabel}>{item.actorLabel}</AppText>
+            ) : null}
+
+            {item.location ? (
+              <AppText style={styles.locationText}>{item.location}</AppText>
+            ) : null}
+          </View>
+        ) : null}
       </View>
     </Pressable>
   );
@@ -61,52 +80,46 @@ const styles = StyleSheet.create({
     paddingBottom: 18,
   },
 
-  pressed: {
-    opacity: 0.88,
+  rowLast: {
+    paddingBottom: 8,
   },
 
   leftRail: {
-    width: 50,
+    width: 30,
     alignItems: "center",
   },
 
   iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: Theme.colors.primary,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 2,
+    zIndex: 2,
   },
 
-  line: {
+  connector: {
     width: 2,
     flex: 1,
-    minHeight: 46,
-    marginTop: 6,
+    minHeight: 36,
     backgroundColor: Theme.colors.primary,
-    opacity: 0.9,
-    borderRadius: 999,
+    marginTop: 4,
   },
 
-  lineSpacer: {
-    width: 2,
-    flex: 1,
-    minHeight: 46,
-    marginTop: 6,
-    opacity: 0,
+  connectorSpacer: {
+    height: 6,
   },
 
-  content: {
+  contentWrap: {
     flex: 1,
     gap: 6,
     paddingTop: 2,
   },
 
-  time: {
-    fontSize: 12.5,
-    lineHeight: 16,
+  timeText: {
+    fontSize: 13,
+    lineHeight: 18,
     color: Theme.colors.textMuted,
     fontFamily: Theme.fonts.body.medium,
   },
@@ -114,7 +127,7 @@ const styles = StyleSheet.create({
   titleRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 8,
+    gap: 10,
   },
 
   title: {
@@ -122,26 +135,26 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 24,
     color: Theme.colors.text,
-    fontFamily: Theme.fonts.heading.semibold,
+    fontFamily: Theme.fonts.body.semibold,
   },
 
   metaRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
     alignItems: "center",
+    flexWrap: "wrap",
     gap: 4,
   },
 
-  actor: {
-    fontSize: 13,
-    lineHeight: 18,
+  actorLabel: {
+    fontSize: 15,
+    lineHeight: 22,
     color: Theme.colors.primary,
-    fontFamily: Theme.fonts.body.semibold,
+    fontFamily: Theme.fonts.body.medium,
   },
 
-  location: {
-    fontSize: 13,
-    lineHeight: 18,
+  locationText: {
+    fontSize: 15,
+    lineHeight: 22,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.medium,
   },

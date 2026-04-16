@@ -1,5 +1,11 @@
 import AppInput from "@/components/ui/AppInput";
-import { Control, Controller, FieldPath, FieldValues } from "react-hook-form";
+import {
+  Control,
+  Controller,
+  FieldPath,
+  FieldValues,
+  RegisterOptions,
+} from "react-hook-form";
 
 type Props<TFieldValues extends FieldValues> = {
   control: Control<TFieldValues>;
@@ -12,6 +18,7 @@ type Props<TFieldValues extends FieldValues> = {
   autoCapitalize?: "none" | "sentences" | "words" | "characters";
   autoCorrect?: boolean;
   startIcon?: React.ReactNode;
+  rules?: RegisterOptions<TFieldValues, FieldPath<TFieldValues>>;
 };
 
 export default function ControlledTextField<TFieldValues extends FieldValues>({
@@ -25,11 +32,13 @@ export default function ControlledTextField<TFieldValues extends FieldValues>({
   autoCapitalize = "sentences",
   autoCorrect = true,
   startIcon,
+  rules,
 }: Props<TFieldValues>) {
   return (
     <Controller
       control={control}
       name={name}
+      rules={rules}
       render={({ field, fieldState }) => (
         <AppInput
           label={label}

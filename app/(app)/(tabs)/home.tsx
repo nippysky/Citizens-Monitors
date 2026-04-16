@@ -1,10 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -14,8 +9,10 @@ import ElectionUpdatesSection from "@/components/home/ElectionUpdatesSection";
 import HomeHeader from "@/components/home/HomeHeader";
 import LatestNewsSection from "@/components/home/LatestNewsSection";
 import QuietDayBanner from "@/components/home/QuietDayBanner";
-import TabBarSpacer from "@/components/layout/TabBarSpacer";
 import VoterEssentialsModal from "@/components/home/VoterEssentialsModal";
+import HomeCalendarStrip from "@/components/home/HomeCalenderStrip";
+import VoterEssentialsSection from "@/components/home/VoterEssentialSection";
+import TabBarSpacer from "@/components/layout/TabBarSpacer";
 import { useAuth } from "@/context/AuthContext";
 import { useNetwork } from "@/context/NetworkContext";
 import {
@@ -26,8 +23,6 @@ import {
 } from "@/data/home";
 import { Theme } from "@/theme";
 import { CalendarDayItem } from "@/types/home";
-import HomeCalendarStrip from "@/components/home/HomeCalenderStrip";
-import VoterEssentialsSection from "@/components/home/VoterEssentialSection";
 
 function roleLabelFromRole(role: typeof mockRole): string {
   if (role === "observer") return "Observer";
@@ -80,10 +75,8 @@ export default function HomeScreen() {
     setSelectedDate(item.date);
   };
 
-  // ── Pull to refresh ──
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    // In production: fetch fresh data, update cache via cacheSet()
     await new Promise((resolve) => setTimeout(resolve, 1200));
     setRefreshing(false);
 
@@ -96,26 +89,9 @@ export default function HomeScreen() {
     }
   }, [isConnected, showToast]);
 
-  // ── Show live election toast on mount if election day ──
-  useEffect(() => {
-    if (selectedContent.hasElection && selectedContent.electionCards.length > 0) {
-      const timer = setTimeout(() => {
-        showToast({
-          type: "live-election",
-          title: "Alimosho 2026 Election is Live!",
-          subtitle: "Submit result & incident reports.",
-          actionLabel: "Submit Election Report",
-          actionRoute: "/(app)/election/election-1",
-        });
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [selectedContent.hasElection]); // eslint-disable-line react-hooks/exhaustive-deps
-
   return (
     <SafeAreaView edges={["top"]} style={styles.safe}>
       <View style={styles.root}>
-        {/* Gradient background for top portion */}
         <LinearGradient
           colors={["#F4F1D9", "#F4F1D9", "#FFFFFF", "#FFFFFF"]}
           locations={[0, 0.18, 0.48, 1]}
@@ -138,7 +114,6 @@ export default function HomeScreen() {
             />
           }
         >
-          {/* ── Top gradient section ── */}
           <View style={styles.topSection}>
             <HomeHeader
               firstName={firstName}
@@ -162,24 +137,19 @@ export default function HomeScreen() {
             ) : null}
           </View>
 
-          {/* ── White section — everything below the election card ── */}
           <View style={styles.whiteSection}>
-            {/* Election Updates */}
             {selectedContent.electionUpdates.length > 0 && (
               <ElectionUpdatesSection items={selectedContent.electionUpdates} />
             )}
 
-            {/* Discussion Room */}
             {selectedContent.discussions.length > 0 && (
               <DiscussionRoomSection items={selectedContent.discussions} />
             )}
 
-            {/* Latest News & Insights */}
             {selectedContent.news.length > 0 && (
               <LatestNewsSection items={selectedContent.news} />
             )}
 
-            {/* Voter Essentials */}
             <VoterEssentialsSection
               onViewAll={() => setVoterEssentialsVisible(true)}
             />
@@ -188,7 +158,6 @@ export default function HomeScreen() {
           </View>
         </ScrollView>
 
-        {/* Voter Essentials Modal */}
         <VoterEssentialsModal
           visible={voterEssentialsVisible}
           onClose={() => setVoterEssentialsVisible(false)}

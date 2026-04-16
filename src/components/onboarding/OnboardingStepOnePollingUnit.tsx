@@ -49,7 +49,10 @@ const POLLING_DATA: PollingData = {
   },
 };
 
-export default function OnboardingStepFour({ value, onChange }: Props) {
+export default function OnboardingStepOnePollingUnit({
+  value,
+  onChange,
+}: Props) {
   const stateSheetRef = useRef<BottomSheetModal>(null);
   const lgaSheetRef = useRef<BottomSheetModal>(null);
   const wardSheetRef = useRef<BottomSheetModal>(null);
@@ -75,8 +78,10 @@ export default function OnboardingStepFour({ value, onChange }: Props) {
   }, [value.pollingState, value.localGovernmentArea]);
 
   const pollingUnits = useMemo(() => {
-    if (!value.pollingState || !value.localGovernmentArea || !value.ward)
+    if (!value.pollingState || !value.localGovernmentArea || !value.ward) {
       return [];
+    }
+
     return (
       POLLING_DATA[value.pollingState]?.[value.localGovernmentArea]?.[
         value.ward
@@ -86,71 +91,46 @@ export default function OnboardingStepFour({ value, onChange }: Props) {
 
   const filteredStates = useMemo(
     () =>
-      states.filter((s) =>
-        s.toLowerCase().includes(stateQuery.trim().toLowerCase())
+      states.filter((item) =>
+        item.toLowerCase().includes(stateQuery.trim().toLowerCase())
       ),
     [states, stateQuery]
   );
 
   const filteredLgas = useMemo(
     () =>
-      lgas.filter((s) =>
-        s.toLowerCase().includes(lgaQuery.trim().toLowerCase())
+      lgas.filter((item) =>
+        item.toLowerCase().includes(lgaQuery.trim().toLowerCase())
       ),
     [lgas, lgaQuery]
   );
 
   const filteredWards = useMemo(
     () =>
-      wards.filter((s) =>
-        s.toLowerCase().includes(wardQuery.trim().toLowerCase())
+      wards.filter((item) =>
+        item.toLowerCase().includes(wardQuery.trim().toLowerCase())
       ),
     [wards, wardQuery]
   );
 
   const filteredUnits = useMemo(
     () =>
-      pollingUnits.filter((s) =>
-        s.toLowerCase().includes(unitQuery.trim().toLowerCase())
+      pollingUnits.filter((item) =>
+        item.toLowerCase().includes(unitQuery.trim().toLowerCase())
       ),
     [pollingUnits, unitQuery]
   );
-
-  const handlePickState = (picked: string): void => {
-    onChange({
-      pollingState: picked,
-      localGovernmentArea: "",
-      ward: "",
-      pollingUnit: "",
-    });
-  };
-
-  const handlePickLga = (picked: string): void => {
-    onChange({
-      ...value,
-      localGovernmentArea: picked,
-      ward: "",
-      pollingUnit: "",
-    });
-  };
-
-  const handlePickWard = (picked: string): void => {
-    onChange({ ...value, ward: picked, pollingUnit: "" });
-  };
-
-  const handlePickUnit = (picked: string): void => {
-    onChange({ ...value, pollingUnit: picked });
-  };
 
   return (
     <>
       <View style={styles.container}>
         <View style={styles.headerBlock}>
           <AppText variant="title" style={styles.heading}>
-            Your Polling Unit
+            Polling Unit
           </AppText>
           <AppText style={styles.subheading}>
-            Select the specific area where you will be monitoring the elections.
+            Select the specific area where you will like to be monitoring
+            elections happening there.
           </AppText>
         </View>
 
@@ -236,7 +216,14 @@ export default function OnboardingStepFour({ value, onChange }: Props) {
         query={stateQuery}
         onChangeQuery={setStateQuery}
         selectedValue={value.pollingState}
-        onSelectValue={handlePickState}
+        onSelectValue={(pollingState) =>
+          onChange({
+            pollingState,
+            localGovernmentArea: "",
+            ward: "",
+            pollingUnit: "",
+          })
+        }
         options={filteredStates}
       />
 
@@ -246,7 +233,14 @@ export default function OnboardingStepFour({ value, onChange }: Props) {
         query={lgaQuery}
         onChangeQuery={setLgaQuery}
         selectedValue={value.localGovernmentArea}
-        onSelectValue={handlePickLga}
+        onSelectValue={(localGovernmentArea) =>
+          onChange({
+            ...value,
+            localGovernmentArea,
+            ward: "",
+            pollingUnit: "",
+          })
+        }
         options={filteredLgas}
       />
 
@@ -256,7 +250,13 @@ export default function OnboardingStepFour({ value, onChange }: Props) {
         query={wardQuery}
         onChangeQuery={setWardQuery}
         selectedValue={value.ward}
-        onSelectValue={handlePickWard}
+        onSelectValue={(ward) =>
+          onChange({
+            ...value,
+            ward,
+            pollingUnit: "",
+          })
+        }
         options={filteredWards}
       />
 
@@ -266,7 +266,12 @@ export default function OnboardingStepFour({ value, onChange }: Props) {
         query={unitQuery}
         onChangeQuery={setUnitQuery}
         selectedValue={value.pollingUnit}
-        onSelectValue={handlePickUnit}
+        onSelectValue={(pollingUnit) =>
+          onChange({
+            ...value,
+            pollingUnit,
+          })
+        }
         options={filteredUnits}
       />
     </>
@@ -278,7 +283,7 @@ const styles = StyleSheet.create({
     gap: 18,
   },
   headerBlock: {
-    gap: 6,
+    gap: 8,
     marginTop: 22,
   },
   heading: {
@@ -289,6 +294,7 @@ const styles = StyleSheet.create({
     color: Theme.colors.textMuted,
     fontSize: 15,
     lineHeight: 22,
+    maxWidth: 360,
   },
   form: {
     gap: 14,

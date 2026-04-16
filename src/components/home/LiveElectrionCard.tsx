@@ -152,7 +152,7 @@ export default function LiveElectionCard({ item }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    width: 310,
+    width: 320,
     borderRadius: 18,
     backgroundColor: "#F6F1D9",
     padding: 14,

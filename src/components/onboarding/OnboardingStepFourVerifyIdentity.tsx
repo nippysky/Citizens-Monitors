@@ -1,6 +1,6 @@
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import {
   Image,
   Pressable,
@@ -11,6 +11,8 @@ import {
 import TutorialBanner from "@/components/onboarding/TutorialBanner";
 import AppButton from "@/components/ui/AppButton";
 import AppText from "@/components/ui/AppText";
+import { useAppToast } from "@/hooks/useAppToast";
+import { ensureMediaLibraryPermission } from "@/lib/permissions";
 import { Theme } from "@/theme";
 
 type Props = {
@@ -25,27 +27,6 @@ type UploadCardProps = {
   onRemove: () => void;
 };
 
-async function pickImageFromLibrary(): Promise<string | null> {
-  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-  if (!permission.granted) {
-    return null;
-  }
-
-  const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ["images"],
-    allowsEditing: false,
-    quality: 0.9,
-    selectionLimit: 1,
-  });
-
-  if (result.canceled || !result.assets?.length) {
-    return null;
-  }
-
-  return result.assets[0].uri;
-}
-
 function UploadCard({
   label,
   uri,
@@ -56,12 +37,19 @@ function UploadCard({
     <View style={styles.uploadBlock}>
       <AppText style={styles.uploadLabel}>{label}</AppText>
 
-      <Pressable onPress={onPick} style={[styles.uploadCard, uri && styles.uploadCardFilled]}>
+      <Pressable
+        onPress={onPick}
+        style={[styles.uploadCard, uri && styles.uploadCardFilled]}
+      >
         {uri ? (
           <>
             <Image source={{ uri }} style={styles.previewImage} />
 
-            <Pressable onPress={onRemove} hitSlop={10} style={styles.removeButton}>
+            <Pressable
+              onPress={onRemove}
+              hitSlop={10}
+              style={styles.removeButton}
+            >
               <Ionicons name="close" size={18} color="#FFFFFF" />
             </Pressable>
           </>
@@ -83,31 +71,71 @@ function UploadCard({
   );
 }
 
-export default function OnboardingVerifyIdetity({
+export default function OnboardingStepFourVerifyIdentity({
   onComplete,
   onSkip,
 }: Props) {
+  const { showToast } = useAppToast();
+
   const [frontPvcUri, setFrontPvcUri] = useState<string | null>(null);
   const [backPvcUri, setBackPvcUri] = useState<string | null>(null);
 
-  const handlePickFront = async (): Promise<void> => {
-    const uri = await pickImageFromLibrary();
+  const pickImage = useCallback(async (): Promise<string | null> => {
+    const ok = await ensureMediaLibraryPermission();
+    if (!ok) return null;
 
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: false,
+        quality: 0.9,
+        selectionLimit: 1,
+      });
+
+      if (result.canceled || !result.assets?.length) {
+        return null;
+      }
+
+      return result.assets[0].uri;
+    } catch {
+      showToast({
+        type: "error",
+        message: "Could not open gallery.",
+      });
+      return null;
+    }
+  }, [showToast]);
+
+  const handlePickFront = useCallback(async (): Promise<void> => {
+    const uri = await pickImage();
     if (uri) {
       setFrontPvcUri(uri);
+      showToast({
+        type: "success",
+        message: "Front PVC uploaded.",
+      });
     }
-  };
+  }, [pickImage, showToast]);
 
-  const handlePickBack = async (): Promise<void> => {
-    const uri = await pickImageFromLibrary();
-
+  const handlePickBack = useCallback(async (): Promise<void> => {
+    const uri = await pickImage();
     if (uri) {
       setBackPvcUri(uri);
+      showToast({
+        type: "success",
+        message: "Back PVC uploaded.",
+      });
     }
-  };
+  }, [pickImage, showToast]);
 
   const handleFinish = (): void => {
-    if (!frontPvcUri || !backPvcUri) return;
+    if (!frontPvcUri || !backPvcUri) {
+      showToast({
+        type: "error",
+        message: "Upload both front and back PVC images.",
+      });
+      return;
+    }
 
     onComplete({
       frontPvcUri,
@@ -125,7 +153,7 @@ export default function OnboardingVerifyIdetity({
         </AppText>
 
         <AppText style={styles.subheading}>
-          Upload both sides of your permanents voter&apos;s card (PVC) to unlock
+          Upload both sides of your permanent voter&apos;s card (PVC) to unlock
           full observer access.
         </AppText>
       </View>
@@ -150,14 +178,26 @@ export default function OnboardingVerifyIdetity({
           label="Front of PVC"
           uri={frontPvcUri}
           onPick={handlePickFront}
-          onRemove={() => setFrontPvcUri(null)}
+          onRemove={() => {
+            setFrontPvcUri(null);
+            showToast({
+              type: "success",
+              message: "Front PVC removed.",
+            });
+          }}
         />
 
         <UploadCard
           label="Back of PVC"
           uri={backPvcUri}
           onPick={handlePickBack}
-          onRemove={() => setBackPvcUri(null)}
+          onRemove={() => {
+            setBackPvcUri(null);
+            showToast({
+              type: "success",
+              message: "Back PVC removed.",
+            });
+          }}
         />
       </View>
 
@@ -187,7 +227,7 @@ const styles = StyleSheet.create({
   },
 
   headerBlock: {
-    gap: 6,
+    gap: 8,
     marginTop: 22,
   },
 
@@ -280,7 +320,7 @@ const styles = StyleSheet.create({
 
   previewImage: {
     width: "100%",
-    height: 260,
+    height: 210,
     resizeMode: "cover",
   },
 

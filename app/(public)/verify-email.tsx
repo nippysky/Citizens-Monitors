@@ -10,20 +10,29 @@ import {
 import AuthShell from "@/components/auth/AuthShell";
 import OtpInputRow from "@/components/auth/OtpInputRow";
 import VerifyEmailFooter from "@/components/auth/VerifyEmailFooter";
-import VerifyEmailIntro from "@/components/auth/VerifyEmailIntor";
 import AppScreenLoader from "@/components/feedback/AppScreenLoader";
 import AppButton from "@/components/ui/AppButton";
+import AppText from "@/components/ui/AppText";
 import BackButton from "@/components/ui/BackButton";
 import { Paths } from "@/constants/paths";
 import { useAppToast } from "@/hooks/useAppToast";
 import CheckIcon from "@/svgs/app/CheckIcon";
+import { Theme } from "@/theme";
 
 const OTP_LENGTH = 5;
 const INITIAL_SECONDS = 60;
 
+type VerifyFlow = "sign-up" | "reset-password";
+
 export default function VerifyEmailScreen() {
-  const params = useLocalSearchParams<{ email?: string }>();
+  const params = useLocalSearchParams<{
+    email?: string;
+    flow?: VerifyFlow;
+  }>();
+
   const email = params.email ?? "yourname@gmail.com";
+  const flow: VerifyFlow =
+    params.flow === "reset-password" ? "reset-password" : "sign-up";
 
   const { showToast } = useAppToast();
 
@@ -33,7 +42,10 @@ export default function VerifyEmailScreen() {
 
   const inputRefs = useRef<(TextInput | null)[]>([]);
 
-  const isComplete = useMemo(() => code.every((digit) => digit.length === 1), [code]);
+  const isComplete = useMemo(
+    () => code.every((digit) => digit.length === 1),
+    [code]
+  );
   const joinedCode = code.join("");
   const canResend = secondsLeft === 0;
 
@@ -89,7 +101,10 @@ export default function VerifyEmailScreen() {
 
     showToast({
       type: "success",
-      message: "OTP resent to your email.",
+      message:
+        flow === "reset-password"
+          ? "Password reset code resent to your email."
+          : "OTP resent to your email.",
     });
 
     focusInput(0);
@@ -106,6 +121,22 @@ export default function VerifyEmailScreen() {
       setLoading(false);
 
       if (joinedCode === "12345") {
+        if (flow === "reset-password") {
+          showToast({
+            type: "success",
+            message: "Email verified. Set your new password.",
+          });
+
+          setTimeout(() => {
+            router.replace({
+              pathname: Paths.setPassword,
+              params: { email, flow: "reset-password" },
+            });
+          }, 450);
+
+          return;
+        }
+
         showToast({
           type: "success",
           message: "Email verified. Let’s complete your profile.",
@@ -138,7 +169,14 @@ export default function VerifyEmailScreen() {
         <View style={styles.container}>
           <View style={styles.headerBlock}>
             <CheckIcon width={54} height={54} />
-            <VerifyEmailIntro email={email} />
+
+            <View style={styles.introBlock}>
+              <AppText variant="title">Verify Email</AppText>
+              <AppText style={styles.introText}>
+                Check your inbox & spam folder. We just sent a 5-digit code to{" "}
+                <AppText style={styles.emailText}>{email}</AppText>.
+              </AppText>
+            </View>
           </View>
 
           <View style={styles.formBlock}>
@@ -180,6 +218,20 @@ const styles = StyleSheet.create({
     gap: 18,
     marginTop: 18,
     marginBottom: 26,
+  },
+  introBlock: {
+    gap: 10,
+  },
+  introText: {
+    color: Theme.colors.textMuted,
+    fontSize: 16,
+    lineHeight: 24,
+  },
+  emailText: {
+    color: Theme.colors.primary,
+    fontSize: 16,
+    lineHeight: 24,
+    fontFamily: Theme.fonts.body.medium,
   },
   formBlock: {
     gap: 22,

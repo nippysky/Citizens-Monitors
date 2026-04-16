@@ -1,5 +1,5 @@
-import { router } from "expo-router";
-import { useState } from "react";
+import { router, useLocalSearchParams } from "expo-router";
+import { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import AuthShell from "@/components/auth/AuthShell";
@@ -15,10 +15,39 @@ import { useAppToast } from "@/hooks/useAppToast";
 import { useSetPasswordForm } from "@/hooks/useSetPasswordForm";
 import { Theme } from "@/theme";
 
+type FlowType = "sign-up" | "reset-password";
+
 export default function SetPasswordScreen() {
+  const params = useLocalSearchParams<{
+    email?: string;
+    flow?: FlowType;
+  }>();
+
+  const flow: FlowType =
+    params.flow === "reset-password" ? "reset-password" : "sign-up";
+
   const { control, handleSubmit, formState } = useSetPasswordForm();
   const [loading, setLoading] = useState(false);
   const { showToast } = useAppToast();
+
+  const copy = useMemo(() => {
+    if (flow === "reset-password") {
+      return {
+        title: "Set New Password",
+        subtitle: "You can reset your account password here",
+        buttonLabel: "Set Password",
+        successMessage: "Password reset successful.",
+      };
+    }
+
+    return {
+      title: "Set Password",
+      subtitle:
+        "Create a password so you can also sign in with your email next time — without needing Google.",
+      buttonLabel: "Set Password",
+      successMessage: "Password set successfully.",
+    };
+  }, [flow]);
 
   const onSubmit = handleSubmit(async (values) => {
     try {
@@ -28,12 +57,21 @@ export default function SetPasswordScreen() {
 
       showToast({
         type: "success",
-        message: "Password set successfully.",
+        message: copy.successMessage,
       });
 
-      console.log("Set password values:", values);
+      console.log("Set password values:", {
+        ...values,
+        email: params.email,
+        flow,
+      });
 
       setTimeout(() => {
+        if (flow === "reset-password") {
+          router.replace(Paths.signIn);
+          return;
+        }
+
         router.replace(Paths.onboarding);
       }, 400);
     } catch {
@@ -51,19 +89,16 @@ export default function SetPasswordScreen() {
       <AuthShell topSlot={<BackButton />}>
         <View style={styles.container}>
           <View style={styles.headerBlock}>
-            <AppText variant="title">Set Password</AppText>
-            <AppText style={styles.subtitle}>
-              Create a password so you can also sign in with your email next time
-              — without needing Google.
-            </AppText>
+            <AppText variant="title">{copy.title}</AppText>
+            <AppText style={styles.subtitle}>{copy.subtitle}</AppText>
           </View>
 
           <View style={styles.form}>
             <ControlledTextField
               control={control}
               name="password"
-              label="Set Password"
-              placeholder="Your password"
+              label={flow === "reset-password" ? "New Password" : "Set Password"}
+              placeholder={flow === "reset-password" ? "Password" : "Your password"}
               secureTextEntry
               secureToggle
               autoCapitalize="none"
@@ -84,16 +119,18 @@ export default function SetPasswordScreen() {
             />
 
             <AppButton
-              title="Set Password"
+              title={copy.buttonLabel}
               onPress={onSubmit}
               loading={formState.isSubmitting || loading}
               disabled={!formState.isValid || loading}
             />
           </View>
 
-          <View style={styles.termsBlock}>
-            <AuthTermsSetPassword />
-          </View>
+          {flow === "sign-up" ? (
+            <View style={styles.termsBlock}>
+              <AuthTermsSetPassword />
+            </View>
+          ) : null}
         </View>
       </AuthShell>
 

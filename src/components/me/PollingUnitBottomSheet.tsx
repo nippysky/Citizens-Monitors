@@ -1,18 +1,24 @@
-import { Ionicons } from "@expo/vector-icons";
 import {
   BottomSheetBackdrop,
   BottomSheetModal,
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
-import { forwardRef, RefObject, useMemo } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import {
+  forwardRef,
+  RefObject,
+  useMemo,
+  useState,
+} from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import MeOptionsSheet from "@/components/me/MeOptionsSheet";
 import AppButton from "@/components/ui/AppButton";
 import AppSelectField from "@/components/ui/AppSelectField";
 import AppText from "@/components/ui/AppText";
 import { Theme } from "@/theme";
+
+import SelectPickerSheet from "@/components/ui/sheets/SelectPickerSheet";
 
 export type PollingUnitFormState = {
   state: string;
@@ -25,10 +31,6 @@ type Props = {
   value: PollingUnitFormState;
   onChange: (value: PollingUnitFormState) => void;
   onSave: () => void;
-  stateSheetRef: RefObject<BottomSheetModal | null>;
-  lgaSheetRef: RefObject<BottomSheetModal | null>;
-  wardSheetRef: RefObject<BottomSheetModal | null>;
-  pollingUnitSheetRef: RefObject<BottomSheetModal | null>;
   stateOptions: string[];
   lgaOptions: string[];
   wardOptions: string[];
@@ -41,10 +43,6 @@ const PollingUnitBottomSheet = forwardRef<BottomSheetModal, Props>(
       value,
       onChange,
       onSave,
-      stateSheetRef,
-      lgaSheetRef,
-      wardSheetRef,
-      pollingUnitSheetRef,
       stateOptions,
       lgaOptions,
       wardOptions,
@@ -55,7 +53,22 @@ const PollingUnitBottomSheet = forwardRef<BottomSheetModal, Props>(
     const insets = useSafeAreaInsets();
     const snapPoints = useMemo(() => ["70%"], []);
 
-    const closeSheet = () => {
+    const stateRef = useState<RefObject<BottomSheetModal | null>>(
+      () => ({ current: null })
+    )[0];
+    const lgaRef = useState<RefObject<BottomSheetModal | null>>(
+      () => ({ current: null })
+    )[0];
+    const wardRef = useState<RefObject<BottomSheetModal | null>>(
+      () => ({ current: null })
+    )[0];
+    const puRef = useState<RefObject<BottomSheetModal | null>>(
+      () => ({ current: null })
+    )[0];
+
+    const [query, setQuery] = useState("");
+
+    const close = () => {
       if (ref && typeof ref !== "function" && ref.current) {
         ref.current.dismiss();
       }
@@ -71,9 +84,9 @@ const PollingUnitBottomSheet = forwardRef<BottomSheetModal, Props>(
           keyboardBehavior="interactive"
           keyboardBlurBehavior="restore"
           android_keyboardInputMode="adjustResize"
-          backdropComponent={(props) => (
+          backdropComponent={(p) => (
             <BottomSheetBackdrop
-              {...props}
+              {...p}
               appearsOnIndex={0}
               disappearsOnIndex={-1}
               opacity={0.32}
@@ -92,40 +105,35 @@ const PollingUnitBottomSheet = forwardRef<BottomSheetModal, Props>(
             ]}
           >
             <View style={styles.header}>
-              <AppText style={styles.headerTitle}>Update Polling Unit</AppText>
+              <AppText style={styles.headerTitle}>
+                Update Polling Unit
+              </AppText>
 
-              <Pressable onPress={closeSheet} hitSlop={8} style={styles.closeBtn}>
-                <Ionicons name="close" size={22} color={Theme.colors.textMuted} />
+              <Pressable onPress={close} style={styles.closeBtn}>
+                <Ionicons
+                  name="close"
+                  size={22}
+                  color={Theme.colors.textMuted}
+                />
               </Pressable>
             </View>
 
             <View style={styles.divider} />
 
-            <View style={styles.noteBox}>
-              <Ionicons
-                name="information-circle"
-                size={18}
-                color={Theme.colors.primary}
-              />
-              <AppText style={styles.noteText}>
-                Note You can only change your polling unit 3 times max.
-              </AppText>
-            </View>
-
             <AppSelectField
-              label="Polling Unit State"
+              label="State"
               value={value.state}
               placeholder="Select state"
-              onPress={() => stateSheetRef.current?.present()}
+              onPress={() => stateRef.current?.present()}
             />
 
             <AppSelectField
-              label="Local Government Area"
+              label="LGA"
               value={value.lga}
               placeholder="Select state first"
               onPress={() => {
                 if (!value.state) return;
-                lgaSheetRef.current?.present();
+                lgaRef.current?.present();
               }}
             />
 
@@ -135,7 +143,7 @@ const PollingUnitBottomSheet = forwardRef<BottomSheetModal, Props>(
               placeholder="Select LGA first"
               onPress={() => {
                 if (!value.lga) return;
-                wardSheetRef.current?.present();
+                wardRef.current?.present();
               }}
             />
 
@@ -145,68 +153,61 @@ const PollingUnitBottomSheet = forwardRef<BottomSheetModal, Props>(
               placeholder="Select ward first"
               onPress={() => {
                 if (!value.ward) return;
-                pollingUnitSheetRef.current?.present();
+                puRef.current?.present();
               }}
             />
 
-            <AppButton title="Save Changes" onPress={onSave} style={styles.saveButton} />
+            <AppButton title="Save Changes" onPress={onSave} />
           </BottomSheetScrollView>
         </BottomSheetModal>
 
-        <MeOptionsSheet
-          ref={stateSheetRef}
+        {/* STACKED SELECT SHEETS */}
+
+        <SelectPickerSheet
+          ref={stateRef}
           title="Select State"
           options={stateOptions}
-          selectedValue={value.state}
-          onSelect={(selected) =>
-            onChange({
-              state: selected,
-              lga: "",
-              ward: "",
-              pollingUnit: "",
-            })
+          query={query}
+          onChangeQuery={setQuery}
+          selectedValue={value.state || ""}
+          onSelectValue={(state) =>
+            onChange({ state, lga: "", ward: "", pollingUnit: "" })
           }
         />
 
-        <MeOptionsSheet
-          ref={lgaSheetRef}
+        <SelectPickerSheet
+          ref={lgaRef}
           title="Select LGA"
           options={lgaOptions}
-          selectedValue={value.lga}
-          onSelect={(selected) =>
-            onChange({
-              ...value,
-              lga: selected,
-              ward: "",
-              pollingUnit: "",
-            })
+          query={query}
+          onChangeQuery={setQuery}
+          selectedValue={value.lga || ""}
+          onSelectValue={(lga) =>
+            onChange({ ...value, lga, ward: "", pollingUnit: "" })
           }
         />
 
-        <MeOptionsSheet
-          ref={wardSheetRef}
+        <SelectPickerSheet
+          ref={wardRef}
           title="Select Ward"
           options={wardOptions}
-          selectedValue={value.ward}
-          onSelect={(selected) =>
-            onChange({
-              ...value,
-              ward: selected,
-              pollingUnit: "",
-            })
+          query={query}
+          onChangeQuery={setQuery}
+          selectedValue={value.ward || ""}
+          onSelectValue={(ward) =>
+            onChange({ ...value, ward, pollingUnit: "" })
           }
         />
 
-        <MeOptionsSheet
-          ref={pollingUnitSheetRef}
+        <SelectPickerSheet
+          ref={puRef}
           title="Select Polling Unit"
           options={pollingUnitOptions}
-          selectedValue={value.pollingUnit}
-          onSelect={(selected) =>
-            onChange({
-              ...value,
-              pollingUnit: selected,
-            })
+          query={query}
+          onChangeQuery={setQuery}
+          selectedValue={value.pollingUnit || ""}
+          onSelectValue={(pollingUnit) =>
+            onChange({ ...value, pollingUnit })
           }
         />
       </>

@@ -1,16 +1,19 @@
 // ─── src/components/me/MeHeader.tsx ───────────────────────────────────────────
-import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import { Image, Pressable, StyleSheet, View } from "react-native";
+// Matches Figma exactly: large avatar + name + role + username.
+// No CitizenIcon, no notification bell — those live in the tab bar area.
+// Uses ProfileAvatar.png from assets/images as fallback when no user photo.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { Image, StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
-import { Paths } from "@/constants/paths";
 import type { MeUser } from "@/data/me";
-import CitizenIcon from "@/svgs/app/CitizenIcon";
-import ProfilePhoto from "@/svgs/app/profile/ProfilePhoto";
 import { Theme } from "@/theme";
 
 type Props = { user: MeUser };
+
+// The large PNG avatar fallback — only PNG used on this screen
+const AVATAR_FALLBACK = require("../../../assets/images/me/ProfileAvatar.png")
 
 export default function MeHeader({ user }: Props) {
   const showStatus =
@@ -19,76 +22,113 @@ export default function MeHeader({ user }: Props) {
 
   return (
     <View style={styles.wrap}>
-      {/* Top bar */}
-      <View style={styles.topBar}>
-        <CitizenIcon width={28} height={28} />
-        <Pressable
-          style={styles.iconButton}
-          onPress={() => router.push(Paths.appNotifications)}
-        >
-          <Ionicons name="notifications-outline" size={21} color={Theme.colors.text} />
-        </Pressable>
+      {/* Avatar */}
+      <View style={styles.avatarWrap}>
+        <Image
+          source={user.avatarUri ? { uri: user.avatarUri } : AVATAR_FALLBACK}
+          style={styles.avatar}
+        />
       </View>
 
-      {/* Profile row */}
-      <View style={styles.profileRow}>
-        <View style={styles.avatarWrap}>
-          {user.avatarUri ? (
-            <Image source={{ uri: user.avatarUri }} style={styles.avatarImg} />
-          ) : (
-            <ProfilePhoto width={80} height={80} />
-          )}
+      {/* Text block */}
+      <View style={styles.textWrap}>
+        <AppText style={styles.name}>{user.fullName}</AppText>
+        <AppText style={styles.role}>{user.roleLabel}</AppText>
+
+        {/* Username row */}
+        <View style={styles.usernameRow}>
+          <AppText style={styles.usernameLabel}>Username: </AppText>
+          <AppText style={styles.usernameValue}>• {user.username}</AppText>
         </View>
 
-        <View style={styles.profileTextWrap}>
-          <AppText style={styles.name}>{user.fullName}</AppText>
-          <AppText style={styles.roleText}>{user.roleLabel}</AppText>
-
-          {/* Username */}
-          <View style={styles.usernameRow}>
-            <AppText style={styles.usernameLabel}>Username: </AppText>
-            <AppText style={styles.usernameValue}>• {user.username}</AppText>
+        {/* Verification status — observer only */}
+        {showStatus ? (
+          <View style={styles.statusRow}>
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: isVerified ? "#1E8E3E" : "#EE7A34" },
+              ]}
+            />
+            <AppText
+              style={[
+                styles.statusText,
+                { color: isVerified ? "#1E8E3E" : "#EE7A34" },
+              ]}
+            >
+              {isVerified ? "Verified" : "Pending Verification"}
+            </AppText>
           </View>
-
-          {/* Verification status (observer only) */}
-          {showStatus ? (
-            <View style={styles.statusRow}>
-              <View
-                style={[
-                  styles.statusDot,
-                  { backgroundColor: isVerified ? "#1E8E3E" : "#EE7A34" },
-                ]}
-              />
-              <AppText
-                style={[
-                  styles.statusText,
-                  { color: isVerified ? "#1E8E3E" : "#EE7A34" },
-                ]}
-              >
-                {isVerified ? "Verified" : "Pending Verification"}
-              </AppText>
-            </View>
-          ) : null}
-        </View>
+        ) : null}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: 14 },
-  topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  iconButton: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  profileRow: { flexDirection: "row", alignItems: "center", gap: 14 },
-  avatarWrap: { width: 80, height: 80, borderRadius: 40, alignItems: "center", justifyContent: "center", overflow: "hidden", backgroundColor: "#EEF2F6" },
-  avatarImg: { width: 80, height: 80, borderRadius: 40 },
-  profileTextWrap: { flex: 1, gap: 2 },
-  name: { fontSize: 22, lineHeight: 26, color: Theme.colors.text, fontFamily: Theme.fonts.heading.bold },
-  roleText: { fontSize: 13, lineHeight: 18, color: "rgba(17,26,50,0.68)", fontFamily: Theme.fonts.body.medium },
-  usernameRow: { flexDirection: "row", alignItems: "center", marginTop: 2 },
-  usernameLabel: { fontSize: 13, lineHeight: 18, color: Theme.colors.textMuted },
-  usernameValue: { fontSize: 13, lineHeight: 18, color: Theme.colors.primary, fontFamily: Theme.fonts.body.semibold },
-  statusRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 },
-  statusDot: { width: 7, height: 7, borderRadius: 999 },
-  statusText: { fontSize: 13, lineHeight: 18, fontFamily: Theme.fonts.body.semibold },
+  wrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  avatarWrap: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    overflow: "hidden",
+    backgroundColor: "#E4EAF0",
+  },
+  avatar: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+  },
+  textWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  name: {
+    fontSize: 22,
+    lineHeight: 26,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.heading.bold,
+  },
+  role: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: "rgba(17,26,50,0.68)",
+    fontFamily: Theme.fonts.body.medium,
+  },
+  usernameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
+  },
+  usernameLabel: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Theme.colors.textMuted,
+  },
+  usernameValue: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 4,
+  },
+  statusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+  },
+  statusText: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: Theme.fonts.body.semibold,
+  },
 });

@@ -10,12 +10,9 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ToastProvider } from "@/components/feedback/ToastProvider";
 import { AuthProvider } from "@/context/AuthContext";
-import { LiveNoticeProvider } from "@/components/feedback/LiveNoticeProvider";
 
-// Keep splash visible until resources load
 void SplashScreen.preventAutoHideAsync();
 
-// Smooth fade transition
 SplashScreen.setOptions({
   duration: 500,
   fade: true,
@@ -48,9 +45,6 @@ export default function RootLayout() {
         <BottomSheetModalProvider>
           <AuthProvider>
             <ToastProvider>
-              <LiveNoticeProvider>
-
-           
               <StatusBar style="dark" translucent backgroundColor="transparent" />
               <Stack
                 screenOptions={{
@@ -59,9 +53,7 @@ export default function RootLayout() {
                   contentStyle: { backgroundColor: "#F7F4EA" },
                 }}
               />
-                 </LiveNoticeProvider>
             </ToastProvider>
-            
           </AuthProvider>
         </BottomSheetModalProvider>
       </SafeAreaProvider>

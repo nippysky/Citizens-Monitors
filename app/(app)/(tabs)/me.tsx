@@ -1,9 +1,11 @@
 // ─── src/app/(app)/(tabs)/me.tsx ──────────────────────────────────────────────
-// Part 2 update: integrates PVC verification + bank details sheets.
-// ─────────────────────────────────────────────────────────────────────────────
+// ┌──────────────────────────────────────────────────────────────────────────┐
+// │  To test different user views, change DEV_USER_TYPE in src/data/me.ts:  │
+// │    "observer-pending"  │ "observer-verified"  │ "volunteer"             │
+// │    "public-viewer"                                                      │
+// └──────────────────────────────────────────────────────────────────────────┘
 
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
-import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useMemo, useRef, useState } from "react";
@@ -29,6 +31,10 @@ import ProfileBottomSheet, {
 import SecurityBottomSheet, {
   SecurityFormState,
 } from "@/components/me/SecurityBottomSheet";
+import PVCVerificationBottomSheet from "@/components/me/PVCVerificationBottomSheet";
+import BankDetailsBottomSheet, {
+  BankFormState,
+} from "@/components/me/BankDetailsBottomSheet";
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
 import { useAuth } from "@/context/AuthContext";
@@ -43,8 +49,8 @@ import {
 } from "@/data/me";
 import { Theme } from "@/theme";
 import { BirthdayValue, Gender } from "@/types/onboarding";
-import BankDetailsBottomSheet, { BankFormState } from "@/components/me/BankDetailsBottomSheet";
-import PVCVerificationBottomSheet from "@/components/me/PVCVerificationBottomSheet";
+
+/* ───── Static data ───── */
 
 const DEFAULT_BIRTHDAY: BirthdayValue = {
   day: 4,
@@ -73,16 +79,20 @@ const bankOptions = [
   "Zenith Bank", "Opay", "Moniepoint", "Sterling Bank", "Wema Bank",
 ];
 
+/* ───── Screen ───── */
+
 export default function MeScreen() {
   const { signOut } = useAuth();
   const { showToast } = useToastContext();
   const [loading, setLoading] = useState(false);
 
+  // Dynamic content driven by mockMeUser (controlled by DEV_USER_TYPE)
   const banner = useMemo(() => getMeBanner(mockMeUser), []);
   const accountItems = useMemo(() => getMeAccountItems(mockMeUser), []);
   const otherItems = useMemo(() => getMeOtherItems(), []);
 
-  // ── Form states ──
+  /* ── Form states ── */
+
   const [profileForm, setProfileForm] = useState<ProfileFormState>({
     firstName: "Ifeoluwa",
     lastName: "Ajetomobi",
@@ -113,9 +123,6 @@ export default function MeScreen() {
       phoneNumber: "",
       pvcFrontUri: null,
       pvcBackUri: null,
-      bankName: "",
-      accountNumber: "",
-      accountFullName: "",
     });
 
   const [bankForm, setBankForm] = useState<BankFormState>({
@@ -124,7 +131,8 @@ export default function MeScreen() {
     accountFullName: "",
   });
 
-  // ── Sheet refs ──
+  /* ── Sheet refs ── */
+
   const profileSheetRef = useRef<BottomSheetModal>(null);
   const securitySheetRef = useRef<BottomSheetModal>(null);
   const pollingUnitSheetRef = useRef<BottomSheetModal>(null);
@@ -133,37 +141,58 @@ export default function MeScreen() {
   const pvcSheetRef = useRef<BottomSheetModal>(null);
   const bankSheetRef = useRef<BottomSheetModal>(null);
 
+  // Sub-sheet refs for ProfileBottomSheet
   const birthdaySheetRef = useRef<BottomSheetModal>(null);
   const nationalitySheetRef = useRef<BottomSheetModal>(null);
   const genderSheetRef = useRef<BottomSheetModal>(null);
 
+  // Sub-sheet refs for PollingUnitBottomSheet
   const stateSelectorRef = useRef<BottomSheetModal>(null);
   const lgaSelectorRef = useRef<BottomSheetModal>(null);
   const wardSelectorRef = useRef<BottomSheetModal>(null);
   const puSelectorRef = useRef<BottomSheetModal>(null);
-  const bankSelectorRef = useRef<BottomSheetModal>(null);
+
+  // Sub-sheet ref for BankDetailsBottomSheet
   const bankDetailsSelectorRef = useRef<BottomSheetModal>(null);
 
-  // ── Polling data cascading ──
+  /* ── Cascading polling data ── */
+
   const stateOptions = useMemo(() => Object.keys(pollingData), []);
+
   const lgaOptions = useMemo(() => {
     if (!pollingUnitForm.state) return [];
-    return Object.keys(pollingData[pollingUnitForm.state as PollingStateKey] ?? {});
+    return Object.keys(
+      pollingData[pollingUnitForm.state as PollingStateKey] ?? {}
+    );
   }, [pollingUnitForm.state]);
+
   const wardOptions = useMemo(() => {
     if (!pollingUnitForm.state || !pollingUnitForm.lga) return [];
     const sk = pollingUnitForm.state as PollingStateKey;
-    return Object.keys(pollingData[sk]?.[pollingUnitForm.lga as keyof (typeof pollingData)[typeof sk]] ?? {});
+    return Object.keys(
+      pollingData[sk]?.[
+        pollingUnitForm.lga as keyof (typeof pollingData)[typeof sk]
+      ] ?? {}
+    );
   }, [pollingUnitForm.state, pollingUnitForm.lga]);
+
   const pollingUnitOptions = useMemo(() => {
-    if (!pollingUnitForm.state || !pollingUnitForm.lga || !pollingUnitForm.ward) return [];
+    if (
+      !pollingUnitForm.state ||
+      !pollingUnitForm.lga ||
+      !pollingUnitForm.ward
+    )
+      return [];
     const sk = pollingUnitForm.state as PollingStateKey;
-    const lk = pollingUnitForm.lga as keyof (typeof pollingData)[typeof sk];
-    const wk = pollingUnitForm.ward as keyof (typeof pollingData)[typeof sk][typeof lk];
+    const lk =
+      pollingUnitForm.lga as keyof (typeof pollingData)[typeof sk];
+    const wk =
+      pollingUnitForm.ward as keyof (typeof pollingData)[typeof sk][typeof lk];
     return pollingData[sk]?.[lk]?.[wk] ?? [];
   }, [pollingUnitForm.state, pollingUnitForm.lga, pollingUnitForm.ward]);
 
-  // ── Helpers ──
+  /* ── Helpers ── */
+
   const runSave = async (
     message: string,
     dismissRef?: React.RefObject<BottomSheetModal | null>
@@ -175,23 +204,8 @@ export default function MeScreen() {
     showToast({ message, type: "success" });
   };
 
-  const pickPvcImage = async (side: "front" | "back") => {
-    const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!granted) {
-      showToast({ message: "Please allow photo library access.", type: "error" });
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.85 });
-    if (result.canceled || !result.assets?.length) return;
-    const uri = result.assets[0].uri;
-    setObserverForm((prev) => ({
-      ...prev,
-      pvcFrontUri: side === "front" ? uri : prev.pvcFrontUri,
-      pvcBackUri: side === "back" ? uri : prev.pvcBackUri,
-    }));
-  };
+  /* ── Menu handler ── */
 
-  // ── Menu handler ──
   const handleItemPress = (item: MeMenuItem) => {
     switch (item.id) {
       case "personal-profile":
@@ -220,7 +234,6 @@ export default function MeScreen() {
         return;
       case "archive-reports":
       case "digital-vault":
-      case "my-reports":
         router.push(Paths.appArchiveReports);
         return;
       case "support-faq":
@@ -249,6 +262,8 @@ export default function MeScreen() {
     observerSheetRef.current?.present();
   };
 
+  /* ── Render ── */
+
   return (
     <SafeAreaView edges={["top"]} style={styles.safe}>
       <View style={styles.screen}>
@@ -263,17 +278,21 @@ export default function MeScreen() {
           contentContainerStyle={styles.content}
           bounces
         >
+          {/* Header — just avatar + name + role + username */}
           <View style={styles.headerWrap}>
             <MeHeader user={mockMeUser} />
           </View>
 
+          {/* Dynamic banner (shows only for observer-pending or volunteer) */}
           <MeProfileCard banner={banner} onPress={handleBannerPress} />
 
+          {/* MY ACCOUNT */}
           <View style={styles.sectionBlock}>
             <AppText style={styles.sectionTitle}>MY ACCOUNT</AppText>
             <MeSection items={accountItems} onItemPress={handleItemPress} />
           </View>
 
+          {/* OTHERS */}
           <View style={styles.sectionBlock}>
             <AppText style={styles.sectionTitle}>OTHERS</AppText>
             <MeSection items={otherItems} onItemPress={handleItemPress} />
@@ -282,12 +301,13 @@ export default function MeScreen() {
           <TabBarSpacer />
         </ScrollView>
 
-        {/* ── Bottom sheets ── */}
+        {/* ── All bottom sheets ── */}
+
         <ProfileBottomSheet
           ref={profileSheetRef}
           value={profileForm}
           onChange={setProfileForm}
-          onSave={() => runSave("Profile updated!", profileSheetRef)}
+          onSave={() => runSave("Successfully!!", profileSheetRef)}
           birthdaySheetRef={birthdaySheetRef}
           nationalitySheetRef={nationalitySheetRef}
           genderSheetRef={genderSheetRef}
@@ -299,14 +319,20 @@ export default function MeScreen() {
           onChange={setSecurityForm}
           onSave={async () => {
             if (!securityForm.password || !securityForm.confirmPassword) {
-              showToast({ message: "Fill both password fields.", type: "error" });
+              showToast({
+                message: "Please fill both password fields.",
+                type: "error",
+              });
               return;
             }
             if (securityForm.password !== securityForm.confirmPassword) {
-              showToast({ message: "Passwords do not match.", type: "error" });
+              showToast({
+                message: "Passwords do not match.",
+                type: "error",
+              });
               return;
             }
-            await runSave("Security updated.", securitySheetRef);
+            await runSave("Security updated successfully.", securitySheetRef);
             setSecurityForm({ password: "", confirmPassword: "" });
           }}
         />
@@ -315,7 +341,9 @@ export default function MeScreen() {
           ref={pollingUnitSheetRef}
           value={pollingUnitForm}
           onChange={setPollingUnitForm}
-          onSave={() => runSave("Polling unit updated.", pollingUnitSheetRef)}
+          onSave={() =>
+            runSave("Polling unit updated successfully.", pollingUnitSheetRef)
+          }
           stateSheetRef={stateSelectorRef}
           lgaSheetRef={lgaSelectorRef}
           wardSheetRef={wardSelectorRef}
@@ -330,25 +358,28 @@ export default function MeScreen() {
           ref={notificationSheetRef}
           value={notificationSettings}
           onChange={setNotificationSettings}
-          onSave={() => runSave("Notification settings saved.", notificationSheetRef)}
+          onSave={() =>
+            runSave("Notification settings updated.", notificationSheetRef)
+          }
         />
 
         <ObserverRegistrationBottomSheet
           ref={observerSheetRef}
           value={observerForm}
           onChange={setObserverForm}
-          onSubmit={() => runSave("Registration submitted.", observerSheetRef)}
-          onPickFront={() => pickPvcImage("front")}
-          onPickBack={() => pickPvcImage("back")}
-          bankSheetRef={bankSelectorRef}
-          bankOptions={bankOptions}
+          onSubmit={() =>
+            runSave("Observer registration submitted.", observerSheetRef)
+          }
         />
 
         <PVCVerificationBottomSheet
           ref={pvcSheetRef}
           pvcVerifiedDate={mockMeUser.pvcVerifiedDate}
-          onSubmit={(front, back) => {
-            showToast({ message: "PVC submitted for verification.", type: "success" });
+          onSubmit={() => {
+            showToast({
+              message: "PVC submitted for verification.",
+              type: "success",
+            });
           }}
         />
 
@@ -373,11 +404,11 @@ const styles = StyleSheet.create({
   gradientBg: { ...StyleSheet.absoluteFillObject },
   content: {
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 16,
     paddingBottom: 18,
     backgroundColor: "transparent",
   },
-  headerWrap: { marginBottom: 16 },
+  headerWrap: { marginBottom: 14 },
   sectionBlock: { gap: 12, marginTop: 18 },
   sectionTitle: {
     fontSize: 14,

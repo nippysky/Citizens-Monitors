@@ -1,13 +1,11 @@
-import { StyleSheet, Switch, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import TutorialBanner from "@/components/onboarding/TutorialBanner";
-import AppInput from "@/components/ui/AppInput";
 import AppText from "@/components/ui/AppText";
 import { Theme } from "@/theme";
-import { CitizenType, JoinReason, MonitoringExperience, StepThreeForm, VoterStatus, YesNo } from "@/types/onboarding";
+import { JoinReason, StepThreeForm, VoterStatus, YesNo } from "@/types/onboarding";
 
 type Props = {
-  citizenType: CitizenType;
   value: StepThreeForm;
   onChange: (value: StepThreeForm) => void;
 };
@@ -40,19 +38,11 @@ const JOIN_REASON_OPTIONS: JoinReason[] = [
 
 const VOTER_OPTIONS: VoterStatus[] = ["Yes", "No", "In Progress"];
 const YES_NO_OPTIONS: YesNo[] = ["Yes", "No"];
-const EXPERIENCE_OPTIONS: MonitoringExperience[] = [
-  "First time",
-  "1-5 year",
-  "10 yr above",
-];
 
-export default function OnboardingStepThree({
-  citizenType,
+export default function OnboardingStepTwoCoverage({
   value,
   onChange,
 }: Props) {
-  const isPublicViewer = citizenType === "public-viewer";
-
   const toggleJoinReason = (reason: JoinReason) => {
     const exists = value.joinReasons.includes(reason);
 
@@ -71,7 +61,8 @@ export default function OnboardingStepThree({
           Your Coverage
         </AppText>
         <AppText style={styles.subheading}>
-          Help us understand your background to better assign your monitoring roles.
+          Help us understand your background to better assign your monitoring
+          roles.
         </AppText>
       </View>
 
@@ -93,98 +84,23 @@ export default function OnboardingStepThree({
         </View>
 
         <View style={styles.fieldBlock}>
-          <AppText style={styles.label}>Is This Your First Election?</AppText>
+          <AppText style={styles.label}>
+            If required, are you willing to testify in court as an election
+            witness?
+          </AppText>
           <View style={styles.choiceRow}>
             {YES_NO_OPTIONS.map((option) => (
               <ChoiceChip
                 key={option}
                 label={option}
-                active={value.firstElection === option}
-                onPress={() => onChange({ ...value, firstElection: option })}
+                active={value.willingToTestify === option}
+                onPress={() =>
+                  onChange({ ...value, willingToTestify: option })
+                }
               />
             ))}
           </View>
         </View>
-
-        {!isPublicViewer ? (
-          <View style={styles.fieldBlock}>
-            <AppText style={styles.label}>Election Monitoring Experience</AppText>
-            <View style={styles.choiceRow}>
-              {EXPERIENCE_OPTIONS.map((option) => (
-                <ChoiceChip
-                  key={option}
-                  label={option}
-                  active={value.monitoringExperience === option}
-                  onPress={() =>
-                    onChange({ ...value, monitoringExperience: option })
-                  }
-                />
-              ))}
-            </View>
-          </View>
-        ) : null}
-
-        {!isPublicViewer ? (
-          <View style={styles.partyCard}>
-            <View style={styles.partyRow}>
-              <View style={styles.partyTextWrap}>
-                <AppText style={styles.label}>Party Affiliation</AppText>
-                <AppText style={styles.helperText}>
-                  Do you belong to a political party?
-                </AppText>
-              </View>
-
-              <Switch
-                value={value.partyAffiliation}
-                onValueChange={(enabled: boolean) =>
-                  onChange({
-                    ...value,
-                    partyAffiliation: enabled,
-                    partyName: enabled ? value.partyName : "",
-                  })
-                }
-                trackColor={{
-                  false: "#DADFE7",
-                  true: "#8EDFD8",
-                }}
-                thumbColor={value.partyAffiliation ? Theme.colors.primary : "#FFFFFF"}
-              />
-            </View>
-
-            {value.partyAffiliation ? (
-              <View style={styles.partyInputWrap}>
-                <AppInput
-                  label="Party Name (Optional)"
-                  placeholder="e.g. APC, PDP"
-                  value={value.partyName}
-                  onChangeText={(text: string) =>
-                    onChange({ ...value, partyName: text })
-                  }
-                />
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-
-        {!isPublicViewer ? (
-          <View style={styles.fieldBlock}>
-            <AppText style={styles.label}>
-              If required, are you willing to testify in court as an election witness?
-            </AppText>
-            <View style={styles.choiceRow}>
-              {YES_NO_OPTIONS.map((option) => (
-                <ChoiceChip
-                  key={option}
-                  label={option}
-                  active={value.willingToTestify === option}
-                  onPress={() =>
-                    onChange({ ...value, willingToTestify: option })
-                  }
-                />
-              ))}
-            </View>
-          </View>
-        ) : null}
 
         <View style={styles.fieldBlock}>
           <AppText style={styles.label}>
@@ -230,7 +146,7 @@ const styles = StyleSheet.create({
   },
 
   headerBlock: {
-    gap: 6,
+    gap: 8,
     marginTop: 22,
   },
 
@@ -259,12 +175,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontFamily: Theme.fonts.body.semibold,
     color: Theme.colors.text,
-  },
-
-  helperText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: Theme.colors.textMuted,
   },
 
   choiceRow: {
@@ -299,30 +209,5 @@ const styles = StyleSheet.create({
     color: Theme.colors.primary,
     backgroundColor: "rgba(25, 183, 176, 0.08)",
     fontFamily: Theme.fonts.body.semibold,
-  },
-
-  partyCard: {
-    borderWidth: 1,
-    borderColor: "#D8DDE6",
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.4)",
-    padding: 12,
-    gap: 14,
-  },
-
-  partyRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-
-  partyTextWrap: {
-    flex: 1,
-    gap: 2,
-  },
-
-  partyInputWrap: {
-    marginTop: 2,
   },
 });

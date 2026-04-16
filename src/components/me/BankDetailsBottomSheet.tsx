@@ -1,20 +1,25 @@
-// ─── src/components/me/BankDetailsBottomSheet.tsx ─────────────────────────────
 import {
   BottomSheetBackdrop,
   BottomSheetModal,
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
-import { forwardRef, RefObject, useMemo } from "react";
+import {
+  forwardRef,
+  RefObject,
+  useMemo,
+  useState,
+} from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import MeOptionsSheet from "@/components/me/MeOptionsSheet";
 import AppButton from "@/components/ui/AppButton";
 import AppInput from "@/components/ui/AppInput";
 import AppSelectField from "@/components/ui/AppSelectField";
 import AppText from "@/components/ui/AppText";
 import { Theme } from "@/theme";
+
+import SelectPickerSheet from "@/components/ui/sheets/SelectPickerSheet";
 
 export type BankFormState = {
   bankName: string;
@@ -26,31 +31,47 @@ type Props = {
   value: BankFormState;
   onChange: (value: BankFormState) => void;
   onSave: () => void;
-  bankSheetRef: RefObject<BottomSheetModal | null>;
   bankOptions: string[];
 };
 
 const BankDetailsBottomSheet = forwardRef<BottomSheetModal, Props>(
-  function BankDetailsBottomSheet({ value, onChange, onSave, bankSheetRef, bankOptions }, ref) {
+  function BankDetailsBottomSheet(
+    { value, onChange, onSave, bankOptions },
+    ref
+  ) {
     const insets = useSafeAreaInsets();
-    const snaps = useMemo(() => ["78%"], []);
+    const snapPoints = useMemo(() => ["78%"], []);
+
+    const bankSheetRef = useState<RefObject<BottomSheetModal | null>>(
+      () => ({ current: null })
+    )[0];
+
+    const [query, setQuery] = useState("");
 
     const close = () => {
-      if (ref && typeof ref !== "function" && ref.current) ref.current.dismiss();
+      if (ref && typeof ref !== "function" && ref.current) {
+        ref.current.dismiss();
+      }
     };
 
     return (
       <>
         <BottomSheetModal
           ref={ref}
-          snapPoints={snaps}
+          snapPoints={snapPoints}
           enablePanDownToClose
           topInset={insets.top + 12}
           keyboardBehavior="interactive"
           keyboardBlurBehavior="restore"
           android_keyboardInputMode="adjustResize"
           backdropComponent={(p) => (
-            <BottomSheetBackdrop {...p} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.32} pressBehavior="close" />
+            <BottomSheetBackdrop
+              {...p}
+              appearsOnIndex={0}
+              disappearsOnIndex={-1}
+              opacity={0.32}
+              pressBehavior="close"
+            />
           )}
           handleIndicatorStyle={styles.handle}
           backgroundStyle={styles.bg}
@@ -58,31 +79,28 @@ const BankDetailsBottomSheet = forwardRef<BottomSheetModal, Props>(
           <BottomSheetScrollView
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 22 }]}
+            contentContainerStyle={[
+              styles.content,
+              { paddingBottom: insets.bottom + 22 },
+            ]}
           >
             <View style={styles.header}>
-              <AppText style={styles.headerTitle}>Your Bank Detail</AppText>
-              <Pressable onPress={close} hitSlop={8} style={styles.closeBtn}>
-                <Ionicons name="close" size={22} color={Theme.colors.textMuted} />
+              <AppText style={styles.headerTitle}>
+                Your Bank Detail
+              </AppText>
+
+              <Pressable onPress={close} style={styles.closeBtn}>
+                <Ionicons
+                  name="close"
+                  size={22}
+                  color={Theme.colors.textMuted}
+                />
               </Pressable>
             </View>
+
             <View style={styles.divider} />
 
-            {/* Info banner */}
-            <View style={styles.infoBanner}>
-              <Ionicons name="information-circle" size={18} color="#B45309" />
-              <AppText style={styles.infoBannerText}>
-                As a verified observer, you are entitled to compensation when Citizen Monitors licences anonymized election data per Section 149 of the Electoral Act 2022 and our data sharing policy.
-              </AppText>
-            </View>
-
-            <View style={styles.section}>
-              <AppText style={styles.sectionTitle}>Bank Details</AppText>
-              <AppText style={styles.sectionSub}>
-                Please Submit your bank account details for volunteering allowance.
-              </AppText>
-            </View>
-
+            {/* Bank Select */}
             <AppSelectField
               label="Bank Name"
               value={value.bankName}
@@ -93,8 +111,9 @@ const BankDetailsBottomSheet = forwardRef<BottomSheetModal, Props>(
             <AppInput
               label="Account Number"
               value={value.accountNumber}
-              onChangeText={(accountNumber) => onChange({ ...value, accountNumber })}
-              placeholder="Your account number"
+              onChangeText={(accountNumber) =>
+                onChange({ ...value, accountNumber })
+              }
               keyboardType="number-pad"
               maxLength={10}
             />
@@ -102,20 +121,26 @@ const BankDetailsBottomSheet = forwardRef<BottomSheetModal, Props>(
             <AppInput
               label="Your Full Name"
               value={value.accountFullName}
-              onChangeText={(accountFullName) => onChange({ ...value, accountFullName })}
-              placeholder="Your names"
+              onChangeText={(accountFullName) =>
+                onChange({ ...value, accountFullName })
+              }
             />
 
-            <AppButton title="Submit" onPress={onSave} style={{ marginVertical: 0 }} />
+            <AppButton title="Submit" onPress={onSave} />
           </BottomSheetScrollView>
         </BottomSheetModal>
 
-        <MeOptionsSheet
+        {/* ✅ FIXED SELECT SHEET */}
+        <SelectPickerSheet
           ref={bankSheetRef}
           title="Select Bank"
           options={bankOptions}
-          selectedValue={value.bankName}
-          onSelect={(bankName) => onChange({ ...value, bankName })}
+          query={query}
+          onChangeQuery={setQuery}
+          selectedValue={value.bankName || ""}
+          onSelectValue={(bankName) =>
+            onChange({ ...value, bankName })
+          }
         />
       </>
     );

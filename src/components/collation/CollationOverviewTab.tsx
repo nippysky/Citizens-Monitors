@@ -12,6 +12,7 @@ import { CollationItem, formatCompactNumber } from "@/data/collation";
 import { Theme } from "@/theme";
 import NoElection from "@/svgs/app/NoElection";
 import INEC from "@/svgs/app/collation/INEC";
+import FullLogo from "@/svgs/app/FullLogo";
 
 
 type Props = { collation: CollationItem };
@@ -99,7 +100,7 @@ export default function CollationOverviewTab({ collation }: Props) {
       {/* Promo */}
       <View style={styles.promoCard}>
         <View style={styles.promoHeader}>
-          <AppText style={styles.promoBrand}>Citizen Monitor</AppText>
+          <FullLogo />
           <Ionicons name="trophy-outline" size={20} color="#FFB547" />
         </View>
         <AppText style={styles.promoTitle}>Our observer voice will make this election transparent to the world!</AppText>
@@ -222,10 +223,9 @@ const styles = StyleSheet.create({
   partyList: { gap: 10 },
   promoCard: { borderRadius: 18, backgroundColor: "#DDF7E8", padding: 16, gap: 8 },
   promoHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  promoBrand: { fontSize: 16, lineHeight: 20, color: Theme.colors.primary, fontFamily: Theme.fonts.heading.bold },
   promoTitle: { fontSize: 20, lineHeight: 24, color: Theme.colors.text, fontFamily: Theme.fonts.heading.bold },
   promoBody: { fontSize: 13, lineHeight: 18, color: Theme.colors.text },
-  figureGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  figureGrid: { flexDirection: "row", flexWrap: "wrap", gap: 20 },
   figureItem: { width: "47%", gap: 4 },
   figureLabel: { fontSize: 12, lineHeight: 16, color: Theme.colors.textMuted },
   figureValue: { fontSize: 28, lineHeight: 28, color: Theme.colors.text, fontFamily: Theme.fonts.heading.bold },
@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
   inecTextWrap: { flex: 1, gap: 2 },
   inecMeta: { fontSize: 12, lineHeight: 16, color: Theme.colors.textMuted },
   inecValueRow: { flexDirection: "row", alignItems: "baseline", gap: 8 },
-  inecValue: { fontSize: 22, lineHeight: 24, color: Theme.colors.text, fontFamily: Theme.fonts.heading.bold },
+  inecValue: { fontSize: 18, lineHeight: 24, color: Theme.colors.text, fontFamily: Theme.fonts.heading.bold },
   inecLabel: { fontSize: 13, lineHeight: 18, color: Theme.colors.primary, fontFamily: Theme.fonts.body.semibold },
 
   lowerTabsRow: { flexDirection: "row", gap: 10 },

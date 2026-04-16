@@ -80,11 +80,17 @@ export type NewsItem = {
 export type VoterEssentialItem = {
   id: string;
   label: string;
-  icon: string; // SVG component key
+  icon: string;
   route: string;
 };
 
-export type ToastType = "network-offline" | "network-online" | "live-election" | "info";
+export type ToastType =
+  | "network-offline"
+  | "network-online"
+  | "live-election"
+  | "info"
+  | "success"
+  | "error";
 
 export type ToastData = {
   id: string;
