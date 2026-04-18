@@ -6,6 +6,7 @@ import {
   Pressable,
   StyleProp,
   StyleSheet,
+  TextStyle,
   View,
   ViewStyle,
 } from "react-native";
@@ -17,6 +18,7 @@ type Props = {
   loading?: boolean;
   variant?: "primary" | "secondary" | "ghost";
   style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
   leftIcon?: ReactNode;
   rightIcon?: ReactNode;
 };
@@ -28,10 +30,12 @@ export default function AppButton({
   loading,
   variant = "primary",
   style,
+  textStyle,
   leftIcon,
   rightIcon,
 }: Props) {
   const isDisabled = disabled || loading;
+  const isPrimary = variant === "primary";
 
   return (
     <Pressable
@@ -47,7 +51,7 @@ export default function AppButton({
     >
       {loading ? (
         <ActivityIndicator
-          color={variant === "primary" ? Theme.colors.white : Theme.colors.primary}
+          color={isPrimary ? Theme.colors.white : Theme.colors.primary}
         />
       ) : (
         <View style={styles.content}>
@@ -55,7 +59,10 @@ export default function AppButton({
 
           <AppText
             variant="button"
-            style={variant === "primary" ? styles.primaryText : styles.secondaryText}
+            style={[
+              isPrimary ? styles.primaryText : styles.secondaryText,
+              textStyle,
+            ]}
           >
             {title}
           </AppText>
@@ -74,7 +81,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: Theme.spacing.lg,
-    marginVertical: Theme.spacing.lg
+    marginVertical: Theme.spacing.lg,
   },
   content: {
     flexDirection: "row",

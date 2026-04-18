@@ -1,16 +1,16 @@
 import { FlatList, ListRenderItem, StyleSheet } from "react-native";
 
-import NewsFeedCard from "@/components/news/NewsFeedCard";
-import { NewsFeedItem } from "@/data/news";
+import PressCoverageFeedCard from "@/components/press-coverage/PressCoverageFeedCard";
+import { PressCoverageItem } from "@/data/pressCoverage";
 
 type Props = {
-  items: NewsFeedItem[];
+  items: PressCoverageItem[];
 };
 
-export default function NewsFeedList({ items }: Props) {
-  const renderItem: ListRenderItem<NewsFeedItem> = ({ item, index }) => {
+export default function PressCoverageFeedList({ items }: Props) {
+  const renderItem: ListRenderItem<PressCoverageItem> = ({ item, index }) => {
     const isLast = index === items.length - 1;
-    return <NewsFeedCard item={item} isLast={isLast} />;
+    return <PressCoverageFeedCard item={item} isLast={isLast} />;
   };
 
   return (
@@ -33,7 +33,7 @@ const styles = StyleSheet.create({
 
   content: {
     paddingHorizontal: 16,
-    paddingTop: 0,
+    paddingTop: 8,
     paddingBottom: 20,
   },
 });

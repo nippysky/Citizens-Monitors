@@ -17,6 +17,7 @@ import CommencementBottomSheet from "@/components/reporting/CommencementBottomSh
 import LocationPermissionModal from "@/components/reporting/LocationPermissionModal";
 import { Paths } from "@/constants/paths";
 import {
+  buildCommencementContext,
   buildInitialIncidentDraft,
   buildInitialResultDraft,
   CommencementContext,
@@ -30,6 +31,7 @@ type ShowNoticeArgs = {
   message: string;
   actionLabel?: string;
   contextData?: CommencementContext;
+  onPress?: () => void;
 };
 
 type LiveNoticeContextValue = {
@@ -49,8 +51,10 @@ export function LiveNoticeProvider({ children }: { children: ReactNode }) {
   const [rendered, setRendered] = useState(false);
   const [message, setMessage] = useState("");
   const [actionLabel, setActionLabel] = useState<string | undefined>();
-  const [noticeContext, setNoticeContext] =
-    useState<CommencementContext>(DEV_COMMENCEMENT_CONTEXT);
+  const [noticeContext, setNoticeContext] = useState<CommencementContext>(
+    DEV_COMMENCEMENT_CONTEXT
+  );
+  const [customOnPress, setCustomOnPress] = useState<(() => void) | null>(null);
 
   const [locationVisible, setLocationVisible] = useState(false);
   const [locationSuccessHandler, setLocationSuccessHandler] =
@@ -71,12 +75,13 @@ export function LiveNoticeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const showNotice = useCallback(
-    ({ message, actionLabel, contextData }: ShowNoticeArgs) => {
+    ({ message, actionLabel, contextData, onPress }: ShowNoticeArgs) => {
       clearTimer();
 
       setMessage(message);
       setActionLabel(actionLabel);
-      setNoticeContext(contextData ?? DEV_COMMENCEMENT_CONTEXT);
+      setNoticeContext(buildCommencementContext(contextData));
+      setCustomOnPress(() => onPress ?? null);
       setRendered(true);
 
       requestAnimationFrame(() => {
@@ -91,7 +96,7 @@ export function LiveNoticeProvider({ children }: { children: ReactNode }) {
   );
 
   const openCommencement = useCallback((contextData?: CommencementContext) => {
-    setNoticeContext(contextData ?? DEV_COMMENCEMENT_CONTEXT);
+    setNoticeContext(buildCommencementContext(contextData));
 
     requestAnimationFrame(() => {
       commencementRef.current?.present();
@@ -141,13 +146,13 @@ export function LiveNoticeProvider({ children }: { children: ReactNode }) {
   }, [noticeContext]);
 
   useEffect(() => {
-    if (REPORTING_DEV_CONFIG.autoShowDemoLiveNotice) {
-      const timer = setTimeout(() => {
-        triggerDevElectionNotice();
-      }, 1200);
+    if (!REPORTING_DEV_CONFIG.autoShowDemoLiveNotice) return;
 
-      return () => clearTimeout(timer);
-    }
+    const timer = setTimeout(() => {
+      triggerDevElectionNotice();
+    }, 1200);
+
+    return () => clearTimeout(timer);
   }, [triggerDevElectionNotice]);
 
   useEffect(() => {
@@ -187,7 +192,11 @@ export function LiveNoticeProvider({ children }: { children: ReactNode }) {
           message={message}
           actionLabel={actionLabel}
           onPressAction={() => {
-            openCommencement(noticeContext);
+            if (customOnPress) {
+              customOnPress();
+            } else {
+              openCommencement(noticeContext);
+            }
 
             requestAnimationFrame(() => {
               hideNotice();

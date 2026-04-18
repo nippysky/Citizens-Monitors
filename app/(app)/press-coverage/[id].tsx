@@ -5,33 +5,30 @@ import { Image, ScrollView, StyleSheet, View } from "react-native";
 import AppGradientScreen from "@/components/app/AppGradientScreen";
 import BackButton from "@/components/ui/BackButton";
 import AppText from "@/components/ui/AppText";
-import { getNewsById } from "@/data/news";
+import { getPressCoverageById } from "@/data/pressCoverage";
 import { Theme } from "@/theme";
 
-export default function NewsDetailsScreen() {
+export default function PressCoverageDetailsScreen() {
   const params = useLocalSearchParams<{ id?: string }>();
-  const article = params.id ? getNewsById(params.id) : undefined;
+  const article = params.id ? getPressCoverageById(params.id) : undefined;
 
   if (!article) {
     return (
-      <AppGradientScreen scroll={false}>
+      <AppGradientScreen>
         <View style={styles.missingWrap}>
-          <View style={styles.topBar}>
-            <BackButton label="" />
-          </View>
-
+          <BackButton />
           <View style={styles.missingContent}>
             <View style={styles.missingIconWrap}>
               <Ionicons
-                name="newspaper-outline"
+                name="megaphone-outline"
                 size={28}
                 color={Theme.colors.primary}
               />
             </View>
 
-            <AppText style={styles.missingTitle}>Article not found</AppText>
+            <AppText style={styles.missingTitle}>Statement not found</AppText>
             <AppText style={styles.missingSubtitle}>
-              This news story may have been removed or is no longer available.
+              This press release may have been removed or is no longer available.
             </AppText>
           </View>
         </View>
@@ -47,13 +44,13 @@ export default function NewsDetailsScreen() {
         bounces
       >
         <View style={styles.topBar}>
-          <BackButton label="" />
+          <BackButton />
         </View>
 
         <View style={styles.headerBlock}>
           <AppText style={styles.title}>{article.title}</AppText>
 
-          <View style={styles.dateRow}>
+          <View style={styles.metaRow}>
             <View style={styles.dot} />
             <AppText style={styles.dateText}>{article.date}</AppText>
           </View>
@@ -81,18 +78,17 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     paddingTop: 6,
-    paddingBottom: 28,
+    paddingBottom: 30,
   },
 
   topBar: {
-    alignItems: "flex-start",
     paddingBottom: 8,
+    alignItems: "flex-start",
   },
 
   headerBlock: {
-    gap: 12,
-    paddingTop: 8,
-    paddingBottom: 16,
+    gap: 10,
+    paddingBottom: 14,
   },
 
   title: {
@@ -102,7 +98,7 @@ const styles = StyleSheet.create({
     fontFamily: Theme.fonts.heading.bold,
   },
 
-  dateRow: {
+  metaRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -116,41 +112,41 @@ const styles = StyleSheet.create({
   },
 
   dateText: {
-    fontSize: 16,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 17,
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.semibold,
   },
 
   heroImage: {
     width: "100%",
-    height: 246,
-    backgroundColor: "#E8EBEF",
+    height: 210,
+    backgroundColor: "#EAECEF",
     marginBottom: 18,
   },
 
   bodyWrap: {
-    gap: 14,
+    gap: 18,
   },
 
   excerpt: {
     fontSize: 17,
     lineHeight: 30,
-    color: Theme.colors.text,
-    fontFamily: Theme.fonts.body.medium,
+    color: "rgba(17,26,50,0.78)",
+    fontFamily: Theme.fonts.body.regular,
   },
 
   paragraph: {
     fontSize: 17,
     lineHeight: 30,
-    color: "rgba(17,26,50,0.74)",
+    color: "rgba(17,26,50,0.78)",
     fontFamily: Theme.fonts.body.regular,
   },
 
   missingWrap: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingTop: 6,
+    paddingTop: 10,
   },
 
   missingContent: {

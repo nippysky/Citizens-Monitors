@@ -7,8 +7,6 @@ import { getRandomVoterEssentials } from "@/data/home";
 import { Theme } from "@/theme";
 import { VoterEssentialItem } from "@/types/home";
 
-
-// ── SVG imports for voter essentials ──
 import CitizenAcademy from "@/svgs/app/voter-essentials/CitizenAcademy";
 import DigitalElectionVault from "@/svgs/app/voter-essentials/DigitalElectionVault";
 import DonateSupport from "@/svgs/app/voter-essentials/DonateSupport";
@@ -40,14 +38,15 @@ function EssentialIcon({ item }: { item: VoterEssentialItem }) {
 
   return (
     <Pressable
-      style={styles.iconWrap}
-      onPress={() => router.push(item.route as any)}
+      style={({ pressed }) => [styles.iconWrap, pressed && styles.iconWrapPressed]}
+      onPress={() => router.push(item.route as never)}
     >
       {IconComponent ? (
         <IconComponent width={52} height={52} />
       ) : (
         <View style={styles.iconFallback} />
       )}
+
       <AppText style={styles.iconLabel} numberOfLines={2}>
         {item.label}
       </AppText>
@@ -67,7 +66,8 @@ export default function VoterEssentialsSection({ onViewAll }: Props) {
     <View style={styles.wrap}>
       <View style={styles.headerRow}>
         <AppText style={styles.sectionTitle}>Voters Essentials</AppText>
-        <Pressable onPress={onViewAll}>
+
+        <Pressable onPress={onViewAll} hitSlop={8}>
           <AppText style={styles.viewAll}>VIEW ALL</AppText>
         </Pressable>
       </View>
@@ -78,6 +78,7 @@ export default function VoterEssentialsSection({ onViewAll }: Props) {
             {row.map((item) => (
               <EssentialIcon key={item.id} item={item} />
             ))}
+
             {row.length < 3 &&
               Array.from({ length: 3 - row.length }).map((_, i) => (
                 <View key={`empty-${i}`} style={styles.iconWrap} />
@@ -122,6 +123,9 @@ const styles = StyleSheet.create({
     width: "30%",
     alignItems: "center",
     gap: 8,
+  },
+  iconWrapPressed: {
+    opacity: 0.82,
   },
   iconFallback: {
     width: 52,

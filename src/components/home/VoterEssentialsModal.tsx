@@ -1,6 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import React from "react";
+import React, { useMemo } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -8,7 +7,6 @@ import AppText from "@/components/ui/AppText";
 import { allVoterEssentials } from "@/data/home";
 import { Theme } from "@/theme";
 import { VoterEssentialItem } from "@/types/home";
-
 
 import CitizenAcademy from "@/svgs/app/voter-essentials/CitizenAcademy";
 import DigitalElectionVault from "@/svgs/app/voter-essentials/DigitalElectionVault";
@@ -19,8 +17,6 @@ import PollingUnitLocator from "@/svgs/app/voter-essentials/PollingUnitLocator";
 import PollStationConduct from "@/svgs/app/voter-essentials/PollStationConduct";
 import PressCoverage from "@/svgs/app/voter-essentials/PressCoverage";
 import VoterRegistration from "@/svgs/app/voter-essentials/VoterRegistration";
-
-
 
 const ICON_MAP: Record<string, React.FC<{ width: number; height: number }>> = {
   CitizenAcademy,
@@ -37,17 +33,22 @@ const ICON_MAP: Record<string, React.FC<{ width: number; height: number }>> = {
 type Props = {
   visible: boolean;
   onClose: () => void;
+  onNavigate: (route: string) => void;
 };
 
-function EssentialIcon({ item }: { item: VoterEssentialItem }) {
+function EssentialIcon({
+  item,
+  onPress,
+}: {
+  item: VoterEssentialItem;
+  onPress: () => void;
+}) {
   const IconComponent = ICON_MAP[item.icon];
 
   return (
     <Pressable
-      style={styles.iconWrap}
-      onPress={() => {
-        router.push(item.route as any);
-      }}
+      style={({ pressed }) => [styles.iconWrap, pressed && styles.iconWrapPressed]}
+      onPress={onPress}
     >
       {IconComponent ? (
         <IconComponent width={56} height={56} />
@@ -61,13 +62,20 @@ function EssentialIcon({ item }: { item: VoterEssentialItem }) {
   );
 }
 
-export default function VoterEssentialsModal({ visible, onClose }: Props) {
+export default function VoterEssentialsModal({
+  visible,
+  onClose,
+  onNavigate,
+}: Props) {
   const insets = useSafeAreaInsets();
 
-  const rows: VoterEssentialItem[][] = [];
-  for (let i = 0; i < allVoterEssentials.length; i += 3) {
-    rows.push(allVoterEssentials.slice(i, i + 3));
-  }
+  const rows = useMemo(() => {
+    const grouped: VoterEssentialItem[][] = [];
+    for (let i = 0; i < allVoterEssentials.length; i += 3) {
+      grouped.push(allVoterEssentials.slice(i, i + 3));
+    }
+    return grouped;
+  }, []);
 
   return (
     <Modal
@@ -86,13 +94,20 @@ export default function VoterEssentialsModal({ visible, onClose }: Props) {
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(insets.bottom, 24) + 16 },
+          ]}
         >
           <View style={styles.grid}>
             {rows.map((row, rowIdx) => (
               <View key={`row-${rowIdx}`} style={styles.gridRow}>
                 {row.map((item) => (
-                  <EssentialIcon key={item.id} item={item} />
+                  <EssentialIcon
+                    key={item.id}
+                    item={item}
+                    onPress={() => onNavigate(item.route)}
+                  />
                 ))}
                 {row.length < 3 &&
                   Array.from({ length: 3 - row.length }).map((_, i) => (
@@ -129,7 +144,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
-    paddingBottom: 40,
   },
   grid: {
     gap: 28,
@@ -142,6 +156,9 @@ const styles = StyleSheet.create({
     width: "30%",
     alignItems: "center",
     gap: 10,
+  },
+  iconWrapPressed: {
+    opacity: 0.82,
   },
   iconFallback: {
     width: 56,

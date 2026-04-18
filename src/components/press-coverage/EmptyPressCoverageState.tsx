@@ -4,21 +4,21 @@ import { StyleSheet, View } from "react-native";
 import AppText from "@/components/ui/AppText";
 import { Theme } from "@/theme";
 
-export default function EmptyNewsState() {
+export default function EmptyPressCoverageState() {
   return (
     <View style={styles.wrap}>
       <View style={styles.iconWrap}>
         <Ionicons
-          name="newspaper-outline"
-          size={32}
+          name="megaphone-outline"
+          size={30}
           color={Theme.colors.primary}
         />
       </View>
 
       <View style={styles.textBlock}>
-        <AppText style={styles.title}>No news yet</AppText>
+        <AppText style={styles.title}>No press coverage yet</AppText>
         <AppText style={styles.subtitle}>
-          Fresh political stories from trusted publications will appear here.
+          Official statements, releases, and public updates will appear here.
         </AppText>
       </View>
     </View>
@@ -27,13 +27,12 @@ export default function EmptyNewsState() {
 
 const styles = StyleSheet.create({
   wrap: {
-    flex: 1,
     width: "100%",
     alignItems: "center",
     justifyContent: "center",
+    gap: 16,
     paddingHorizontal: 20,
     paddingTop: 40,
-    gap: 16,
   },
 
   iconWrap: {
@@ -61,7 +60,7 @@ const styles = StyleSheet.create({
   },
 
   subtitle: {
-    maxWidth: 260,
+    maxWidth: 270,
     fontSize: 13,
     lineHeight: 19,
     color: Theme.colors.textMuted,

@@ -1,5 +1,9 @@
-import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView } from "@gorhom/bottom-sheet";
-import { forwardRef, useMemo, useRef, useState } from "react";
+import {
+  BottomSheetBackdrop,
+  BottomSheetModal,
+  BottomSheetScrollView,
+} from "@gorhom/bottom-sheet";
+import { forwardRef, useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -24,167 +28,189 @@ const CommencementBottomSheet = forwardRef<BottomSheetModal, Props>(
     ref
   ) {
     const snapPoints = useMemo(() => ["78%"], []);
-    const timeSheetRef = useRef<BottomSheetModal>(null);
 
     const [step, setStep] = useState<Step>("choice");
     const [selectedTime, setSelectedTime] = useState("");
+    const [iosPickerVisible, setIosPickerVisible] = useState(false);
 
-    const dismiss = () => {
+    const dismiss = useCallback(() => {
       if (ref && typeof ref !== "function" && ref.current) {
         ref.current.dismiss();
       }
-    };
+    }, [ref]);
 
-    const reset = () => {
+    const reset = useCallback(() => {
       setStep("choice");
       setSelectedTime("");
-    };
+      setIosPickerVisible(false);
+    }, []);
 
-    const handleClose = () => {
+    const handleClose = useCallback(() => {
       dismiss();
       reset();
-    };
+    }, [dismiss, reset]);
 
-    const handleElectionHappened = () => {
+    const handleElectionHappened = useCallback(() => {
       setStep("time");
-    };
+      setIosPickerVisible(false);
+    }, []);
 
-    const handleProceed = () => {
+    const handleProceed = useCallback(() => {
       if (!selectedTime) return;
       onProceedResult(selectedTime);
       handleClose();
-    };
+    }, [selectedTime, onProceedResult, handleClose]);
+
+    const handleIncident = useCallback(() => {
+      onProceedIncident();
+      handleClose();
+    }, [onProceedIncident, handleClose]);
 
     return (
-      <>
-        <BottomSheetModal
-          ref={ref}
-          snapPoints={snapPoints}
-          enablePanDownToClose
-          onDismiss={reset}
-          backgroundStyle={styles.sheetBg}
-          handleIndicatorStyle={styles.handle}
-          backdropComponent={(props) => (
-            <BottomSheetBackdrop
-              {...props}
-              appearsOnIndex={0}
-              disappearsOnIndex={-1}
-              opacity={0.3}
-              pressBehavior="close"
-            />
-          )}
+      <BottomSheetModal
+        ref={ref}
+        snapPoints={snapPoints}
+        enablePanDownToClose
+        onDismiss={reset}
+        backgroundStyle={styles.sheetBg}
+        handleIndicatorStyle={styles.handle}
+        backdropComponent={(props) => (
+          <BottomSheetBackdrop
+            {...props}
+            appearsOnIndex={0}
+            disappearsOnIndex={-1}
+            opacity={0.3}
+            pressBehavior="close"
+          />
+        )}
+      >
+        <BottomSheetScrollView
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.content}
         >
-          <BottomSheetScrollView
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.content}
-          >
-            <View style={styles.header}>
-              <AppText style={styles.title}>Commencement</AppText>
+          <View style={styles.header}>
+            <AppText style={styles.title}>Commencement</AppText>
 
-              <Pressable onPress={handleClose} style={styles.closeBtn}>
-                <Ionicons name="close" size={22} color={Theme.colors.textMuted} />
-              </Pressable>
-            </View>
+            <Pressable onPress={handleClose} style={styles.closeBtn}>
+              <Ionicons
+                name="close"
+                size={22}
+                color={Theme.colors.textMuted}
+              />
+            </Pressable>
+          </View>
 
-            <View style={styles.divider} />
+          <View style={styles.divider} />
 
-            {step === "choice" ? (
-              <>
-                <View style={styles.unitCard}>
-                  <AppText style={styles.unitLabel}>📍 Your Polling Unit</AppText>
-                  <AppText style={styles.unitName}>
-                    {contextData?.pollingUnitName ?? "Ikotun Community Primary School"}
+          {step === "choice" ? (
+            <>
+              <View style={styles.unitCard}>
+                <AppText style={styles.unitLabel}>📍 Your Polling Unit</AppText>
+                <AppText style={styles.unitName}>
+                  {contextData?.pollingUnitName ??
+                    "Ikotun Community Primary School"}
+                </AppText>
+                <AppText style={styles.unitMeta}>
+                  {contextData?.pollingUnitCode ?? "LA/01/08/004"} ·{" "}
+                  {contextData?.ward ?? "Ward 01"},{" "}
+                  {contextData?.lga ?? "Alimosho LGA"},{" "}
+                  {contextData?.state ?? "Lagos"}
+                </AppText>
+              </View>
+
+              <View style={styles.questionWrap}>
+                <AppText style={styles.question}>
+                  Did the Alimosho LG election hold in your polling unit?
+                </AppText>
+              </View>
+
+              <Pressable
+                onPress={handleElectionHappened}
+                style={styles.optionCard}
+              >
+                <View style={styles.optionIconWrap}>
+                  <AppText style={styles.optionEmoji}>🧺</AppText>
+                </View>
+
+                <View style={styles.optionTextWrap}>
+                  <AppText style={styles.optionTitle}>
+                    Yes — The election happened
                   </AppText>
-                  <AppText style={styles.unitMeta}>
-                    {contextData?.pollingUnitCode ?? "LA/01/08/004"} ·{" "}
-                    {contextData?.ward ?? "Ward 01"}, {contextData?.lga ?? "Alimosho LGA"},{" "}
-                    {contextData?.state ?? "Lagos"}
+                  <AppText style={styles.optionSubtitle}>
+                    I want to submit an official result.
                   </AppText>
                 </View>
 
-                <View style={styles.questionWrap}>
-                  <AppText style={styles.question}>
-                    Did the Alimosho LG election hold in your polling unit?
-                  </AppText>
-                </View>
-
-                <Pressable onPress={handleElectionHappened} style={styles.optionCard}>
-                  <View style={styles.optionIconWrap}>
-                    <AppText style={styles.optionEmoji}>🧺</AppText>
-                  </View>
-
-                  <View style={styles.optionTextWrap}>
-                    <AppText style={styles.optionTitle}>
-                      Yes — The election happened
-                    </AppText>
-                    <AppText style={styles.optionSubtitle}>
-                      I want to submit an official result.
-                    </AppText>
-                  </View>
-
-                  <Ionicons name="chevron-forward" size={20} color={Theme.colors.textMuted} />
-                </Pressable>
-
-                <Pressable
-                  onPress={() => {
-                    onProceedIncident();
-                    handleClose();
-                  }}
-                  style={styles.optionCard}
-                >
-                  <View style={styles.optionIconWrap}>
-                    <AppText style={styles.optionEmoji}>🚨</AppText>
-                  </View>
-
-                  <View style={styles.optionTextWrap}>
-                    <AppText style={styles.optionTitle}>
-                      No — The election did not hold
-                    </AppText>
-                    <AppText style={styles.optionSubtitle}>
-                      Report what happened.
-                    </AppText>
-                  </View>
-
-                  <Ionicons name="chevron-forward" size={20} color={Theme.colors.textMuted} />
-                </Pressable>
-              </>
-            ) : (
-              <>
-                <View style={styles.timeStepHeader}>
-                  <AppText style={styles.timeStepIntro}>
-                    Select the time polling opened at your unit today.
-                  </AppText>
-
-                  <AppText style={styles.timeFieldLabel}>When did voting start?</AppText>
-                </View>
-
-                <AppSelectField
-                  label=""
-                  value={selectedTime}
-                  placeholder="Select time"
-                  onPress={() => timeSheetRef.current?.present()}
-                  leftIcon={<AppText style={styles.clockEmoji}>⏰</AppText>}
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={Theme.colors.textMuted}
                 />
+              </Pressable>
 
-                <View style={styles.bottomActionWrap}>
-                  <AppButton
-                    title="Proceed To Report"
-                    onPress={handleProceed}
-                    disabled={!selectedTime}
-                  />
+              <Pressable onPress={handleIncident} style={styles.optionCard}>
+                <View style={styles.optionIconWrap}>
+                  <AppText style={styles.optionEmoji}>🚨</AppText>
                 </View>
-              </>
-            )}
-          </BottomSheetScrollView>
-        </BottomSheetModal>
 
-        <TimePickerSheet
-          ref={timeSheetRef}
-          selectedValue={selectedTime}
-          onSelect={setSelectedTime}
-        />
-      </>
+                <View style={styles.optionTextWrap}>
+                  <AppText style={styles.optionTitle}>
+                    No — The election did not hold
+                  </AppText>
+                  <AppText style={styles.optionSubtitle}>
+                    Report what happened.
+                  </AppText>
+                </View>
+
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={Theme.colors.textMuted}
+                />
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <View style={styles.timeStepHeader}>
+                <AppText style={styles.timeStepIntro}>
+                  Select the time polling opened at your unit today.
+                </AppText>
+
+                <AppText style={styles.timeFieldLabel}>
+                  When did voting start?
+                </AppText>
+              </View>
+
+              <AppSelectField
+                label=""
+                value={selectedTime}
+                placeholder="Select time"
+                onPress={() => setIosPickerVisible(true)}
+                leftIcon={<AppText style={styles.clockEmoji}>⏰</AppText>}
+              />
+
+              <TimePickerSheet
+                visible={iosPickerVisible}
+                value={selectedTime}
+                onClose={() => setIosPickerVisible(false)}
+                onConfirm={(time) => {
+                  setSelectedTime(time);
+                  setIosPickerVisible(false);
+                }}
+              />
+
+              <View style={styles.bottomActionWrap}>
+                <AppButton
+                  title="Proceed To Report"
+                  onPress={handleProceed}
+                  disabled={!selectedTime}
+                />
+              </View>
+            </>
+          )}
+        </BottomSheetScrollView>
+      </BottomSheetModal>
     );
   }
 );

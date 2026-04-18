@@ -1,148 +1,211 @@
-import { BottomSheetBackdrop, BottomSheetModal } from "@gorhom/bottom-sheet";
-import { forwardRef, useMemo } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import DateTimePicker, {
+  DateTimePickerAndroid,
+  DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
+import { Ionicons } from "@expo/vector-icons";
+import { useEffect, useMemo, useState } from "react";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
 
+import AppButton from "@/components/ui/AppButton";
 import AppText from "@/components/ui/AppText";
 import { Theme } from "@/theme";
 
 type Props = {
-  selectedValue?: string;
-  onSelect: (value: string) => void;
+  visible: boolean;
+  value?: string;
+  onClose: () => void;
+  onConfirm: (value: string) => void;
 };
 
-const TIMES = [
-  "06:00 AM",
-  "06:15 AM",
-  "06:30 AM",
-  "06:45 AM",
-  "07:00 AM",
-  "07:15 AM",
-  "07:30 AM",
-  "07:45 AM",
-  "08:00 AM",
-  "08:15 AM",
-  "08:30 AM",
-  "08:45 AM",
-  "09:00 AM",
-  "09:15 AM",
-  "09:30 AM",
-  "09:45 AM",
-  "10:00 AM",
-  "10:15 AM",
-  "10:30 AM",
-  "10:45 AM",
-  "11:00 AM",
-  "11:15 AM",
-  "11:30 AM",
-  "11:45 AM",
-  "12:00 PM",
-] as const;
+function parseTimeValue(value?: string): Date {
+  const base = new Date();
+  base.setSeconds(0);
+  base.setMilliseconds(0);
 
-const TimePickerSheet = forwardRef<BottomSheetModal, Props>(
-  function TimePickerSheet({ selectedValue, onSelect }, ref) {
-    const snapPoints = useMemo(() => ["72%"], []);
-
-    const handleSelect = (value: string) => {
-      onSelect(value);
-
-      if (ref && typeof ref !== "function" && ref.current) {
-        ref.current.dismiss();
-      }
-    };
-
-    return (
-      <BottomSheetModal
-        ref={ref}
-        snapPoints={snapPoints}
-        enablePanDownToClose
-        backgroundStyle={styles.sheetBg}
-        handleIndicatorStyle={styles.handle}
-        backdropComponent={(props) => (
-          <BottomSheetBackdrop
-            {...props}
-            appearsOnIndex={0}
-            disappearsOnIndex={-1}
-            opacity={0.28}
-            pressBehavior="close"
-          />
-        )}
-      >
-        <View style={styles.container}>
-          <AppText style={styles.title}>Select time</AppText>
-
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={styles.list}>
-              {TIMES.map((time) => {
-                const active = selectedValue === time;
-
-                return (
-                  <Pressable
-                    key={time}
-                    onPress={() => handleSelect(time)}
-                    style={[styles.row, active && styles.rowActive]}
-                  >
-                    <AppText
-                      style={[styles.rowLabel, active && styles.rowLabelActive]}
-                    >
-                      {time}
-                    </AppText>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </ScrollView>
-        </View>
-      </BottomSheetModal>
-    );
+  if (!value) {
+    base.setHours(8, 0, 0, 0);
+    return base;
   }
-);
 
-export default TimePickerSheet;
+  const match = value.trim().match(/^(\d{1,2}):(\d{2})\s?(AM|PM)$/i);
+
+  if (!match) {
+    base.setHours(8, 0, 0, 0);
+    return base;
+  }
+
+  let hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const period = match[3].toUpperCase();
+
+  if (period === "PM" && hour < 12) hour += 12;
+  if (period === "AM" && hour === 12) hour = 0;
+
+  base.setHours(hour, minute, 0, 0);
+  return base;
+}
+
+function formatTime(date: Date): string {
+  return date.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+export default function TimePickerSheet({
+  visible,
+  value,
+  onClose,
+  onConfirm,
+}: Props) {
+  const initialDate = useMemo(() => parseTimeValue(value), [value]);
+  const [tempDate, setTempDate] = useState<Date>(initialDate);
+
+  useEffect(() => {
+    setTempDate(parseTimeValue(value));
+  }, [value, visible]);
+
+  useEffect(() => {
+    if (Platform.OS !== "android" || !visible) return;
+
+    DateTimePickerAndroid.open({
+      value: tempDate,
+      mode: "time",
+      is24Hour: false,
+      display: "default",
+      onChange: (event: DateTimePickerEvent, selectedDate?: Date) => {
+        if (event.type === "dismissed") {
+          onClose();
+          return;
+        }
+
+        if (selectedDate) {
+          onConfirm(formatTime(selectedDate));
+        } else {
+          onClose();
+        }
+      },
+    });
+  }, [visible, tempDate, onClose, onConfirm]);
+
+  if (Platform.OS === "android") {
+    return null;
+  }
+
+  if (!visible) return null;
+
+  return (
+    <View style={styles.wrap}>
+      <View style={styles.headerRow}>
+        <AppText style={styles.title}>Select time</AppText>
+
+        <Pressable onPress={onClose} style={styles.closeBtn}>
+          <Ionicons name="close" size={18} color={Theme.colors.textMuted} />
+        </Pressable>
+      </View>
+
+      <AppText style={styles.subtitle}>
+        Choose the approximate time voting started at your unit.
+      </AppText>
+
+      <View style={styles.previewRow}>
+        <Ionicons name="time-outline" size={18} color={Theme.colors.primary} />
+        <AppText style={styles.previewText}>{formatTime(tempDate)}</AppText>
+      </View>
+
+      <View style={styles.iosPickerCard}>
+        <DateTimePicker
+          value={tempDate}
+          mode="time"
+          display="spinner"
+          onChange={(_, selectedDate) => {
+            if (selectedDate) {
+              setTempDate(selectedDate);
+            }
+          }}
+          style={styles.iosPicker}
+        />
+      </View>
+
+      <View style={styles.footer}>
+        <AppButton
+          title="Use Selected Time"
+          onPress={() => onConfirm(formatTime(tempDate))}
+        />
+      </View>
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
-  sheetBg: {
+  wrap: {
+    marginTop: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E3E7EE",
     backgroundColor: "#FFFFFF",
-    borderRadius: 24,
+    padding: 14,
+    gap: 12,
   },
-  handle: {
-    backgroundColor: "#D1D5DB",
-    width: 42,
-  },
-  container: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingBottom: 28,
+  headerRow: {
+    minHeight: 34,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
   },
   title: {
-    fontSize: 18,
-    lineHeight: 24,
-    color: Theme.colors.text,
-    fontFamily: Theme.fonts.heading.semibold,
-    marginBottom: 16,
-  },
-  list: {
-    borderRadius: 16,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  row: {
-    minHeight: 54,
-    justifyContent: "center",
-    paddingHorizontal: 16,
-    backgroundColor: "#FFFFFF",
-  },
-  rowActive: {
-    backgroundColor: "rgba(5,163,156,0.08)",
-  },
-  rowLabel: {
     fontSize: 15,
     lineHeight: 20,
     color: Theme.colors.text,
-    fontFamily: Theme.fonts.body.medium,
-  },
-  rowLabelActive: {
-    color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.semibold,
+  },
+  closeBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  subtitle: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: Theme.colors.textMuted,
+  },
+  previewRow: {
+    minHeight: 48,
+    borderRadius: 14,
+    backgroundColor: "rgba(5,163,156,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(5,163,156,0.14)",
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  previewText: {
+    fontSize: 16,
+    lineHeight: 22,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+  iosPickerCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#FAFAFA",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    paddingVertical: 6,
+  },
+  iosPicker: {
+    width: "100%",
+    height: 180,
+  },
+  footer: {
+    paddingTop: 4,
   },
 });

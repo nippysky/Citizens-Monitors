@@ -14,7 +14,8 @@
         "NSCameraUsageDescription": "Citizen Monitor uses your camera so you can capture election evidence, signed result sheets, and incident reports.",
         "NSPhotoLibraryUsageDescription": "Citizen Monitor uses your photo library so you can attach election photos and videos from your gallery.",
         "NSMicrophoneUsageDescription": "Citizen Monitor uses your microphone when recording live incident videos and cumulative result announcement videos.",
-        "NSLocationWhenInUseUsageDescription": "Citizen Monitor uses your location to verify that reports and evidence are submitted from the correct polling area."
+        "NSLocationWhenInUseUsageDescription": "Citizen Monitor uses your location to verify that reports and evidence are submitted from the correct polling area.",
+        "LSApplicationQueriesSchemes": ["mailto"]
       }
     },
     "android": {
@@ -73,7 +74,8 @@
       ],
       "expo-font",
       "expo-dev-client",
-      "expo-video"
+      "expo-video",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,

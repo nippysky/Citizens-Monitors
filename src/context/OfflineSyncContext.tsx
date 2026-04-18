@@ -1,8 +1,3 @@
-// ─── src/context/OfflineSyncContext.tsx ───────────────────────────────────────
-// Offline-first queue: actions are stored locally and auto-synced when online.
-// Expanded to support report submission flows app-wide.
-// ─────────────────────────────────────────────────────────────────────────────
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 import {
@@ -46,6 +41,44 @@ type OfflineSyncContextValue = {
 const STORAGE_KEY = "@citizen_monitors/offline_queue";
 const OfflineSyncContext = createContext<OfflineSyncContextValue | null>(null);
 
+async function persistQueue(items: QueuedAction[]) {
+  try {
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  } catch {
+    // best effort
+  }
+}
+
+/**
+ * Replace this with your real backend sync implementation.
+ * Important: payload should contain staged file URIs only, not file blobs/base64.
+ */
+async function syncQueuedAction(item: QueuedAction): Promise<boolean> {
+  try {
+    // simulate real async work (network call later)
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    switch (item.type) {
+      case "submit-election-report":
+      case "submit-incident-report":
+      case "submit-incident-feedback":
+      case "flag-report":
+      case "comment":
+      case "opinion":
+      case "like":
+      case "confirm-report":
+        // TODO: plug real API here
+        return true;
+
+      default:
+        return false;
+    }
+  } catch (error) {
+    console.log("Sync failed:", error);
+    return false;
+  }
+}
+
 export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   const [queue, setQueue] = useState<QueuedAction[]>([]);
   const [isOnline, setIsOnline] = useState(true);
@@ -72,14 +105,6 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     return unsub;
   }, []);
 
-  const persistQueue = useCallback(async (items: QueuedAction[]) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-    } catch {
-      // best effort
-    }
-  }, []);
-
   const enqueue = useCallback(
     (action: Omit<QueuedAction, "id" | "createdAt" | "synced">) => {
       const item: QueuedAction = {
@@ -97,7 +122,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
         });
       });
     },
-    [persistQueue]
+    []
   );
 
   useEffect(() => {
@@ -108,19 +133,29 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
 
     syncingRef.current = true;
 
-    const timer = setTimeout(() => {
-      setQueue((prev) => {
-        const next = prev.map((item) => ({ ...item, synced: true }));
-        const cleaned = next.slice(-100);
-        void persistQueue(cleaned);
-        return cleaned;
-      });
+    const run = async () => {
+      let currentQueue = [...queue];
+
+      for (const item of pending) {
+        const ok = await syncQueuedAction(item);
+
+        if (!ok) {
+          continue;
+        }
+
+        currentQueue = currentQueue.map((entry) =>
+          entry.id === item.id ? { ...entry, synced: true } : entry
+        );
+
+        setQueue(currentQueue);
+        await persistQueue(currentQueue);
+      }
 
       syncingRef.current = false;
-    }, 1500);
+    };
 
-    return () => clearTimeout(timer);
-  }, [isOnline, queue, persistQueue]);
+    void run();
+  }, [isOnline, queue]);
 
   const pendingCount = useMemo(
     () => queue.filter((item) => !item.synced).length,

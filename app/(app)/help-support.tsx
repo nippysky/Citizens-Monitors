@@ -1,0 +1,780 @@
+import { Ionicons } from "@expo/vector-icons";
+import { VideoView, useVideoPlayer } from "expo-video";
+import { useMemo, useRef, useState } from "react";
+import {
+  Animated,
+  Image,
+  LayoutAnimation,
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  UIManager,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import AppGradientScreen from "@/components/app/AppGradientScreen";
+import { useToastContext } from "@/components/feedback/ToastProvider";
+import BackButton from "@/components/ui/BackButton";
+import AppText from "@/components/ui/AppText";
+import { mockMeUser, type UserType } from "@/data/me";
+import { Theme } from "@/theme";
+
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+type HelpScopeKey = "general" | "observer" | "volunteer";
+
+type HelpFaqItem = {
+  id: string;
+  question: string;
+  answer: string;
+  videoTitle: string;
+  thumbnailUrl: string;
+  videoUrl: string;
+};
+
+const DEV_HELP_ROLE_OVERRIDE: UserType | null = null;
+// Set to "general" | "observer" | "volunteer" to force a tab while testing.
+const DEV_HELP_TAB_OVERRIDE: HelpScopeKey | null = null;
+
+const FAQ_VIDEO_URL = "https://www.w3schools.com/html/mov_bbb.mp4";
+
+const GENERAL_FAQS: HelpFaqItem[] = [
+  {
+    id: "general-password",
+    question: "How can I change my password?",
+    answer:
+      "To change your Citizen Monitor password, visit settings page and open the security section. Enter your new password, confirm it, and save changes. For stronger protection, use a password you do not reuse elsewhere.",
+    videoTitle: "How to change password on Citizen Monitor App",
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80",
+    videoUrl: FAQ_VIDEO_URL,
+  },
+  {
+    id: "general-name",
+    question: "How can I change my name?",
+    answer:
+      "Open your profile details from the Me screen and edit your personal profile information. Once updated, save changes and your new display details will reflect across supported parts of the app.",
+    videoTitle: "How to update your profile name",
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=1200&q=80",
+    videoUrl: FAQ_VIDEO_URL,
+  },
+  {
+    id: "general-news",
+    question: "How can I get news updates?",
+    answer:
+      "Turn on app notifications and visit News & Insight regularly. Important alerts, election-day activity, and platform notices are shown based on your notification settings and app activity.",
+    videoTitle: "How to receive updates faster",
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1495020689067-958852a7765e?auto=format&fit=crop&w=1200&q=80",
+    videoUrl: FAQ_VIDEO_URL,
+  },
+  {
+    id: "general-anonymous",
+    question: "How do I stay anonymous?",
+    answer:
+      "Citizen Monitor protects sensitive identity context. Only the information required for platform integrity is collected internally. Public-facing content does not need to reveal your private identity unless a workflow explicitly requires it.",
+    videoTitle: "Privacy and anonymity basics",
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80",
+    videoUrl: FAQ_VIDEO_URL,
+  },
+];
+
+const OBSERVER_FAQS: HelpFaqItem[] = [
+  {
+    id: "observer-identity",
+    question: "Will my identity be revealed if I submit a report?",
+    answer:
+      "No. Your identity is kept strictly confidential. If you choose to stay anonymous, no personal information will be shared with the public or authorities.",
+    videoTitle: "Observer privacy and secure reporting",
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80",
+    videoUrl: FAQ_VIDEO_URL,
+  },
+  {
+    id: "observer-upload",
+    question: "My report is not uploading. What should I do?",
+    answer:
+      "First confirm your internet connection. If you are offline, your report can remain staged locally and sync later when connection returns. Also confirm media permissions, report completeness, and that your selected file finished processing.",
+    videoTitle: "Fixing report upload issues",
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1516321165247-4aa89a48be28?auto=format&fit=crop&w=1200&q=80",
+    videoUrl: FAQ_VIDEO_URL,
+  },
+  {
+    id: "observer-issues",
+    question: "What type of issues can I report?",
+    answer:
+      "You can report result-sheet issues, ballot stuffing, intimidation, underage voting, missing materials, alteration concerns, violence, delayed opening, and other verifiable election irregularities supported by evidence.",
+    videoTitle: "Types of observer reports",
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1543286386-713bdd548da4?auto=format&fit=crop&w=1200&q=80",
+    videoUrl: FAQ_VIDEO_URL,
+  },
+  {
+    id: "observer-rejected",
+    question: "Why was my report rejected?",
+    answer:
+      "Reports may be rejected when evidence is incomplete, details conflict with the attached media, result figures fail validation, or the submission lacks enough clarity for verification. Review the feedback, correct the issue, and submit again.",
+    videoTitle: "Why a report may be rejected",
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1486312338219-ce68d2c6f44d?auto=format&fit=crop&w=1200&q=80",
+    videoUrl: FAQ_VIDEO_URL,
+  },
+];
+
+const VOLUNTEER_FAQS: HelpFaqItem[] = [
+  {
+    id: "volunteer-responsibility",
+    question: "What are my responsibilities as a volunteer?",
+    answer:
+      "Review and verify reports.\nFlag false or misleading content.\nAdd context or supporting information.\nEscalate urgent issues to admins or authorities.",
+    videoTitle: "Volunteer responsibilities explained",
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80",
+    videoUrl: FAQ_VIDEO_URL,
+  },
+  {
+    id: "volunteer-verify",
+    question: "How do I verify a report?",
+    answer:
+      "Open the report evidence, compare the description with the attached image or video, check the time and polling-unit context, and confirm only when the submission is clear, consistent, and credible.",
+    videoTitle: "How volunteers verify reports",
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1200&q=80",
+    videoUrl: FAQ_VIDEO_URL,
+  },
+  {
+    id: "volunteer-mistake",
+    question: "What happens if I approve a false report by mistake?",
+    answer:
+      "The platform can still receive flags, corrections, and further moderation actions. Volunteers should act carefully, but the review system is designed to support layered verification rather than relying on one single action forever.",
+    videoTitle: "Correcting review mistakes",
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1450101499163-c8848c66ca85?auto=format&fit=crop&w=1200&q=80",
+    videoUrl: FAQ_VIDEO_URL,
+  },
+  {
+    id: "volunteer-public",
+    question: "Will my identity be public as a volunteer?",
+    answer:
+      "Volunteer identity is not exposed publicly by default. Only required internal workflow details are retained for trust, accountability, and platform safety.",
+    videoTitle: "Volunteer privacy and visibility",
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1516321497487-e288fb19713f?auto=format&fit=crop&w=1200&q=80",
+    videoUrl: FAQ_VIDEO_URL,
+  },
+];
+
+export default function HelpSupportScreen() {
+  const resolvedRole = DEV_HELP_ROLE_OVERRIDE ?? mockMeUser.userType;
+
+  const availableTabs = useMemo(() => {
+    const base: HelpScopeKey[] = ["general"];
+
+    if (resolvedRole === "observer") {
+      base.push("observer");
+    }
+
+    if (resolvedRole === "volunteer") {
+      base.push("volunteer");
+    }
+
+    return base;
+  }, [resolvedRole]);
+
+  const defaultTab = useMemo<HelpScopeKey>(() => {
+    if (DEV_HELP_TAB_OVERRIDE && availableTabs.includes(DEV_HELP_TAB_OVERRIDE)) {
+      return DEV_HELP_TAB_OVERRIDE;
+    }
+
+    if (resolvedRole === "observer") return "observer";
+    if (resolvedRole === "volunteer") return "volunteer";
+    return "general";
+  }, [availableTabs, resolvedRole]);
+
+  const [activeTab, setActiveTab] = useState<HelpScopeKey>(defaultTab);
+  const [expandedId, setExpandedId] = useState<string | null>(
+    getFaqsForTab(defaultTab)[0]?.id ?? null
+  );
+  const [playerItem, setPlayerItem] = useState<HelpFaqItem | null>(null);
+
+  const faqs = useMemo(() => getFaqsForTab(activeTab), [activeTab]);
+
+  const handleSwitchTab = (tab: HelpScopeKey) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setActiveTab(tab);
+    setExpandedId(getFaqsForTab(tab)[0]?.id ?? null);
+  };
+
+  const handleToggleFaq = (id: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpandedId((prev) => (prev === id ? null : id));
+  };
+
+  return (
+    <>
+      <AppGradientScreen>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+        >
+          <BackButton />
+
+          <View style={styles.headerBlock}>
+            <AppText style={styles.screenTitle}>Help & Support</AppText>
+            <AppText style={styles.screenSubtitle}>
+              Get the help you need to proceed.
+            </AppText>
+          </View>
+
+          <View style={styles.tabRow}>
+            <ScopeTab
+              title="GENERAL FAQ"
+              active={activeTab === "general"}
+              onPress={() => handleSwitchTab("general")}
+            />
+
+            {availableTabs.includes("observer") ? (
+              <ScopeTab
+                title="OBSERVER FAQ"
+                active={activeTab === "observer"}
+                onPress={() => handleSwitchTab("observer")}
+              />
+            ) : null}
+
+            {availableTabs.includes("volunteer") ? (
+              <ScopeTab
+                title="VOLUNTEER FAQ"
+                active={activeTab === "volunteer"}
+                onPress={() => handleSwitchTab("volunteer")}
+              />
+            ) : null}
+          </View>
+
+          <AppText style={styles.helperText}>
+            Here are quick guides to help you use Citizen Monitor app better.
+          </AppText>
+
+          <View style={styles.faqList}>
+            {faqs.map((item) => (
+              <FaqAccordionCard
+                key={item.id}
+                item={item}
+                expanded={expandedId === item.id}
+                onToggle={() => handleToggleFaq(item.id)}
+                onOpenVideo={() => setPlayerItem(item)}
+              />
+            ))}
+          </View>
+
+          <StillNeedHelpCard />
+        </ScrollView>
+      </AppGradientScreen>
+
+      <FaqVideoPlayerModal
+        item={playerItem}
+        onClose={() => setPlayerItem(null)}
+      />
+    </>
+  );
+}
+
+function getFaqsForTab(tab: HelpScopeKey): HelpFaqItem[] {
+  if (tab === "observer") return OBSERVER_FAQS;
+  if (tab === "volunteer") return VOLUNTEER_FAQS;
+  return GENERAL_FAQS;
+}
+
+function ScopeTab({
+  title,
+  active,
+  onPress,
+}: {
+  title: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.scopeTab, active && styles.scopeTabActive]}
+    >
+      <AppText
+        style={[styles.scopeTabText, active && styles.scopeTabTextActive]}
+      >
+        {title}
+      </AppText>
+    </Pressable>
+  );
+}
+
+function FaqAccordionCard({
+  item,
+  expanded,
+  onToggle,
+  onOpenVideo,
+}: {
+  item: HelpFaqItem;
+  expanded: boolean;
+  onToggle: () => void;
+  onOpenVideo: () => void;
+}) {
+  const rotate = useRef(new Animated.Value(expanded ? 1 : 0)).current;
+
+  useMemo(() => {
+    Animated.timing(rotate, {
+      toValue: expanded ? 1 : 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }, [expanded, rotate]);
+
+  const rotateDeg = rotate.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "180deg"],
+  });
+
+  return (
+    <View style={styles.accordionCard}>
+      <Pressable onPress={onToggle} style={styles.accordionHeader}>
+        <AppText style={styles.accordionQuestion}>{item.question}</AppText>
+
+        <Animated.View style={{ transform: [{ rotate: rotateDeg }] }}>
+          <Ionicons
+            name="chevron-down"
+            size={20}
+            color={Theme.colors.textMuted}
+          />
+        </Animated.View>
+      </Pressable>
+
+      {expanded ? (
+        <View style={styles.accordionBody}>
+          <AppText style={styles.accordionAnswer}>{item.answer}</AppText>
+
+          <Pressable style={styles.videoCard} onPress={onOpenVideo}>
+            <Image
+              source={{ uri: item.thumbnailUrl }}
+              style={styles.videoThumbnail}
+            />
+
+            <View style={styles.playOverlay}>
+              <View style={styles.playButton}>
+                <Ionicons name="play" size={26} color="#F15A24" />
+              </View>
+            </View>
+
+            <AppText style={styles.videoCaption}>{item.videoTitle}</AppText>
+          </Pressable>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function StillNeedHelpCard() {
+  const { showToast } = useToastContext();
+
+  const openWhatsApp = async () => {
+    const url = "https://wa.me/2348000000000";
+
+    try {
+      await Linking.openURL(url);
+    } catch {
+      showToast({
+        type: "error",
+        message: "Unable to open WhatsApp right now.",
+      });
+    }
+  };
+
+  const openMail = async () => {
+    const email = "support@citizenmonitor.africa";
+    const url = `mailto:${email}?subject=${encodeURIComponent(
+      "Citizen Monitor Support"
+    )}`;
+
+    try {
+      await Linking.openURL(url);
+    } catch {
+      showToast({
+        type: "error",
+        message: "No mail app available on this device right now.",
+      });
+    }
+  };
+
+  return (
+    <View style={styles.supportCard}>
+      <View style={styles.supportIconWrap}>
+        <Ionicons
+          name="chatbubble-ellipses-outline"
+          size={22}
+          color="#FFFFFF"
+        />
+      </View>
+
+      <AppText style={styles.supportTitle}>Still Need Help?</AppText>
+      <AppText style={styles.supportSubtitle}>
+        Our dedicated support team is available to assist you.
+      </AppText>
+
+      <View style={styles.supportActionRow}>
+        <Pressable style={styles.whatsappBtn} onPress={openWhatsApp}>
+          <Ionicons name="logo-whatsapp" size={18} color="#FFFFFF" />
+          <AppText style={styles.whatsappBtnText}>WHATSAPP US</AppText>
+        </Pressable>
+
+        <Pressable style={styles.emailBtn} onPress={openMail}>
+          <Ionicons name="mail-outline" size={18} color="#5D665F" />
+          <AppText style={styles.emailBtnText}>EMAIL SUPPORT</AppText>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function FaqVideoPlayerModal({
+  item,
+  onClose,
+}: {
+  item: HelpFaqItem | null;
+  onClose: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+
+  const player = useVideoPlayer(item?.videoUrl ?? null, (videoPlayer) => {
+    videoPlayer.loop = false;
+    videoPlayer.play();
+  });
+
+  return (
+    <Modal
+      visible={Boolean(item)}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      onRequestClose={onClose}
+      statusBarTranslucent={Platform.OS === "android"}
+    >
+      <View style={styles.playerModalRoot}>
+        <View
+          style={[
+            styles.playerTopBar,
+            { paddingTop: Math.max(insets.top + 10, 18) },
+          ]}
+        >
+          <Pressable onPress={onClose} style={styles.playerCloseBtn}>
+            <Ionicons name="close" size={24} color="#FFFFFF" />
+          </Pressable>
+        </View>
+
+        {item ? (
+          <View style={styles.playerBody}>
+            <VideoView
+              player={player}
+              style={styles.playerVideo}
+              nativeControls
+              contentFit="contain"
+              allowsFullscreen
+              allowsPictureInPicture
+            />
+
+            <View style={styles.playerTextWrap}>
+              <AppText style={styles.playerTitle}>{item.videoTitle}</AppText>
+              <AppText style={styles.playerHint}>
+                Tap the native controls for fullscreen playback and media
+                actions.
+              </AppText>
+            </View>
+          </View>
+        ) : null}
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  content: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 36,
+    gap: 18,
+  },
+
+  headerBlock: {
+    gap: 8,
+    marginTop: 2,
+  },
+
+  screenTitle: {
+    fontSize: 22,
+    lineHeight: 28,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.heading.bold,
+  },
+
+  screenSubtitle: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: Theme.colors.textMuted,
+  },
+
+  tabRow: {
+    flexDirection: "row",
+    gap: 10,
+    flexWrap: "wrap",
+  },
+
+  scopeTab: {
+    minHeight: 34,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+    borderWidth: 1.2,
+    borderColor: Theme.colors.border,
+  },
+
+  scopeTabActive: {
+    backgroundColor: Theme.colors.primary,
+    borderColor: Theme.colors.primary,
+  },
+
+  scopeTabText: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Theme.colors.textMuted,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+
+  scopeTabTextActive: {
+    color: "#FFFFFF",
+  },
+
+  helperText: {
+    marginTop: -10,
+    fontSize: 15,
+    lineHeight: 22,
+    color: Theme.colors.textMuted,
+  },
+
+  faqList: {
+    gap: 12,
+  },
+
+  accordionCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#DCE2EA",
+    backgroundColor: "rgba(255,255,255,0.72)",
+    overflow: "hidden",
+  },
+
+  accordionHeader: {
+    minHeight: 58,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
+  accordionQuestion: {
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 21,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+
+  accordionBody: {
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    gap: 12,
+  },
+
+  accordionAnswer: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: Theme.colors.textMuted,
+  },
+
+  videoCard: {
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E1E7EE",
+  },
+
+  videoThumbnail: {
+    width: "100%",
+    height: 184,
+    backgroundColor: "#EAECEF",
+  },
+
+  playOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  playButton: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    backgroundColor: "rgba(255,255,255,0.88)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  videoCaption: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#5D665F",
+  },
+
+  supportCard: {
+    marginTop: 6,
+    borderRadius: 18,
+    backgroundColor: Theme.colors.primary,
+    padding: 16,
+    gap: 10,
+  },
+
+  supportIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.36)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  supportTitle: {
+    fontSize: 18,
+    lineHeight: 24,
+    color: "#FFFFFF",
+    fontFamily: Theme.fonts.heading.bold,
+  },
+
+  supportSubtitle: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: "rgba(255,255,255,0.9)",
+  },
+
+  supportActionRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 2,
+    flexWrap: "wrap",
+  },
+
+  whatsappBtn: {
+    flex: 1,
+    minWidth: 140,
+    minHeight: 42,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.42)",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 14,
+  },
+
+  whatsappBtnText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+
+  emailBtn: {
+    flex: 1,
+    minWidth: 140,
+    minHeight: 42,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 14,
+  },
+
+  emailBtnText: {
+    color: "#5D665F",
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+
+  playerModalRoot: {
+    flex: 1,
+    backgroundColor: "#000000",
+  },
+
+  playerTopBar: {
+    paddingHorizontal: 16,
+    alignItems: "flex-end",
+  },
+
+  playerCloseBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  playerBody: {
+    flex: 1,
+    justifyContent: "center",
+  },
+
+  playerVideo: {
+    width: "100%",
+    height: 260,
+    backgroundColor: "#000000",
+  },
+
+  playerTextWrap: {
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    gap: 6,
+  },
+
+  playerTitle: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    lineHeight: 24,
+    fontFamily: Theme.fonts.heading.bold,
+  },
+
+  playerHint: {
+    color: "rgba(255,255,255,0.75)",
+    fontSize: 13,
+    lineHeight: 19,
+  },
+});

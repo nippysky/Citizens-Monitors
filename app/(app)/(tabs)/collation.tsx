@@ -1,6 +1,8 @@
 // ─── src/app/(app)/(tabs)/collation.tsx ───────────────────────────────────────
-// Updated: accepts `tab` param from navigation so Pulse can deep-link to
-// the discussions tab of a specific election.
+// Fixed:
+// 1. Live notice action now opens CommencementBottomSheet correctly
+// 2. Notice now receives real context data from the active collation item
+// 3. Dev + production flow now share the same notice plumbing cleanly
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useMemo, useState } from "react";
@@ -11,28 +13,28 @@ import AppGradientScreen from "@/components/app/AppGradientScreen";
 import CollationContextTabs, {
   CollationTabKey,
 } from "@/components/collation/CollationContextTabs";
+import CollationDiscussionsTab from "@/components/collation/CollationDiscussionTab";
 import CollationOverviewTab from "@/components/collation/CollationOverviewTab";
 import CollationReviewReportsTab from "@/components/collation/CollationReviewReportsTab";
 import LiveCollationCarousel from "@/components/collation/LiveCollationCarousel";
+import { useLiveNotice } from "@/components/feedback/LiveNoticeProvider";
+import ScreenHeader from "@/components/elections/ScreenHeader";
 import { Paths } from "@/constants/paths";
 import {
   collationDummyData,
+  type CollationItem,
   getCollationNotificationText,
 } from "@/data/collation";
+import { buildCommencementContext } from "@/lib/reporting";
 import { Theme } from "@/theme";
-import { useLiveNotice } from "@/components/feedback/LiveNoticeProvider";
-import CollationDiscussionsTab from "@/components/collation/CollationDiscussionTab";
-import ScreenHeader from "@/components/elections/ScreenHeader";
 
 export default function CollationScreen() {
-  // ── Read incoming params (e.g. from Pulse "Join Discussion") ──
   const params = useLocalSearchParams<{ tab?: string; collationId?: string }>();
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [activeTab, setActiveTab] = useState<CollationTabKey>("overview");
   const { showNotice, hideNotice } = useLiveNotice();
 
-  // ── Apply incoming tab param on mount / when params change ──
   useEffect(() => {
     if (params.tab) {
       const validTabs: CollationTabKey[] = [
@@ -40,17 +42,19 @@ export default function CollationScreen() {
         "review-reports",
         "discussions",
       ];
+
       const incoming = params.tab as CollationTabKey;
+
       if (validTabs.includes(incoming)) {
         setActiveTab(incoming);
       }
     }
 
-    // If a specific collation ID was passed, find its index
     if (params.collationId) {
       const idx = collationDummyData.findIndex(
         (c) => c.id === params.collationId
       );
+
       if (idx >= 0) {
         setActiveIndex(idx);
       }
@@ -62,20 +66,26 @@ export default function CollationScreen() {
     [activeIndex]
   );
 
+  const noticeContextData = useMemo(
+    () => buildNoticeContextFromCollation(activeCollation),
+    [activeCollation]
+  );
+
   useEffect(() => {
     if (activeCollation.status === "live") {
       showNotice({
         message: getCollationNotificationText(activeCollation),
         actionLabel: "Submit Election Report",
-        onPress: () => setActiveTab("review-reports"),
+        contextData: noticeContextData,
       });
     } else {
       hideNotice();
     }
+
     return () => {
       hideNotice();
     };
-  }, [activeCollation, showNotice, hideNotice]);
+  }, [activeCollation, hideNotice, noticeContextData, showNotice]);
 
   return (
     <AppGradientScreen scroll={false}>
@@ -100,19 +110,37 @@ export default function CollationScreen() {
         </View>
 
         <View style={styles.body}>
-          {activeTab === "overview" && (
+          {activeTab === "overview" ? (
             <CollationOverviewTab collation={activeCollation} />
-          )}
-          {activeTab === "review-reports" && (
+          ) : activeTab === "review-reports" ? (
             <CollationReviewReportsTab collation={activeCollation} />
-          )}
-          {activeTab === "discussions" && (
+          ) : (
             <CollationDiscussionsTab collation={activeCollation} />
           )}
         </View>
       </View>
     </AppGradientScreen>
   );
+}
+
+function buildNoticeContextFromCollation(item: CollationItem) {
+  const locationParts = item.location
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const state = locationParts[0] || "Lagos";
+  const lga = locationParts[1] || "Alimosho LGA";
+
+  return buildCommencementContext({
+    electionId: item.id,
+    electionTitle: item.fullTitle,
+    pollingUnitName: "Ikotun Community Primary School",
+    pollingUnitCode: "LA/01/08/004",
+    ward: "Ward 01",
+    lga,
+    state,
+  });
 }
 
 const styles = StyleSheet.create({

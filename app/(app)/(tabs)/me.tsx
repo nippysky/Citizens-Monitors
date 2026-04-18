@@ -75,8 +75,16 @@ const pollingData = {
 type PollingStateKey = keyof typeof pollingData;
 
 const bankOptions = [
-  "Access Bank", "First Bank", "GTBank", "Fidelity Bank", "UBA",
-  "Zenith Bank", "Opay", "Moniepoint", "Sterling Bank", "Wema Bank",
+  "Access Bank",
+  "First Bank",
+  "GTBank",
+  "Fidelity Bank",
+  "UBA",
+  "Zenith Bank",
+  "Opay",
+  "Moniepoint",
+  "Sterling Bank",
+  "Wema Bank",
 ];
 
 /* ───── Screen ───── */
@@ -146,21 +154,13 @@ export default function MeScreen() {
   const nationalitySheetRef = useRef<BottomSheetModal>(null);
   const genderSheetRef = useRef<BottomSheetModal>(null);
 
-  // Sub-sheet refs for PollingUnitBottomSheet
-  const stateSelectorRef = useRef<BottomSheetModal>(null);
-  const lgaSelectorRef = useRef<BottomSheetModal>(null);
-  const wardSelectorRef = useRef<BottomSheetModal>(null);
-  const puSelectorRef = useRef<BottomSheetModal>(null);
-
-  // Sub-sheet ref for BankDetailsBottomSheet
-  const bankDetailsSelectorRef = useRef<BottomSheetModal>(null);
-
   /* ── Cascading polling data ── */
 
   const stateOptions = useMemo(() => Object.keys(pollingData), []);
 
   const lgaOptions = useMemo(() => {
     if (!pollingUnitForm.state) return [];
+
     return Object.keys(
       pollingData[pollingUnitForm.state as PollingStateKey] ?? {}
     );
@@ -168,7 +168,9 @@ export default function MeScreen() {
 
   const wardOptions = useMemo(() => {
     if (!pollingUnitForm.state || !pollingUnitForm.lga) return [];
+
     const sk = pollingUnitForm.state as PollingStateKey;
+
     return Object.keys(
       pollingData[sk]?.[
         pollingUnitForm.lga as keyof (typeof pollingData)[typeof sk]
@@ -181,15 +183,21 @@ export default function MeScreen() {
       !pollingUnitForm.state ||
       !pollingUnitForm.lga ||
       !pollingUnitForm.ward
-    )
+    ) {
       return [];
+    }
+
     const sk = pollingUnitForm.state as PollingStateKey;
-    const lk =
-      pollingUnitForm.lga as keyof (typeof pollingData)[typeof sk];
+    const lk = pollingUnitForm.lga as keyof (typeof pollingData)[typeof sk];
     const wk =
       pollingUnitForm.ward as keyof (typeof pollingData)[typeof sk][typeof lk];
+
     return pollingData[sk]?.[lk]?.[wk] ?? [];
-  }, [pollingUnitForm.state, pollingUnitForm.lga, pollingUnitForm.ward]);
+  }, [
+    pollingUnitForm.state,
+    pollingUnitForm.lga,
+    pollingUnitForm.ward,
+  ]);
 
   /* ── Helpers ── */
 
@@ -211,37 +219,51 @@ export default function MeScreen() {
       case "personal-profile":
         profileSheetRef.current?.present();
         return;
+
       case "security":
         securitySheetRef.current?.present();
         return;
+
       case "polling-unit":
         pollingUnitSheetRef.current?.present();
         return;
+
       case "notifications":
         notificationSheetRef.current?.present();
         return;
+
       case "upgrade-user":
         observerSheetRef.current?.present();
         return;
+
       case "pvc-verification":
         pvcSheetRef.current?.present();
         return;
+
       case "bank-details":
         bankSheetRef.current?.present();
         return;
+
       case "citizen-academy":
         router.push(Paths.voterCitizenAcademy);
         return;
+
       case "archive-reports":
-      case "digital-vault":
         router.push(Paths.appArchiveReports);
         return;
-      case "support-faq":
-        showToast({ message: "Support & FAQ coming next.", type: "success" });
+
+      case "digital-vault":
+        router.push(Paths.appDigitalVault);
         return;
+
+      case "support-faq":
+        router.push(Paths.appHelpSupport);
+        return;
+
       case "feedback":
         showToast({ message: "Feedback flow coming next.", type: "success" });
         return;
+
       case "sign-out":
         Alert.alert("Sign Out", "Are you sure you want to log out?", [
           { text: "Cancel", style: "cancel" },
@@ -278,21 +300,17 @@ export default function MeScreen() {
           contentContainerStyle={styles.content}
           bounces
         >
-          {/* Header — just avatar + name + role + username */}
           <View style={styles.headerWrap}>
             <MeHeader user={mockMeUser} />
           </View>
 
-          {/* Dynamic banner (shows only for observer-pending or volunteer) */}
           <MeProfileCard banner={banner} onPress={handleBannerPress} />
 
-          {/* MY ACCOUNT */}
           <View style={styles.sectionBlock}>
             <AppText style={styles.sectionTitle}>MY ACCOUNT</AppText>
             <MeSection items={accountItems} onItemPress={handleItemPress} />
           </View>
 
-          {/* OTHERS */}
           <View style={styles.sectionBlock}>
             <AppText style={styles.sectionTitle}>OTHERS</AppText>
             <MeSection items={otherItems} onItemPress={handleItemPress} />
@@ -300,8 +318,6 @@ export default function MeScreen() {
 
           <TabBarSpacer />
         </ScrollView>
-
-        {/* ── All bottom sheets ── */}
 
         <ProfileBottomSheet
           ref={profileSheetRef}
@@ -325,6 +341,7 @@ export default function MeScreen() {
               });
               return;
             }
+
             if (securityForm.password !== securityForm.confirmPassword) {
               showToast({
                 message: "Passwords do not match.",
@@ -332,6 +349,7 @@ export default function MeScreen() {
               });
               return;
             }
+
             await runSave("Security updated successfully.", securitySheetRef);
             setSecurityForm({ password: "", confirmPassword: "" });
           }}
@@ -344,10 +362,6 @@ export default function MeScreen() {
           onSave={() =>
             runSave("Polling unit updated successfully.", pollingUnitSheetRef)
           }
-          stateSheetRef={stateSelectorRef}
-          lgaSheetRef={lgaSelectorRef}
-          wardSheetRef={wardSelectorRef}
-          pollingUnitSheetRef={puSelectorRef}
           stateOptions={stateOptions}
           lgaOptions={lgaOptions}
           wardOptions={wardOptions}
@@ -388,7 +402,6 @@ export default function MeScreen() {
           value={bankForm}
           onChange={setBankForm}
           onSave={() => runSave("Bank details saved.", bankSheetRef)}
-          bankSheetRef={bankDetailsSelectorRef}
           bankOptions={bankOptions}
         />
 
@@ -399,17 +412,36 @@ export default function MeScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#EEF5DB" },
-  screen: { flex: 1, backgroundColor: "#F7F7F2" },
-  gradientBg: { ...StyleSheet.absoluteFillObject },
+  safe: {
+    flex: 1,
+    backgroundColor: "#EEF5DB",
+  },
+
+  screen: {
+    flex: 1,
+    backgroundColor: "#F7F7F2",
+  },
+
+  gradientBg: {
+    ...StyleSheet.absoluteFillObject,
+  },
+
   content: {
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 18,
     backgroundColor: "transparent",
   },
-  headerWrap: { marginBottom: 14 },
-  sectionBlock: { gap: 12, marginTop: 18 },
+
+  headerWrap: {
+    marginBottom: 14,
+  },
+
+  sectionBlock: {
+    gap: 12,
+    marginTop: 18,
+  },
+
   sectionTitle: {
     fontSize: 14,
     lineHeight: 18,

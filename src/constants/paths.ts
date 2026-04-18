@@ -15,11 +15,12 @@ export const Paths = {
   appPulse: "/(app)/(tabs)/pulse",
   appMe: "/(app)/(tabs)/me",
   appNotifications: "/(app)/notifications",
-  appMyReports: "/(app)/my-reports",
+  appDigitalVault: "/(app)/digital-vault",
   appArchiveReports: "/(app)/archive-reports",
   appElectionCalendar: "/(app)/elections-calendar",
   appLearningFeed: "/(app)/learning-feed",
-  appSubmitReport: "/(app)/submit-report",
+
+  appHelpSupport: "/(app)/help-support",
 
   appNotificationDetails: (id: string) =>
     ({
@@ -32,7 +33,6 @@ export const Paths = {
   reportIncidentLive: "/(app)/reporting/report-incident-live",
 
   voterCitizenAcademy: "/(app)/voter-essentials/CitizenAcademy",
-  voterDigitalElectionVault: "/(app)/voter-essentials/DigitalElectionVault",
   voterDonateSupport: "/(app)/voter-essentials/DonateSupport",
   voterElectionDayProcedure: "/(app)/voter-essentials/ElectionDayProcedure",
   voterNewsAndInsights: "/(app)/voter-essentials/NewsAndInsights",
@@ -60,4 +60,12 @@ export const Paths = {
       pathname: "/(app)/learning-feed" as const,
       params: { id },
     }),
+
+
+      pressCoverageDetails: (id: string) =>
+    ({
+      pathname: "/(app)/press-coverage/[id]" as const,
+      params: { id },
+    }),
 } as const;
+

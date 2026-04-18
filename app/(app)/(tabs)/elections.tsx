@@ -15,6 +15,8 @@ import AppGradientScreen from "@/components/app/AppGradientScreen";
 import ElectionCard from "@/components/elections/ElectionCard";
 import ElectionFiltersBottomSheet from "@/components/elections/ElectionFiltersBottomSheet";
 import ElectionStatusPill from "@/components/elections/ElectionStatusPill";
+import ElectionScopeTabs from "@/components/elections/ElectionScopeTab";
+import ScreenHeader from "@/components/elections/ScreenHeader";
 import TabBarSpacer from "@/components/layout/TabBarSpacer";
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
@@ -30,8 +32,6 @@ import {
   startOfMonth,
 } from "@/data/elections";
 import { Theme } from "@/theme";
-import ElectionScopeTabs from "@/components/elections/ElectionScopeTab";
-import ScreenHeader from "@/components/elections/ScreenHeader";
 
 export default function ElectionsScreen() {
   const filterSheetRef = useRef<BottomSheetModal>(null);
@@ -254,7 +254,15 @@ export default function ElectionsScreen() {
                 <ElectionCard
                   key={item.id}
                   item={item}
-                  onPress={() => router.push(Paths.electionDetails(item.id))}
+                  onLivePress={() =>
+                    router.push({
+                      pathname: Paths.appCollation,
+                      params: { collationId: item.id },
+                    })
+                  }
+                  onConcludedPress={() =>
+                    router.push(Paths.electionDetails(item.id))
+                  }
                 />
               ))
             ) : (

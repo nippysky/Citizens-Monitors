@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import DiscussionRoomSection from "@/components/home/DiscussionRoomSection";
@@ -37,6 +38,9 @@ export default function HomeScreen() {
   const [selectedDate, setSelectedDate] = useState<Date>(defaultHomeDate);
   const [refreshing, setRefreshing] = useState(false);
   const [voterEssentialsVisible, setVoterEssentialsVisible] = useState(false);
+  const [pendingRoute, setPendingRoute] = useState<string | null>(null);
+
+  const hasNavigatedRef = useRef(false);
 
   const calendarItems = useMemo(
     () => buildFiveDayWindow(selectedDate),
@@ -88,6 +92,41 @@ export default function HomeScreen() {
       });
     }
   }, [isConnected, showToast]);
+
+  const handleOpenVoterEssentials = useCallback(() => {
+    hasNavigatedRef.current = false;
+    setVoterEssentialsVisible(true);
+  }, []);
+
+  const handleCloseVoterEssentials = useCallback(() => {
+    setVoterEssentialsVisible(false);
+  }, []);
+
+  const handleNavigateFromVoterEssentials = useCallback((route: string) => {
+    hasNavigatedRef.current = false;
+    setPendingRoute(route);
+    setVoterEssentialsVisible(false);
+  }, []);
+
+  useEffect(() => {
+    if (voterEssentialsVisible) return;
+    if (!pendingRoute) return;
+    if (hasNavigatedRef.current) return;
+
+    const timer = setTimeout(() => {
+      if (hasNavigatedRef.current) return;
+
+      hasNavigatedRef.current = true;
+      const nextRoute = pendingRoute;
+      setPendingRoute(null);
+
+      requestAnimationFrame(() => {
+        router.push(nextRoute as never);
+      });
+    }, 220);
+
+    return () => clearTimeout(timer);
+  }, [voterEssentialsVisible, pendingRoute]);
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safe}>
@@ -150,9 +189,7 @@ export default function HomeScreen() {
               <LatestNewsSection items={selectedContent.news} />
             )}
 
-            <VoterEssentialsSection
-              onViewAll={() => setVoterEssentialsVisible(true)}
-            />
+            <VoterEssentialsSection onViewAll={handleOpenVoterEssentials} />
 
             <TabBarSpacer />
           </View>
@@ -160,7 +197,8 @@ export default function HomeScreen() {
 
         <VoterEssentialsModal
           visible={voterEssentialsVisible}
-          onClose={() => setVoterEssentialsVisible(false)}
+          onClose={handleCloseVoterEssentials}
+          onNavigate={handleNavigateFromVoterEssentials}
         />
       </View>
     </SafeAreaView>

@@ -4,17 +4,20 @@ import { Image, Pressable, StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
-import { NewsFeedItem } from "@/data/news";
+import { PressCoverageItem } from "@/data/pressCoverage";
 import { Theme } from "@/theme";
 
 type Props = {
-  item: NewsFeedItem;
+  item: PressCoverageItem;
   isLast?: boolean;
 };
 
-export default function NewsFeedCard({ item, isLast = false }: Props) {
+export default function PressCoverageFeedCard({
+  item,
+  isLast = false,
+}: Props) {
   const handlePress = () => {
-    router.push(Paths.newsDetails(item.id));
+    router.push(Paths.pressCoverageDetails(item.id));
   };
 
   return (
@@ -34,7 +37,7 @@ export default function NewsFeedCard({ item, isLast = false }: Props) {
             {item.title}
           </AppText>
 
-          <View style={styles.dateRow}>
+          <View style={styles.metaRow}>
             <View style={styles.dot} />
             <AppText style={styles.dateText}>{item.date}</AppText>
           </View>
@@ -56,47 +59,46 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: 12,
     paddingVertical: 18,
-    backgroundColor: "transparent",
   },
 
   cardPressed: {
-    opacity: 0.86,
+    opacity: 0.88,
   },
 
   cardBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(17, 26, 50, 0.10)",
+    borderBottomColor: "rgba(17, 26, 50, 0.08)",
   },
 
   image: {
-    width: 84,
-    height: 84,
+    width: 86,
+    height: 74,
     borderRadius: 12,
-    backgroundColor: "#E9ECEF",
+    backgroundColor: "#EEF2F6",
   },
 
   content: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
   },
 
   textWrap: {
     flex: 1,
-    gap: 10,
+    gap: 8,
   },
 
   title: {
     fontSize: 18,
-    lineHeight: 21,
+    lineHeight: 20,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.heading.semibold,
   },
 
-  dateRow: {
+  metaRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -110,8 +112,8 @@ const styles = StyleSheet.create({
   },
 
   dateText: {
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 12.5,
+    lineHeight: 16,
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.semibold,
   },

@@ -37,7 +37,7 @@ export default function AppGradientScreen({
     <SafeAreaView edges={["top"]} style={styles.safe}>
       <View style={styles.root}>
         <LinearGradient
-          colors={["#F4F1D9", "#F8F7EC", "#FCFCF8", "#FFFFFF"]}
+          colors={["#F4F1D9", "#FFFFFF", "#FFFFFF", "#FFFFFF"]}
           locations={[0, 0.18, 0.48, 1]}
           style={StyleSheet.absoluteFill}
         />

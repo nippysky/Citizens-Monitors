@@ -1,7 +1,13 @@
 import AppText from "@/components/ui/AppText";
 import { Theme } from "@/theme";
 import { Ionicons } from "@expo/vector-icons";
-import { cloneElement, isValidElement, ReactNode, useMemo, useState } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  ReactNode,
+  useMemo,
+  useState,
+} from "react";
 import {
   Pressable,
   StyleProp,
@@ -23,6 +29,9 @@ type Props = TextInputProps & {
   onPressStartIcon?: () => void;
   onPressEndIcon?: () => void;
   secureToggle?: boolean;
+  multiline?: boolean;
+  numberOfLines?: number;
+  textareaMinHeight?: number;
 };
 
 export default function AppInput({
@@ -41,13 +50,16 @@ export default function AppInput({
   style,
   onFocus,
   onBlur,
+  multiline = false,
+  numberOfLines,
+  textareaMinHeight = 110,
   ...props
 }: Props) {
   const [isSecureVisible, setIsSecureVisible] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
 
   const hasError = Boolean(errorText);
-  const showSecureToggle = secureToggle || secureTextEntry;
+  const showSecureToggle = !multiline && (secureToggle || secureTextEntry);
 
   const resolvedSecureTextEntry = useMemo(() => {
     if (!showSecureToggle) return secureTextEntry;
@@ -81,7 +93,11 @@ export default function AppInput({
       );
     }
 
-    return <View style={styles.iconSlot}>{tintedStartIcon}</View>;
+    return (
+      <View style={[styles.iconSlot, multiline && styles.iconSlotMultiline]}>
+        {tintedStartIcon}
+      </View>
+    );
   };
 
   const renderEndIcon = () => {
@@ -107,13 +123,20 @@ export default function AppInput({
 
     if (onPressEndIcon) {
       return (
-        <Pressable onPress={onPressEndIcon} style={styles.iconButton}>
+        <Pressable
+          onPress={onPressEndIcon}
+          style={[styles.iconButton, multiline && styles.iconButtonMultiline]}
+        >
           {tintedEndIcon}
         </Pressable>
       );
     }
 
-    return <View style={styles.iconSlot}>{tintedEndIcon}</View>;
+    return (
+      <View style={[styles.iconSlot, multiline && styles.iconSlotMultiline]}>
+        {tintedEndIcon}
+      </View>
+    );
   };
 
   return (
@@ -127,8 +150,11 @@ export default function AppInput({
       <View
         style={[
           styles.inputWrapper,
+          multiline && styles.inputWrapperMultiline,
           !editable && styles.inputWrapperDisabled,
           hasError && styles.inputWrapperError,
+          isFocused && !hasError && styles.inputWrapperFocused,
+          multiline && { minHeight: textareaMinHeight },
           inputWrapperStyle,
         ]}
       >
@@ -137,9 +163,17 @@ export default function AppInput({
         <TextInput
           {...props}
           editable={editable}
+          multiline={multiline}
+          numberOfLines={numberOfLines}
           secureTextEntry={resolvedSecureTextEntry}
           placeholderTextColor={Theme.colors.placeholder}
-          style={[styles.input, !editable && styles.inputDisabled, style]}
+          textAlignVertical={multiline ? "top" : "center"}
+          style={[
+            styles.input,
+            multiline && styles.inputMultiline,
+            !editable && styles.inputDisabled,
+            style,
+          ]}
           onFocus={(e) => {
             setIsFocused(true);
             onFocus?.(e);
@@ -150,7 +184,7 @@ export default function AppInput({
           }}
         />
 
-        {renderEndIcon()}
+        {!multiline ? renderEndIcon() : null}
       </View>
 
       {hasError ? (
@@ -189,6 +223,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
 
+  inputWrapperMultiline: {
+    alignItems: "flex-start",
+    paddingTop: 14,
+    paddingBottom: 14,
+  },
+
+  inputWrapperFocused: {
+    borderColor: Theme.colors.primary,
+  },
+
   inputWrapperDisabled: {
     opacity: 0.6,
   },
@@ -204,11 +248,19 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
 
+  iconSlotMultiline: {
+    marginTop: 2,
+  },
+
   iconButton: {
     width: 30,
     height: 30,
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  iconButtonMultiline: {
+    marginTop: 2,
   },
 
   input: {
@@ -219,6 +271,13 @@ const styles = StyleSheet.create({
     fontFamily: Theme.fonts.body.regular,
     paddingVertical: 0,
     backgroundColor: "transparent",
+  },
+
+  inputMultiline: {
+    minHeight: 84,
+    paddingTop: 0,
+    paddingBottom: 0,
+    lineHeight: 22,
   },
 
   inputDisabled: {},

@@ -23,11 +23,11 @@ export default function HomeHeader({ firstName, roleLabel }: Props) {
 
         {/* Right: icons */}
         <View style={styles.actions}>
-          <Pressable style={styles.iconButton}>
+          <Pressable style={styles.iconButton} onPress={() => router.push(Paths.appHelpSupport)}>
             <Ionicons
               name="help-circle-outline"
               size={22}
-              color={Theme.colors.textMuted}
+              color={Theme.colors.primary}
             />
           </Pressable>
 

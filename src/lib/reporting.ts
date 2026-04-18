@@ -61,8 +61,8 @@ const INCIDENT_DRAFT_KEY = "@cm_reporting_incident_draft";
 const LIVE_VIDEO_KEY = "@cm_reporting_live_video";
 
 export const REPORTING_DEV_CONFIG = {
-  autoShowDemoLiveNotice: false,
-  enableGlobalLiveNoticeDevTrigger: true,
+  autoShowDemoLiveNotice: true,
+  enableGlobalLiveNoticeDevTrigger: false,
   forceInvalidResultSubmission: false,
   forceIncidentSuccess: true,
   forceResultSuccess: true,
@@ -97,6 +97,30 @@ export const INCIDENT_OPTIONS = [
   "Missing Materials",
   "Other Incidents",
 ] as const;
+
+/**
+ * Production-ready helper:
+ * lets any screen build a commencement context from partial data
+ * while still falling back safely in development.
+ */
+export function buildCommencementContext(
+  partial?: Partial<CommencementContext>
+): CommencementContext {
+  return {
+    electionId: partial?.electionId?.trim() || DEV_COMMENCEMENT_CONTEXT.electionId,
+    electionTitle:
+      partial?.electionTitle?.trim() || DEV_COMMENCEMENT_CONTEXT.electionTitle,
+    pollingUnitName:
+      partial?.pollingUnitName?.trim() ||
+      DEV_COMMENCEMENT_CONTEXT.pollingUnitName,
+    pollingUnitCode:
+      partial?.pollingUnitCode?.trim() ||
+      DEV_COMMENCEMENT_CONTEXT.pollingUnitCode,
+    ward: partial?.ward?.trim() || DEV_COMMENCEMENT_CONTEXT.ward,
+    lga: partial?.lga?.trim() || DEV_COMMENCEMENT_CONTEXT.lga,
+    state: partial?.state?.trim() || DEV_COMMENCEMENT_CONTEXT.state,
+  };
+}
 
 export function buildInitialResultDraft(
   ctx: CommencementContext,

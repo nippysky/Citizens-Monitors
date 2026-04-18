@@ -1,100 +1,112 @@
-// ─── src/app/(app)/archive-reports.tsx ────────────────────────────────────────
+// ─── src/app/(app)/digital-vault.tsx ──────────────────────────────────────────
+import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useMemo, useState } from "react";
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
+import { useMemo, useRef, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import BackButton from "@/components/ui/BackButton";
 import AppText from "@/components/ui/AppText";
 import TabBarSpacer from "@/components/layout/TabBarSpacer";
+import ReportSummarySheet from "@/components/me/ReportSummarySheet";
 import { archiveData, ArchiveElection, ArchiveReportItem } from "@/data/me";
 import { Theme } from "@/theme";
 import PresidentialElection from "@/svgs/app/PresidentialElection";
 import SenatorElection from "@/svgs/app/SenatorElection";
 import HouseOfRepsElection from "@/svgs/app/HouseOfRepsElection";
-import Incident from "@/svgs/app/collation/Incident";
 import ElectionNotification from "@/svgs/app/profile/ElectionNotification";
 import { Paths } from "@/constants/paths";
 
-type FilterKey = "all" | "results" | "incidents";
-
 function getElectionIcon(type: string) {
   const t = type.toLowerCase();
-
   if (t.includes("senate")) return SenatorElection;
   if (t.includes("house of rep")) return HouseOfRepsElection;
-
   return PresidentialElection;
 }
 
-export default function ArchiveReportsScreen() {
-  const [filter, setFilter] = useState<FilterKey>("all");
+type VaultElectionRow = {
+  election: ArchiveElection;
+  resultReport: ArchiveReportItem | null;
+};
 
-  const filteredElections = useMemo(() => {
-    return archiveData.elections
-      .map((election) => ({
-        ...election,
-        reports: election.reports.filter((report) => {
-          if (filter === "all") return true;
-          if (filter === "results") return report.type === "result";
-          return report.type === "incident";
-        }),
-      }))
-      .filter((election) => election.reports.length > 0);
-  }, [filter]);
+const DEV_DIGITAL_VAULT_PENDING_ELECTION_IDS = [
+  "ae-2",
+] as const;
 
-  const filters: { key: FilterKey; label: string }[] = [
-    {
-      key: "all",
-      label: `ALL (${archiveData.totalResults + archiveData.totalIncidents})`,
-    },
-    {
-      key: "results",
-      label: `RESULTS (${archiveData.totalResults})`,
-    },
-    {
-      key: "incidents",
-      label: `INCIDENTS (${archiveData.totalIncidents})`,
-    },
-  ];
+/**
+ * For QA:
+ * add/remove election ids in DEV_DIGITAL_VAULT_PENDING_ELECTION_IDS
+ * to force that election into "no result submitted yet" state.
+ *
+ * Example:
+ * []                  -> all submitted
+ * ["ae-2"]            -> House of Rep shows green plus tile
+ * ["ae-2", "ae-3"]    -> House of Rep + Presidential show green plus tile
+ */
 
-  const handleReportPress = (report: ArchiveReportItem, election: ArchiveElection) => {
-    if (report.type === "result") {
-      router.push({
-        ...Paths.electionDetails(election.id),
-        params: {
-          id: election.id,
-          viewer: "observer",
-          scope: "assigned",
-          tab: "overview",
-        },
-      });
-      return;
-    }
+export default function DigitalVaultScreen() {
+  const summaryRef = useRef<BottomSheetModal>(null);
+  const [selectedReport, setSelectedReport] = useState<ArchiveReportItem | null>(
+    null
+  );
+  const [selectedElection, setSelectedElection] =
+    useState<ArchiveElection | null>(null);
 
-    router.push({
-      ...Paths.electionDetails(election.id),
-      params: {
-        id: election.id,
-        viewer: "observer",
-        scope: "assigned",
-        tab: "review-collation",
-      },
+  const vaultRows = useMemo<VaultElectionRow[]>(() => {
+    return archiveData.elections.map((election) => {
+      const isForcedPending = DEV_DIGITAL_VAULT_PENDING_ELECTION_IDS.includes(
+        election.id as (typeof DEV_DIGITAL_VAULT_PENDING_ELECTION_IDS)[number]
+      );
+
+      const resultReport = isForcedPending
+        ? null
+        : election.reports.find((report) => report.type === "result") ?? null;
+
+      return {
+        election,
+        resultReport,
+      };
     });
+  }, []);
+
+  const totalSubmittedResults = useMemo(() => {
+    return vaultRows.filter((row) => row.resultReport).length;
+  }, [vaultRows]);
+
+  const totalElections = vaultRows.length;
+
+  const handleOpenSummary = (
+    report: ArchiveReportItem,
+    election: ArchiveElection
+  ) => {
+    setSelectedReport(report);
+    setSelectedElection(election);
+    requestAnimationFrame(() => summaryRef.current?.present());
   };
+
+const handleAddResult = (election: ArchiveElection) => {
+  router.push({
+    pathname: Paths.submitElectionReport,
+    params: {
+      electionId: election.id,
+      electionTitle: election.title,
+      pollingUnitName: "Ikotun Community Primary School",
+      pollingUnitCode: "LA/01/08/004",
+      ward: "Ward 01",
+      lga: "Alimosho LGA",
+      state: "Lagos",
+      votingStartTime: "",
+    },
+  });
+};
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safe}>
       <View style={styles.screen}>
         <View style={styles.header}>
           <BackButton label="" />
-          <AppText style={styles.headerTitle}>My Archive Reports</AppText>
+          <AppText style={styles.headerTitle}>Digital Vault</AppText>
         </View>
 
         <ScrollView
@@ -104,46 +116,19 @@ export default function ArchiveReportsScreen() {
         >
           <View style={styles.statsRow}>
             <StatBox
-              value={archiveData.totalResults}
+              value={totalSubmittedResults}
               label="RESULTS"
               color={Theme.colors.primary}
             />
             <StatBox
-              value={archiveData.totalIncidents}
-              label="INCIDENTS"
-              color="#F04A1D"
-            />
-            <StatBox
-              value={archiveData.totalElections}
+              value={totalElections}
               label="ELECTIONS"
               color={Theme.colors.text}
             />
           </View>
 
-          <View style={styles.filterRow}>
-            {filters.map((item) => (
-              <Pressable
-                key={item.key}
-                onPress={() => setFilter(item.key)}
-                style={[
-                  styles.filterPill,
-                  filter === item.key && styles.filterPillActive,
-                ]}
-              >
-                <AppText
-                  style={[
-                    styles.filterText,
-                    filter === item.key && styles.filterTextActive,
-                  ]}
-                >
-                  {item.label}
-                </AppText>
-              </Pressable>
-            ))}
-          </View>
-
           <View style={styles.sectionsWrap}>
-            {filteredElections.map((election) => {
+            {vaultRows.map(({ election, resultReport }) => {
               const Icon = getElectionIcon(election.electionType);
 
               return (
@@ -163,28 +148,23 @@ export default function ArchiveReportsScreen() {
                     </View>
 
                     <View style={styles.electionIconWrap}>
-                      <Icon width={30} height={30} />
+                      <Icon width={32} height={32} />
                     </View>
                   </View>
 
-                  <View style={styles.reportList}>
-                    {election.reports.map((report) => (
-                      <Pressable
-                        key={report.id}
-                        onPress={() => handleReportPress(report, election)}
-                        style={styles.reportCard}
-                      >
+                  {resultReport ? (
+                    <Pressable
+                      onPress={() => handleOpenSummary(resultReport, election)}
+                      style={styles.reportCard}
+                    >
+                      <View style={styles.reportMain}>
                         <View style={styles.reportIconWrap}>
-                          {report.type === "result" ? (
-                            <ElectionNotification width={28} height={28} />
-                          ) : (
-                            <Incident width={28} height={28} />
-                          )}
+                          <ElectionNotification width={28} height={28} />
                         </View>
 
                         <View style={styles.reportContent}>
                           <AppText style={styles.reportTitle}>
-                            {report.title}
+                            {resultReport.title}
                           </AppText>
 
                           <View style={styles.reportMetaRow}>
@@ -194,40 +174,53 @@ export default function ArchiveReportsScreen() {
                               color={Theme.colors.textMuted}
                             />
                             <AppText style={styles.reportMeta}>
-                              {report.date} · {report.time}
+                              {resultReport.date} · {resultReport.time}
                             </AppText>
                           </View>
 
-                          {report.partySummary ? (
+                          {resultReport.partySummary ? (
                             <AppText style={styles.reportParties}>
-                              {report.partySummary}
-                            </AppText>
-                          ) : null}
-
-                          {report.evidenceLabel ? (
-                            <AppText
-                              style={[
-                                styles.reportEvidence,
-                                report.evidenceType === "video"
-                                  ? styles.reportEvidenceVideo
-                                  : styles.reportEvidencePhoto,
-                              ]}
-                            >
-                              {report.evidenceLabel}
+                              {resultReport.partySummary}
                             </AppText>
                           ) : null}
                         </View>
+                      </View>
 
-                        <View style={styles.chevronWrap}>
-                          <Ionicons
-                            name="chevron-forward"
-                            size={17}
-                            color={Theme.colors.textMuted}
-                          />
+                      <View style={styles.chevronWrap}>
+                        <Ionicons
+                          name="chevron-forward"
+                          size={17}
+                          color={Theme.colors.textMuted}
+                        />
+                      </View>
+                    </Pressable>
+                  ) : (
+                    <View style={styles.pendingCard}>
+                      <View style={styles.reportMain}>
+                        <View style={styles.reportIconWrap}>
+                          <ElectionNotification width={28} height={28} />
                         </View>
+
+                        <View style={styles.reportContent}>
+                          <AppText style={styles.reportTitle}>
+                            Result Report — EC8A
+                          </AppText>
+
+                          <AppText style={styles.pendingSubtitle}>
+                            Submit election result for this polling unit.
+                          </AppText>
+                        </View>
+                      </View>
+
+                      <Pressable
+                        onPress={() => handleAddResult(election)}
+                        style={styles.addTile}
+                        hitSlop={8}
+                      >
+                        <Ionicons name="add" size={24} color="#FFFFFF" />
                       </Pressable>
-                    ))}
-                  </View>
+                    </View>
+                  )}
                 </View>
               );
             })}
@@ -235,6 +228,12 @@ export default function ArchiveReportsScreen() {
 
           <TabBarSpacer />
         </ScrollView>
+
+        <ReportSummarySheet
+          ref={summaryRef}
+          report={selectedReport}
+          electionTitle={selectedElection?.title ?? ""}
+        />
       </View>
     </SafeAreaView>
   );
@@ -286,31 +285,31 @@ const styles = StyleSheet.create({
 
   content: {
     paddingHorizontal: 16,
-    paddingTop: 10,
+    paddingTop: 14,
     paddingBottom: 20,
-    gap: 18,
+    gap: 20,
   },
 
   statsRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: 10,
   },
 
   statBox: {
     flex: 1,
-    minHeight: 60,
+    minHeight: 78,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: Theme.colors.border,
     backgroundColor: Theme.colors.surface,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     justifyContent: "space-between",
   },
 
   statValue: {
-    fontSize: 24,
-    lineHeight: 26,
+    fontSize: 28,
+    lineHeight: 30,
     fontFamily: Theme.fonts.heading.bold,
   },
 
@@ -321,40 +320,8 @@ const styles = StyleSheet.create({
     fontFamily: Theme.fonts.body.semibold,
   },
 
-  filterRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-
-  filterPill: {
-    minHeight: 32,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
-  },
-
-  filterPillActive: {
-    backgroundColor: Theme.colors.primary,
-    borderColor: Theme.colors.primary,
-  },
-
-  filterText: {
-    fontSize: 11,
-    lineHeight: 14,
-    color: Theme.colors.textMuted,
-    fontFamily: Theme.fonts.body.semibold,
-  },
-
-  filterTextActive: {
-    color: Theme.colors.white,
-  },
-
   sectionsWrap: {
-    gap: 18,
+    gap: 22,
   },
 
   electionSection: {
@@ -386,7 +353,7 @@ const styles = StyleSheet.create({
 
   electionTextWrap: {
     flex: 1,
-    gap: 4,
+    gap: 6,
     minWidth: 0,
   },
 
@@ -404,19 +371,15 @@ const styles = StyleSheet.create({
   },
 
   electionIconWrap: {
-    width: 32,
-    height: 32,
+    width: 34,
+    height: 34,
     alignItems: "center",
     justifyContent: "center",
   },
 
-  reportList: {
-    gap: 12,
-  },
-
   reportCard: {
     minHeight: 88,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: Theme.colors.border,
     backgroundColor: Theme.colors.surface,
@@ -425,6 +388,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+  },
+
+  pendingCard: {
+    minHeight: 88,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+    backgroundColor: Theme.colors.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  reportMain: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minWidth: 0,
   },
 
   reportIconWrap: {
@@ -465,23 +449,24 @@ const styles = StyleSheet.create({
     color: Theme.colors.textMuted,
   },
 
-  reportEvidence: {
+  pendingSubtitle: {
     fontSize: 12,
     lineHeight: 16,
-    fontFamily: Theme.fonts.body.medium,
-  },
-
-  reportEvidenceVideo: {
-    color: "#F04A1D",
-  },
-
-  reportEvidencePhoto: {
-    color: "#F04A1D",
+    color: Theme.colors.textMuted,
   },
 
   chevronWrap: {
     width: 18,
     alignItems: "flex-end",
+    justifyContent: "center",
+  },
+
+  addTile: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Theme.colors.primary,
+    alignItems: "center",
     justifyContent: "center",
   },
 });

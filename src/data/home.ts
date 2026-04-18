@@ -163,7 +163,7 @@ export const allVoterEssentials: VoterEssentialItem[] = [
     id: "ve-2",
     label: "Digital Election Vault",
     icon: "DigitalElectionVault",
-    route: Paths.voterDigitalElectionVault,
+    route: Paths.appDigitalVault,
   },
   {
     id: "ve-3",

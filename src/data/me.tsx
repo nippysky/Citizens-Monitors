@@ -21,7 +21,7 @@ import SignOut from "@/svgs/app/SignOut";
 import React, { ReactNode } from "react";
 
 // └─────────────────────────────────────────────────────────────────────────┘
-export const DEV_USER_TYPE: DevUserType = "observer-verified";
+export const DEV_USER_TYPE: DevUserType = "volunteer";
 // ─────────────────────────────────────────────────────────────────────────────
 
 
