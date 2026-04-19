@@ -36,7 +36,7 @@ type ScopeFilter = "all-state" | "my-unit";
 
 const SCOPE_OPTIONS: { value: ScopeFilter; label: string }[] = [
   { value: "all-state", label: "All State" },
-  { value: "my-unit", label: "My Unit" },
+  { value: "my-unit", label: "My Polling Unit" },
 ];
 
 type IncidentAnalyticsItem = {
@@ -116,6 +116,29 @@ const INCIDENTS_ALL_STATE: IncidentAnalyticsItem[] = [
     iconKey: "voter-intimidation",
   },
 ];
+
+function isPresidentialElection(collation: CollationItem) {
+  const source = collation as CollationItem & {
+    electionType?: string;
+    type?: string;
+    category?: string;
+    title?: string;
+    fullTitle?: string;
+  };
+
+  const combined = [
+    source.electionType,
+    source.type,
+    source.category,
+    source.title,
+    source.fullTitle,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return combined.includes("presidential");
+}
 
 function buildMyUnitIncidentAnalytics(
   items: IncidentAnalyticsItem[]
@@ -238,12 +261,23 @@ function buildVerificationStats(
 
 export default function SentimentAnalysisSection({ collation }: Props) {
   const empty = !collation.isAssignedToPollingUnit;
+  const shouldShowStateScope = isPresidentialElection(collation);
 
-  const [healthScope, setHealthScope] = useState<ScopeFilter>("all-state");
+  const defaultScope: ScopeFilter = shouldShowStateScope ? "all-state" : "my-unit";
+
+  const [healthScope, setHealthScope] = useState<ScopeFilter>(defaultScope);
   const [verificationScope, setVerificationScope] =
-    useState<ScopeFilter>("all-state");
-  const [incidentScope, setIncidentScope] = useState<ScopeFilter>("all-state");
-  const [activityScope, setActivityScope] = useState<ScopeFilter>("all-state");
+    useState<ScopeFilter>(defaultScope);
+  const [incidentScope, setIncidentScope] = useState<ScopeFilter>(defaultScope);
+  const [activityScope, setActivityScope] = useState<ScopeFilter>(defaultScope);
+
+  useEffect(() => {
+    const nextScope: ScopeFilter = shouldShowStateScope ? "all-state" : "my-unit";
+    setHealthScope(nextScope);
+    setVerificationScope(nextScope);
+    setIncidentScope(nextScope);
+    setActivityScope(nextScope);
+  }, [shouldShowStateScope]);
 
   if (empty) {
     return (
@@ -298,7 +332,11 @@ export default function SentimentAnalysisSection({ collation }: Props) {
       <View style={styles.card}>
         <View style={styles.cardHeaderRow}>
           <AppText style={styles.cardTitle}>Overall process health</AppText>
-          <ScopeSelect value={healthScope} onChange={setHealthScope} />
+          <ScopeFilterControl
+            value={healthScope}
+            onChange={setHealthScope}
+            allowDropdown={shouldShowStateScope}
+          />
         </View>
 
         <View style={styles.healthRow}>
@@ -334,7 +372,11 @@ export default function SentimentAnalysisSection({ collation }: Props) {
       <View style={styles.card}>
         <View style={styles.cardHeaderRow}>
           <AppText style={styles.cardTitle}>Report Verification Analysis</AppText>
-          <ScopeSelect value={verificationScope} onChange={setVerificationScope} />
+          <ScopeFilterControl
+            value={verificationScope}
+            onChange={setVerificationScope}
+            allowDropdown={shouldShowStateScope}
+          />
         </View>
 
         <AppText style={styles.smallMuted}>
@@ -408,7 +450,11 @@ export default function SentimentAnalysisSection({ collation }: Props) {
           <AppText style={styles.cardTitleLarge}>
             Instants of incidents Reported
           </AppText>
-          <ScopeSelect value={incidentScope} onChange={setIncidentScope} />
+          <ScopeFilterControl
+            value={incidentScope}
+            onChange={setIncidentScope}
+            allowDropdown={shouldShowStateScope}
+          />
         </View>
 
         <View style={styles.incidentsWrap}>
@@ -443,7 +489,11 @@ export default function SentimentAnalysisSection({ collation }: Props) {
       <View style={styles.card}>
         <View style={styles.cardHeaderRow}>
           <AppText style={styles.cardTitleLarge}>Monitoring Activity</AppText>
-          <ScopeSelect value={activityScope} onChange={setActivityScope} />
+          <ScopeFilterControl
+            value={activityScope}
+            onChange={setActivityScope}
+            allowDropdown={shouldShowStateScope}
+          />
         </View>
 
         <View style={styles.monitoringGrid}>
@@ -479,42 +529,42 @@ function IncidentTypeIcon({
     case "thuggery":
       return (
         <View style={styles.svgIconWrap}>
-          <Thuggery/>
+          <Thuggery />
         </View>
       );
 
     case "ballot-stuffing":
       return (
         <View style={styles.svgIconWrap}>
-         <ElectionNotification/>
+          <ElectionNotification />
         </View>
       );
 
     case "underage-voting":
       return (
         <View style={styles.svgIconWrap}>
-          <UnderAge/>
+          <UnderAge />
         </View>
       );
 
     case "inec-misconduct":
       return (
         <View style={styles.svgIconWrap}>
-        <MisConduct/>
+          <MisConduct />
         </View>
       );
 
     case "result-alteration":
       return (
         <View style={styles.svgIconWrap}>
-          <ResultAlter/>
+          <ResultAlter />
         </View>
       );
 
     case "voter-intimidation":
       return (
         <View style={styles.svgIconWrap}>
-        <VoterIntimidation/>
+          <VoterIntimidation />
         </View>
       );
 
@@ -568,6 +618,28 @@ function MonitoringMetricIcon({
         </View>
       );
   }
+}
+
+/* ───── Smart scope control ───── */
+
+function ScopeFilterControl({
+  value,
+  onChange,
+  allowDropdown,
+}: {
+  value: ScopeFilter;
+  onChange: (v: ScopeFilter) => void;
+  allowDropdown: boolean;
+}) {
+  if (!allowDropdown) {
+    return (
+      <View style={styles.staticScopeWrap}>
+        <AppText style={styles.staticScopeText}>My Polling Unit</AppText>
+      </View>
+    );
+  }
+
+  return <ScopeSelect value={value} onChange={onChange} />;
 }
 
 /* ───── Independent dropdown select ───── */
@@ -876,6 +948,19 @@ const styles = StyleSheet.create({
   },
 
   selectText: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+
+  staticScopeWrap: {
+    paddingBottom: 2,
+    borderBottomWidth: 2,
+    borderBottomColor: Theme.colors.primary,
+  },
+
+  staticScopeText: {
     fontSize: 12,
     lineHeight: 16,
     color: Theme.colors.primary,

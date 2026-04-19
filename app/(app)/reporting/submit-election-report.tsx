@@ -1,7 +1,8 @@
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
+import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Image,
   Pressable,
@@ -10,6 +11,11 @@ import {
   TextInput,
   View,
 } from "react-native";
+import Animated, {
+  FadeInDown,
+  FadeOutUp,
+  LinearTransition,
+} from "react-native-reanimated";
 
 import AppGradientScreen from "@/components/app/AppGradientScreen";
 import ReportingOutcomeState from "@/components/reporting/ReportingOutcomeState";
@@ -23,7 +29,6 @@ import { useOfflineSync } from "@/context/OfflineSyncContext";
 import { useAppToast } from "@/hooks/useAppToast";
 import {
   buildInitialResultDraft,
-  calculateTotalValidVotes,
   clearResultDraft,
   CommencementContext,
   DEV_COMMENCEMENT_CONTEXT,
@@ -37,12 +42,23 @@ import {
   ensureMediaLibraryPermission,
 } from "@/lib/permissions";
 import { stageMediaFile } from "@/lib/offlineMedia";
+import {
+  formatPartyPickerLabel,
+  getPartyInfo,
+  isGenericOthersEntry,
+  isPopularParty,
+  PARTY_CATALOG,
+  parsePartyPickerLabel,
+} from "@/data/parties";
 import { Theme } from "@/theme";
 import APC from "@/svgs/app/collation/APC";
 import LP from "@/svgs/app/collation/LP";
 import NNPP from "@/svgs/app/collation/NNPP";
 import OtherParties from "@/svgs/app/collation/OtherParties";
 import PDP from "@/svgs/app/collation/PDP";
+import SelectPickerSheet from "@/components/ui/sheets/SelectPickerSheet";
+
+/* ─── Local types ──────────────────────────────────────────────────────────── */
 
 type ViewState = "form" | "success" | "invalid";
 
@@ -52,11 +68,17 @@ type FeedbackState = {
   voteBuyingToday: "yes" | "no" | "";
 };
 
+// ElectionResultDraft's votesPerParty element shape — derived so we stay in
+// sync with whatever lib/reporting declares without re-declaring here.
+type PartyVoteEntry = ElectionResultDraft["votesPerParty"][number];
+
 const initialFeedbackState: FeedbackState = {
   rating: "",
   intimidationToday: "",
   voteBuyingToday: "",
 };
+
+/* ─── Small building blocks ────────────────────────────────────────────────── */
 
 function OfflineBanner() {
   return (
@@ -74,37 +96,14 @@ function OfflineBanner() {
 function PartyLogo({ party }: { party: string }) {
   const normalized = party.trim().toUpperCase();
 
-  if (normalized === "APC") {
-    return <APC width={30} height={22} />;
-  }
+  if (normalized === "APC") return <APC width={30} height={22} />;
+  if (normalized === "PDP") return <PDP width={30} height={22} />;
+  if (normalized === "LP") return <LP width={30} height={22} />;
+  if (normalized === "NNPP") return <NNPP width={30} height={22} />;
 
-  if (normalized === "PDP") {
-    return <PDP width={30} height={22} />;
-  }
-
-  if (normalized === "LP") {
-    return <LP width={30} height={22} />;
-  }
-
-  if (normalized === "NNPP") {
-    return <NNPP width={30} height={22} />;
-  }
-
-  if (
-    normalized === "OTHERS" ||
-    normalized === "OTHER PARTIES" ||
-    normalized === "OTHERPARTIES"
-  ) {
-    return <OtherParties width={30} height={22} />;
-  }
-
-  return (
-    <View style={styles.partyLogoStub}>
-      <AppText style={styles.partyLogoStubText}>
-        {party.slice(0, 3).toUpperCase()}
-      </AppText>
-    </View>
-  );
+  // Fallback for any party not in the popular 4. When brand SVGs for the
+  // smaller parties are delivered by design, add more cases above this line.
+  return <OtherParties width={30} height={22} />;
 }
 
 function SmallActionButton({
@@ -241,13 +240,78 @@ function CompactField({
         value={value}
         onChangeText={onChangeText}
         keyboardType="numeric"
-        placeholder=""
         placeholderTextColor="#9CA3AF"
         style={styles.compactFieldInput}
       />
     </View>
   );
 }
+
+/* ─── Party row (animated) ─────────────────────────────────────────────────── */
+
+type PartyRowProps = {
+  item: PartyVoteEntry;
+  removable: boolean;
+  onChangeVotes: (value: string) => void;
+  onRemove: () => void;
+};
+
+function PartyRow({ item, removable, onChangeVotes, onRemove }: PartyRowProps) {
+  const fullName = getPartyInfo(item.party)?.fullName ?? "";
+
+  return (
+    <Animated.View
+      entering={FadeInDown.duration(260)}
+      exiting={FadeOutUp.duration(200)}
+      layout={LinearTransition.duration(220)}
+      style={[styles.partyRow, styles.partyRowBorder]}
+    >
+      <View style={styles.partyInfoWrap}>
+        <PartyLogo party={item.party} />
+
+        <View style={styles.partyTextWrap}>
+          <AppText style={styles.partyName} numberOfLines={1}>
+            {item.party}
+          </AppText>
+          {fullName ? (
+            <AppText
+              style={styles.partyFullName}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {fullName}
+            </AppText>
+          ) : null}
+        </View>
+      </View>
+
+      <View style={styles.partyActionWrap}>
+        <TextInput
+          value={String(item.votes ?? "")}
+          onChangeText={onChangeVotes}
+          keyboardType="numeric"
+          placeholder="0"
+          placeholderTextColor="#9CA3AF"
+          style={styles.voteInput}
+        />
+      </View>
+
+      {removable ? (
+        <Pressable
+          onPress={onRemove}
+          hitSlop={8}
+          style={styles.removePartyBtn}
+          accessibilityRole="button"
+          accessibilityLabel={`Remove ${item.party}`}
+        >
+          <Ionicons name="close" size={11} color="#FFFFFF" />
+        </Pressable>
+      ) : null}
+    </Animated.View>
+  );
+}
+
+/* ─── Utility: commencement context resolver ──────────────────────────────── */
 
 function resolveCommencementContext(input: {
   electionId?: string;
@@ -274,6 +338,22 @@ function resolveCommencementContext(input: {
   };
 }
 
+/**
+ * Strips any legacy "Other Parties" catch-all entries. Called on hydrate so
+ * the new picker flow becomes the only way to add beyond the popular 4.
+ * Returns the SAME reference when nothing changed → lets us skip a needless
+ * disk write.
+ */
+function normalizePartyList(draft: ElectionResultDraft): ElectionResultDraft {
+  const filtered = draft.votesPerParty.filter(
+    (p) => !isGenericOthersEntry(p.party)
+  );
+  if (filtered.length === draft.votesPerParty.length) return draft;
+  return { ...draft, votesPerParty: filtered };
+}
+
+/* ─── Screen ──────────────────────────────────────────────────────────────── */
+
 export default function SubmitElectionReportScreen() {
   const params = useLocalSearchParams<{
     electionId?: string;
@@ -296,57 +376,50 @@ export default function SubmitElectionReportScreen() {
   const [invalidReason, setInvalidReason] = useState("");
   const [feedback, setFeedback] = useState<FeedbackState>(initialFeedbackState);
 
+  // Party picker state — sheet ref + search query (parent-controlled).
+  const partyPickerRef = useRef<BottomSheetModal>(null);
+  const [partyPickerQuery, setPartyPickerQuery] = useState("");
+
   const isOffline = !isConnected || !isInternetReachable;
+
+  /* ── Hydrate draft from storage (or build a fresh one) ── */
 
   useEffect(() => {
     let mounted = true;
 
     const hydrateDraft = async () => {
+      const ctx = resolveCommencementContext({
+        electionId: params.electionId,
+        electionTitle: params.electionTitle,
+        pollingUnitName: params.pollingUnitName,
+        pollingUnitCode: params.pollingUnitCode,
+        ward: params.ward,
+        lga: params.lga,
+        state: params.state,
+      });
+
       try {
-        const storedDraft = await getResultDraft();
+        const stored = await getResultDraft();
         if (!mounted) return;
 
-        if (storedDraft) {
-          setDraft(storedDraft);
-          return;
+        const base =
+          stored ??
+          buildInitialResultDraft(ctx, params.votingStartTime?.trim() || "");
+
+        const normalized = normalizePartyList(base);
+        setDraft(normalized);
+
+        // Persist only if we actually changed something OR this is a brand
+        // new draft. Avoids redundant writes on every screen open.
+        if (normalized !== base || !stored) {
+          await saveResultDraft(normalized);
         }
-
-        const ctx = resolveCommencementContext({
-          electionId: params.electionId,
-          electionTitle: params.electionTitle,
-          pollingUnitName: params.pollingUnitName,
-          pollingUnitCode: params.pollingUnitCode,
-          ward: params.ward,
-          lga: params.lga,
-          state: params.state,
-        });
-
-        const freshDraft = buildInitialResultDraft(
-          ctx,
-          params.votingStartTime?.trim() || ""
-        );
-
-        setDraft(freshDraft);
-        await saveResultDraft(freshDraft);
       } catch {
         if (!mounted) return;
-
-        const fallbackCtx = resolveCommencementContext({
-          electionId: params.electionId,
-          electionTitle: params.electionTitle,
-          pollingUnitName: params.pollingUnitName,
-          pollingUnitCode: params.pollingUnitCode,
-          ward: params.ward,
-          lga: params.lga,
-          state: params.state,
-        });
-
-        const fallbackDraft = buildInitialResultDraft(
-          fallbackCtx,
-          params.votingStartTime?.trim() || ""
+        const fallback = normalizePartyList(
+          buildInitialResultDraft(ctx, params.votingStartTime?.trim() || "")
         );
-
-        setDraft(fallbackDraft);
+        setDraft(fallback);
       }
     };
 
@@ -366,19 +439,108 @@ export default function SubmitElectionReportScreen() {
     params.votingStartTime,
   ]);
 
-  const totalValidVotes = useMemo(() => {
-    if (!draft) return 0;
-    return calculateTotalValidVotes(draft.votesPerParty);
-  }, [draft]);
+  /* ── Derived state ── */
+
+  // Rows actually shown in the table. Filters out any legacy "Other Parties"
+  // row that might have slipped past normalize (defensive).
+  const renderableParties = useMemo(
+    () => draft?.votesPerParty.filter((p) => !isGenericOthersEntry(p.party)) ?? [],
+    [draft]
+  );
+
+  // Picker options — PARTY_CATALOG minus already-added parties, then filtered
+  // by the sheet's search query. We filter here rather than relying on the
+  // sheet's internal filter because SelectPickerSheet currently ignores its
+  // own `query` prop when `options` is provided.
+  const availablePartyOptions = useMemo(() => {
+    if (!draft) return [];
+    const used = new Set(
+      draft.votesPerParty.map((v) => v.party.trim().toUpperCase())
+    );
+    const available = PARTY_CATALOG.filter(
+      (p) => !used.has(p.code.toUpperCase())
+    );
+    const labels = available.map(formatPartyPickerLabel);
+
+    const q = partyPickerQuery.trim().toLowerCase();
+    if (!q) return labels;
+    return labels.filter((l) => l.toLowerCase().includes(q));
+  }, [draft, partyPickerQuery]);
+
+  // Total valid votes computed locally from renderable rows (not from the
+  // full draft) so any hidden "Other Parties" entry can't skew the number.
+  const totalValidVotes = useMemo(
+    () =>
+      renderableParties.reduce(
+        (sum, p) => sum + (parseInt(String(p.votes), 10) || 0),
+        0
+      ),
+    [renderableParties]
+  );
+
+  /* ── Draft mutations ── */
 
   const updateDraft = async (next: ElectionResultDraft) => {
     setDraft(next);
     await saveResultDraft(next);
   };
 
-  const pickImage = async () => {
+  const handleChangeVotes = async (id: string, rawVotes: string) => {
+    if (!draft) return;
+    const cleaned = rawVotes.replace(/[^\d]/g, "");
+    await updateDraft({
+      ...draft,
+      votesPerParty: draft.votesPerParty.map((p) =>
+        p.id === id ? { ...p, votes: cleaned } : p
+      ),
+    });
+  };
+
+  const handleRemoveParty = async (id: string) => {
+    if (!draft) return;
+    await updateDraft({
+      ...draft,
+      votesPerParty: draft.votesPerParty.filter((p) => p.id !== id),
+    });
+  };
+
+  /* ── Party picker ── */
+
+  const handleOpenPartyPicker = () => {
+    setPartyPickerQuery("");
+    partyPickerRef.current?.present();
+  };
+
+  const handleSelectParty = async (label: string) => {
     if (!draft) return;
 
+    const code = parsePartyPickerLabel(label);
+    if (!code) return;
+
+    // Safety: race condition between render and tap could theoretically show
+    // an already-added party. Double-check before mutating.
+    const alreadyAdded = draft.votesPerParty.some(
+      (p) => p.party.trim().toUpperCase() === code.toUpperCase()
+    );
+    if (alreadyAdded) return;
+
+    const newEntry = {
+      id: `party-${code}-${Date.now()}`,
+      party: code,
+      candidate: "",
+      votes: "0",
+    } as PartyVoteEntry;
+
+    await updateDraft({
+      ...draft,
+      votesPerParty: [...draft.votesPerParty, newEntry],
+    });
+  };
+
+  /* ── Media capture/pick (unchanged from before) ── */
+
+  const pickImage = async () => {
+    if (!draft) return;
     const allowed = await ensureMediaLibraryPermission();
     if (!allowed) return;
 
@@ -388,7 +550,6 @@ export default function SubmitElectionReportScreen() {
       allowsEditing: false,
       selectionLimit: 1,
     });
-
     if (result.canceled || !result.assets?.length) return;
 
     const staged = await stageMediaFile({
@@ -397,15 +558,11 @@ export default function SubmitElectionReportScreen() {
       mimeType: result.assets[0].mimeType ?? "image/jpeg",
     });
 
-    await updateDraft({
-      ...draft,
-      signedResultImageUri: staged.localUri,
-    });
+    await updateDraft({ ...draft, signedResultImageUri: staged.localUri });
   };
 
   const takePhoto = async () => {
     if (!draft) return;
-
     const allowed = await ensureCameraPermission();
     if (!allowed) return;
 
@@ -414,7 +571,6 @@ export default function SubmitElectionReportScreen() {
       quality: 0.9,
       allowsEditing: false,
     });
-
     if (result.canceled || !result.assets?.length) return;
 
     const staged = await stageMediaFile({
@@ -423,15 +579,11 @@ export default function SubmitElectionReportScreen() {
       mimeType: result.assets[0].mimeType ?? "image/jpeg",
     });
 
-    await updateDraft({
-      ...draft,
-      signedResultImageUri: staged.localUri,
-    });
+    await updateDraft({ ...draft, signedResultImageUri: staged.localUri });
   };
 
   const pickVideo = async () => {
     if (!draft) return;
-
     const allowed = await ensureMediaLibraryPermission();
     if (!allowed) return;
 
@@ -442,7 +594,6 @@ export default function SubmitElectionReportScreen() {
       allowsEditing: false,
       selectionLimit: 1,
     });
-
     if (result.canceled || !result.assets?.length) return;
 
     const staged = await stageMediaFile({
@@ -451,15 +602,11 @@ export default function SubmitElectionReportScreen() {
       mimeType: result.assets[0].mimeType ?? "video/mp4",
     });
 
-    await updateDraft({
-      ...draft,
-      resultAnnouncementVideoUri: staged.localUri,
-    });
+    await updateDraft({ ...draft, resultAnnouncementVideoUri: staged.localUri });
   };
 
   const recordVideo = async () => {
     if (!draft) return;
-
     const allowed = await ensureCameraPermission();
     if (!allowed) return;
 
@@ -469,7 +616,6 @@ export default function SubmitElectionReportScreen() {
       videoMaxDuration: 180,
       allowsEditing: false,
     });
-
     if (result.canceled || !result.assets?.length) return;
 
     const staged = await stageMediaFile({
@@ -478,15 +624,13 @@ export default function SubmitElectionReportScreen() {
       mimeType: result.assets[0].mimeType ?? "video/mp4",
     });
 
-    await updateDraft({
-      ...draft,
-      resultAnnouncementVideoUri: staged.localUri,
-    });
+    await updateDraft({ ...draft, resultAnnouncementVideoUri: staged.localUri });
   };
+
+  /* ── Submit ── */
 
   const handleSubmit = async () => {
     if (!draft) return;
-
     setLoading(true);
 
     const validation = validateElectionResult(draft);
@@ -517,6 +661,8 @@ export default function SubmitElectionReportScreen() {
         : "Report submitted successfully.",
     });
   };
+
+  /* ── Outcome states ── */
 
   if (viewState === "success") {
     return (
@@ -571,6 +717,8 @@ export default function SubmitElectionReportScreen() {
     );
   }
 
+  /* ── Main form ── */
+
   return (
     <AppGradientScreen>
       <ScrollView
@@ -605,10 +753,7 @@ export default function SubmitElectionReportScreen() {
           onSecondaryAction={
             draft.signedResultImageUri
               ? () =>
-                  void updateDraft({
-                    ...draft,
-                    signedResultImageUri: null,
-                  })
+                  void updateDraft({ ...draft, signedResultImageUri: null })
               : pickImage
           }
           selectedUri={draft.signedResultImageUri}
@@ -648,53 +793,49 @@ export default function SubmitElectionReportScreen() {
 
         <AppText style={styles.fieldLabel}>Enter Votes Per Party</AppText>
 
+        {/* ── Votes table ── */}
         <View style={styles.tableCard}>
           <View style={styles.tableHeader}>
             <AppText style={styles.tableHeaderText}>Party</AppText>
             <AppText style={styles.tableHeaderText}>Votes</AppText>
           </View>
 
-          {draft.votesPerParty.map((item, index) => (
-            <View
-              key={item.id}
-              style={[
+          {renderableParties.map((item) => {
+            const removable = !isPopularParty(item.party);
+            return (
+              <PartyRow
+                key={item.id}
+                item={item}
+                removable={removable}
+                onChangeVotes={(value) => void handleChangeVotes(item.id, value)}
+                onRemove={() => void handleRemoveParty(item.id)}
+              />
+            );
+          })}
+
+          {/* Add More Party trigger — opens the SelectPickerSheet */}
+          <Animated.View layout={LinearTransition.duration(220)}>
+            <Pressable
+              style={({ pressed }) => [
                 styles.partyRow,
-                index !== draft.votesPerParty.length - 1 &&
-                  styles.partyRowBorder,
+                styles.addPartyRow,
+                pressed && styles.addPartyRowPressed,
               ]}
+              onPress={handleOpenPartyPicker}
+              accessibilityRole="button"
+              accessibilityLabel="Add more parties to the results"
             >
               <View style={styles.partyInfoWrap}>
-                <PartyLogo party={item.party} />
-
-                <View style={styles.partyTextWrap}>
-                  <AppText style={styles.partyName}>{item.party}</AppText>
-                  {item.candidate ? (
-                    <AppText style={styles.candidateName}>
-                      {item.candidate}
-                    </AppText>
-                  ) : null}
-                </View>
+                <OtherParties width={30} height={22} />
+                <AppText style={styles.addPartyText}>Add More Party</AppText>
               </View>
-
-              <TextInput
-                value={String(item.votes)}
-                onChangeText={(votes) => {
-                  void updateDraft({
-                    ...draft,
-                    votesPerParty: draft.votesPerParty.map((partyVote) =>
-                      partyVote.id === item.id
-                        ? { ...partyVote, votes: votes.replace(/[^\d]/g, "") }
-                        : partyVote
-                    ),
-                  });
-                }}
-                keyboardType="numeric"
-                placeholder="0"
-                placeholderTextColor="#9CA3AF"
-                style={styles.voteInput}
+              <Ionicons
+                name="chevron-down"
+                size={18}
+                color={Theme.colors.textMuted}
               />
-            </View>
-          ))}
+            </Pressable>
+          </Animated.View>
 
           <View style={styles.totalRow}>
             <AppText style={styles.totalLabel}>Total Valid Votes</AppText>
@@ -702,6 +843,7 @@ export default function SubmitElectionReportScreen() {
           </View>
         </View>
 
+        {/* ── Administrative figures ── */}
         <View style={styles.section}>
           <AppText style={styles.sectionTitle}>
             Administrative Figures on the Result sheet (EC8A)
@@ -720,7 +862,6 @@ export default function SubmitElectionReportScreen() {
                 })
               }
             />
-
             <CompactField
               label="Rejected Voters"
               value={draft.rejectedVoters}
@@ -744,7 +885,6 @@ export default function SubmitElectionReportScreen() {
                 })
               }
             />
-
             <CompactField
               label="Rejected Ballots"
               value={draft.rejectedBallots}
@@ -770,11 +910,11 @@ export default function SubmitElectionReportScreen() {
                 }
               />
             </View>
-
             <View style={styles.halfFieldPlaceholder} />
           </View>
         </View>
 
+        {/* ── Truthfulness + submit ── */}
         <Pressable
           style={styles.truthRow}
           onPress={() =>
@@ -798,7 +938,7 @@ export default function SubmitElectionReportScreen() {
           <AppText style={styles.truthText}>
             I confirm this data matches the signed EC8A result sheet I have
             photographed. I understand that false reporting is an offence under
-            Section 117 of the Electoral Act 2022.
+            Section 117 of the Electoral Act 2026.
           </AppText>
         </Pressable>
 
@@ -810,9 +950,22 @@ export default function SubmitElectionReportScreen() {
           style={styles.submitBtn}
         />
       </ScrollView>
+
+      {/* ── Party picker (mounted at screen level, not the ScrollView) ── */}
+      <SelectPickerSheet
+        ref={partyPickerRef}
+        title="Select Party"
+        query={partyPickerQuery}
+        onChangeQuery={setPartyPickerQuery}
+        selectedValue=""
+        onSelectValue={(label) => void handleSelectParty(label)}
+        options={availablePartyOptions}
+      />
     </AppGradientScreen>
   );
 }
+
+/* ─── Styles ──────────────────────────────────────────────────────────────── */
 
 const styles = StyleSheet.create({
   content: {
@@ -848,6 +1001,8 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
 
+  /* Offline banner */
+
   offlineBanner: {
     minHeight: 52,
     backgroundColor: "#F24E1E",
@@ -859,7 +1014,6 @@ const styles = StyleSheet.create({
     marginHorizontal: -16,
     marginBottom: 6,
   },
-
   offlineIconWrap: {
     width: 26,
     height: 26,
@@ -869,7 +1023,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
   offlineBannerText: {
     flex: 1,
     color: "#FFFFFF",
@@ -878,34 +1031,34 @@ const styles = StyleSheet.create({
     fontFamily: Theme.fonts.body.semibold,
   },
 
+  /* Section headings */
+
   section: {
     gap: 4,
   },
-
   sectionTitle: {
     fontSize: 14,
     lineHeight: 20,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
   },
-
   sectionSubtitle: {
     fontSize: 12,
     lineHeight: 18,
     color: Theme.colors.textMuted,
   },
 
+  /* Evidence (upload) cards */
+
   evidenceBlock: {
     gap: 6,
   },
-
   fieldLabel: {
     fontSize: 13,
     lineHeight: 18,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
   },
-
   uploadCard: {
     borderRadius: 16,
     borderWidth: 1.2,
@@ -917,7 +1070,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
-
   previewIconBadge: {
     width: 36,
     height: 36,
@@ -926,7 +1078,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
   uploadLead: {
     fontSize: 13,
     lineHeight: 18,
@@ -934,13 +1085,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
     maxWidth: 280,
   },
-
   uploadActionRow: {
     flexDirection: "row",
     gap: 10,
     width: "100%",
   },
-
   smallActionBtn: {
     flex: 1,
     minHeight: 36,
@@ -949,31 +1098,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 12,
   },
-
   smallActionBtnPrimary: {
     backgroundColor: Theme.colors.primary,
   },
-
   smallActionBtnSecondary: {
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: Theme.colors.primary,
   },
-
   smallActionBtnText: {
     fontSize: 12,
     lineHeight: 16,
     fontFamily: Theme.fonts.body.semibold,
   },
-
   smallActionBtnTextPrimary: {
     color: "#FFFFFF",
   },
-
   smallActionBtnTextSecondary: {
     color: Theme.colors.primary,
   },
-
   previewCard: {
     height: 160,
     borderRadius: 16,
@@ -982,12 +1125,10 @@ const styles = StyleSheet.create({
     borderColor: "#22B8B0",
     backgroundColor: "#EAF7F6",
   },
-
   previewImage: {
     width: "100%",
     height: "100%",
   },
-
   videoPreviewWrap: {
     flex: 1,
     alignItems: "center",
@@ -995,21 +1136,18 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 16,
   },
-
   previewLead: {
     fontSize: 13,
     lineHeight: 18,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
   },
-
   previewSub: {
     fontSize: 12,
     lineHeight: 17,
     color: Theme.colors.textMuted,
     textAlign: "center",
   },
-
   previewRemoveBtn: {
     position: "absolute",
     top: 8,
@@ -1021,12 +1159,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
   warningText: {
     fontSize: 11,
     lineHeight: 15,
     color: "#F15A24",
   },
+
+  /* Votes table */
 
   tableCard: {
     borderRadius: 16,
@@ -1035,7 +1174,6 @@ const styles = StyleSheet.create({
     borderColor: "#DDE6E9",
     backgroundColor: "#FFFFFF",
   },
-
   tableHeader: {
     minHeight: 40,
     backgroundColor: Theme.colors.primary,
@@ -1044,7 +1182,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-
   tableHeaderText: {
     fontSize: 13,
     lineHeight: 17,
@@ -1061,12 +1198,10 @@ const styles = StyleSheet.create({
     gap: 12,
     backgroundColor: "#FFFFFF",
   },
-
   partyRowBorder: {
     borderBottomWidth: 1,
     borderBottomColor: "#EEF2F5",
   },
-
   partyInfoWrap: {
     flex: 1,
     flexDirection: "row",
@@ -1074,44 +1209,28 @@ const styles = StyleSheet.create({
     gap: 10,
     minWidth: 0,
   },
-
-  partyLogoStub: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    backgroundColor: "#F3F4F6",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-
-  partyLogoStubText: {
-    fontSize: 9,
-    lineHeight: 11,
-    color: Theme.colors.text,
-    fontFamily: Theme.fonts.body.semibold,
-  },
-
   partyTextWrap: {
     flex: 1,
     minWidth: 0,
     gap: 2,
   },
-
   partyName: {
     fontSize: 14,
     lineHeight: 18,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
   },
-
-  candidateName: {
+  // Previously this slot held the candidate name; now it holds the party's
+  // full official name. Style tweaked for a slightly smaller muted read.
+  partyFullName: {
     fontSize: 12,
     lineHeight: 16,
     color: Theme.colors.textMuted,
   },
-
+  partyActionWrap: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
   voteInput: {
     width: 120,
     height: 42,
@@ -1127,6 +1246,37 @@ const styles = StyleSheet.create({
     fontFamily: Theme.fonts.body.semibold,
     textAlign: "right",
   },
+  // Tiny circular remove button in the top-right corner of user-added rows.
+  // Absolute so it can't shift the row layout; sized small + red so it's a
+  // clear destructive affordance without being shouty.
+  removePartyBtn: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#F15A24",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  /* Add More Party trigger */
+
+  addPartyRow: {
+    backgroundColor: "#FFFFFF",
+  },
+  addPartyRowPressed: {
+    backgroundColor: "#F7F9FA",
+  },
+  addPartyText: {
+    fontSize: 14,
+    lineHeight: 18,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+
+  /* Total row */
 
   totalRow: {
     minHeight: 42,
@@ -1136,14 +1286,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-
   totalLabel: {
     fontSize: 14,
     lineHeight: 18,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.medium,
   },
-
   totalValue: {
     fontSize: 14,
     lineHeight: 18,
@@ -1151,35 +1299,31 @@ const styles = StyleSheet.create({
     fontFamily: Theme.fonts.body.semibold,
   },
 
+  /* Admin grid */
+
   adminGrid: {
     gap: 12,
   },
-
   adminGridRow: {
     flexDirection: "row",
     gap: 12,
   },
-
   halfField: {
     flex: 1,
   },
-
   halfFieldPlaceholder: {
     flex: 1,
   },
-
   compactFieldWrap: {
     flex: 1,
     gap: 6,
   },
-
   compactFieldLabel: {
     fontSize: 13,
     lineHeight: 18,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.medium,
   },
-
   compactFieldInput: {
     minHeight: 40,
     borderRadius: 10,
@@ -1194,13 +1338,14 @@ const styles = StyleSheet.create({
     fontFamily: Theme.fonts.body.medium,
   },
 
+  /* Truthfulness + submit */
+
   truthRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 10,
     marginTop: 2,
   },
-
   checkWrap: {
     width: 22,
     height: 22,
@@ -1212,19 +1357,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 1,
   },
-
   checkWrapActive: {
     backgroundColor: Theme.colors.primary,
     borderColor: Theme.colors.primary,
   },
-
   truthText: {
     flex: 1,
     fontSize: 12,
     lineHeight: 17,
     color: Theme.colors.textMuted,
   },
-
   submitBtn: {
     marginTop: 4,
     marginVertical: 0,

@@ -15,15 +15,15 @@ import MyPollingUnit from "@/svgs/app/profile/MyPollingUnit";
 import Notification from "@/svgs/app/profile/Notification";
 import Profile from "@/svgs/app/profile/Profile";
 import PUCheck from "@/svgs/app/profile/PUCheck";
+import PULocator from "@/svgs/app/profile/PULocator";
 import Security from "@/svgs/app/profile/Security";
 import Support from "@/svgs/app/profile/Support";
 import SignOut from "@/svgs/app/SignOut";
 import React, { ReactNode } from "react";
 
 // └─────────────────────────────────────────────────────────────────────────┘
-export const DEV_USER_TYPE: DevUserType = "volunteer";
+export const DEV_USER_TYPE: DevUserType = "observer-verified";
 // ─────────────────────────────────────────────────────────────────────────────
-
 
 /* ───── Types ───── */
 
@@ -199,7 +199,7 @@ export function getMeAccountItems(user: MeUser): MeMenuItem[] {
     });
     items.push({
       id: "archive-reports",
-      title: "Archive Reports",
+      title: "Digital Vault",
       subtitle: `${user.reportsCount} reports across ${user.electionsCount} elections`,
       icon: <ArchiveReport width={42} height={42} />,
     });
@@ -231,6 +231,12 @@ export function getMeAccountItems(user: MeUser): MeMenuItem[] {
 
 export function getMeOtherItems(): MeMenuItem[] {
   return [
+    {
+      id: "polling-unit-locator",
+      title: "Polling Unit Locator",
+      subtitle: "Locate your polling unit",
+      icon: <PULocator width={42} height={42} />,
+    },
     {
       id: "notifications",
       title: "Notifications",

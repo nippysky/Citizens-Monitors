@@ -11,7 +11,7 @@ export type NotificationItem = {
   body: string[];
 };
 
-export const USE_EMPTY_NOTIFICATIONS_DEV = true;
+export const USE_EMPTY_NOTIFICATIONS_DEV = false;
 
 export const mockNotifications: NotificationItem[] = [
   {

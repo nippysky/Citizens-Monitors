@@ -73,7 +73,7 @@ const DEV_ELECTION_DETAILS_OVERRIDE: {
 } = {
   enabled: false,
   electionId: "alimosho-lg-2026",
-  viewerMode: "public",
+  viewerMode: "observer",
   accessScope: "general",
   defaultTab: "overview",
 };

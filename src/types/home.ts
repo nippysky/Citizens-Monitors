@@ -56,6 +56,7 @@ export type InfoBannerItem =
 
 export type ElectionUpdateItem = {
   id: string;
+  collationId: string;
   tag: "RESULT" | "INCIDENT";
   title: string;
   timeAgo: string;

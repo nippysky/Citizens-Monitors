@@ -95,6 +95,7 @@ export default function CollationScreen() {
             title="Collation"
             subtitle={activeCollation.electionDateLabel}
             onNotifications={() => router.push(Paths.appNotifications)}
+            onHelp={() => router.push(Paths.appHelpSupport)}
           />
 
           <LiveCollationCarousel

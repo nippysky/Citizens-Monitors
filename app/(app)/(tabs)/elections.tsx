@@ -147,6 +147,7 @@ export default function ElectionsScreen() {
         <View style={styles.topSection}>
           <ScreenHeader
             onNotifications={() => router.push(Paths.appNotifications)}
+            onHelp={() => router.push(Paths.appHelpSupport)}
           />
 
           <ElectionScopeTabs value={scope} onChange={handleScopeChange} />

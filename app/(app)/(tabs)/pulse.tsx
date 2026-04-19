@@ -60,6 +60,7 @@ export default function PulseScreen() {
           <ScreenHeader
             title="Pulse"
             onNotifications={() => router.push(Paths.appNotifications)}
+            onHelp={() => router.push(Paths.appHelpSupport)}
           />
 
           <PulseScopeTabs

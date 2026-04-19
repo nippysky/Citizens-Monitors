@@ -228,6 +228,10 @@ export default function MeScreen() {
         pollingUnitSheetRef.current?.present();
         return;
 
+      case "polling-unit-locator":
+        router.push(Paths.voterPollingUnitLocator);
+        return;
+
       case "notifications":
         notificationSheetRef.current?.present();
         return;

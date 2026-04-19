@@ -80,27 +80,34 @@ function getHomeBanners(role: UserRole): InfoBannerItem[] {
 }
 
 // ── Election Updates (shared across all days with elections) ──
+// `collationId` links each update to a specific collation so the home screen's
+// "Collation updates" cards can deep-link into the correct collation + tab.
+// These IDs match the electionCards IDs further down ("election-1" etc.).
 const mockElectionUpdates: ElectionUpdateItem[] = [
   {
     id: "eu-1",
+    collationId: "election-1",
     tag: "RESULT",
     title: "Lagos Island results have been submitted",
     timeAgo: "2 mins ago",
   },
   {
     id: "eu-2",
+    collationId: "election-1",
     tag: "INCIDENT",
     title: "Report: Ballot box snatching attempt 03 by unknown individuals",
     timeAgo: "2 mins ago",
   },
   {
     id: "eu-3",
+    collationId: "election-2",
     tag: "RESULT",
     title: "Ikeja Ward 4 preliminary results uploaded",
     timeAgo: "5 mins ago",
   },
   {
     id: "eu-4",
+    collationId: "election-3",
     tag: "INCIDENT",
     title: "Voting machine malfunction reported at PU 012",
     timeAgo: "8 mins ago",
@@ -108,6 +115,8 @@ const mockElectionUpdates: ElectionUpdateItem[] = [
 ];
 
 // ── Discussion Room ──
+// Picsum URLs use seeded paths so the same seed always returns the same image
+// — they won't shuffle between renders like unseeded random would.
 const mockDiscussions: DiscussionItem[] = [
   {
     id: "d-1",
@@ -115,6 +124,7 @@ const mockDiscussions: DiscussionItem[] = [
     title: "Ballot stuffing happening now at our polling unit",
     author: "BoldTouch88",
     pollingUnit: "PU 024, Alimosho",
+    imageUrl: "https://picsum.photos/seed/ballot-pu-001/200/200",
   },
   {
     id: "d-2",
@@ -122,6 +132,7 @@ const mockDiscussions: DiscussionItem[] = [
     title: "Voter intimidation happening now at our polling unit",
     author: "IronEagle99",
     pollingUnit: "PU 024, Alimosho",
+    imageUrl: "https://picsum.photos/seed/crowd-tension-002/200/200",
   },
   {
     id: "d-3",
@@ -129,25 +140,31 @@ const mockDiscussions: DiscussionItem[] = [
     title: "INEC officials arrived late at several units in Surulere",
     author: "CivicWatch01",
     pollingUnit: "PU 008, Surulere",
+    imageUrl: "https://picsum.photos/seed/officials-late-003/200/200",
   },
 ];
 
 // ── Latest News ──
+// News thumbnails get a wider aspect (400×240) since news cards typically
+// show horizontal hero images rather than square thumbs.
 const mockNews: NewsItem[] = [
   {
     id: "news-1",
     title: "Young Nigerians' push for change must go beyond street..",
     date: "02/02/2026",
+    imageUrl: "https://picsum.photos/seed/youth-nigeria-001/400/240",
   },
   {
     id: "news-2",
     title: "Kano by-election: APC sweeps assembly seats",
     date: "02/02/2026",
+    imageUrl: "https://picsum.photos/seed/politics-kano-002/400/240",
   },
   {
     id: "news-3",
     title: "El-Rufai vs Nuhu Ribadu: Tinubu's secret opinion poll",
     date: "02/02/2026",
+    imageUrl: "https://picsum.photos/seed/poll-leaders-003/400/240",
   },
 ];
 

@@ -6,7 +6,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import DiscussionRoomSection from "@/components/home/DiscussionRoomSection";
 import ElectionCarousel from "@/components/home/ElectionCarousel";
-import ElectionUpdatesSection from "@/components/home/ElectionUpdatesSection";
 import HomeHeader from "@/components/home/HomeHeader";
 import LatestNewsSection from "@/components/home/LatestNewsSection";
 import QuietDayBanner from "@/components/home/QuietDayBanner";
@@ -24,6 +23,7 @@ import {
 } from "@/data/home";
 import { Theme } from "@/theme";
 import { CalendarDayItem } from "@/types/home";
+import CollationUpdatesSection from "@/components/home/CollationUpdatesSection";
 
 function roleLabelFromRole(role: typeof mockRole): string {
   if (role === "observer") return "Observer";
@@ -178,7 +178,7 @@ export default function HomeScreen() {
 
           <View style={styles.whiteSection}>
             {selectedContent.electionUpdates.length > 0 && (
-              <ElectionUpdatesSection items={selectedContent.electionUpdates} />
+              <CollationUpdatesSection items={selectedContent.electionUpdates} />
             )}
 
             {selectedContent.discussions.length > 0 && (

@@ -94,7 +94,7 @@ export default function ArchiveReportsScreen() {
       <View style={styles.screen}>
         <View style={styles.header}>
           <BackButton label="" />
-          <AppText style={styles.headerTitle}>My Archive Reports</AppText>
+          <AppText style={styles.headerTitle}>My Digital Vault</AppText>
         </View>
 
         <ScrollView

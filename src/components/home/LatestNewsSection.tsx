@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Image, Pressable, StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
@@ -14,25 +14,43 @@ type Props = {
 function NewsCard({ item }: { item: NewsItem }) {
   return (
     <Pressable
-      style={styles.card}
+      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
       onPress={() => router.push(Paths.newsDetails(item.id))}
     >
-      {/* Placeholder image */}
-      <View style={styles.imagePlaceholder}>
-        <Ionicons name="newspaper-outline" size={22} color={Theme.colors.textMuted} />
+      {/* Thumbnail: real image when available, newspaper icon fallback when not. */}
+      <View style={styles.thumbWrap}>
+        {item.imageUrl ? (
+          <Image
+            source={{ uri: item.imageUrl }}
+            style={styles.thumb}
+            resizeMode="cover"
+          />
+        ) : (
+          <Ionicons
+            name="newspaper-outline"
+            size={22}
+            color={Theme.colors.textMuted}
+          />
+        )}
       </View>
 
       <View style={styles.textBlock}>
-        <AppText style={styles.title} numberOfLines={2}>
+        <AppText style={styles.title} numberOfLines={2} ellipsizeMode="tail">
           {item.title}
         </AppText>
         <View style={styles.dateRow}>
           <View style={styles.dateDot} />
-          <AppText style={styles.dateText}>{item.date}</AppText>
+          <AppText style={styles.dateText} numberOfLines={1}>
+            {item.date}
+          </AppText>
         </View>
       </View>
 
-      <Ionicons name="chevron-forward" size={16} color={Theme.colors.textMuted} />
+      <Ionicons
+        name="chevron-forward"
+        size={16}
+        color={Theme.colors.textMuted}
+      />
     </Pressable>
   );
 }
@@ -42,7 +60,10 @@ export default function LatestNewsSection({ items }: Props) {
     <View style={styles.wrap}>
       <View style={styles.headerRow}>
         <AppText style={styles.sectionTitle}>Latest News & Insights</AppText>
-        <Pressable onPress={() => router.push(Paths.voterNewsAndInsights)}>
+        <Pressable
+          onPress={() => router.push(Paths.voterNewsAndInsights)}
+          hitSlop={8}
+        >
           <AppText style={styles.seeAll}>SEE ALL</AppText>
         </Pressable>
       </View>
@@ -77,6 +98,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontFamily: Theme.fonts.body.semibold,
     color: Theme.colors.primary,
+    letterSpacing: 0.4,
   },
   list: {
     gap: 14,
@@ -87,17 +109,28 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 4,
   },
-  imagePlaceholder: {
+  cardPressed: {
+    opacity: 0.7,
+  },
+  thumbWrap: {
     width: 60,
     height: 60,
     borderRadius: 12,
     backgroundColor: "rgba(17, 24, 39, 0.04)",
     alignItems: "center",
     justifyContent: "center",
+    // overflow: "hidden" is what makes the Image respect the borderRadius.
+    overflow: "hidden",
+  },
+  thumb: {
+    width: "100%",
+    height: "100%",
   },
   textBlock: {
     flex: 1,
     gap: 4,
+    // minWidth:0 lets long titles truncate cleanly in the flex row.
+    minWidth: 0,
   },
   title: {
     fontSize: 14,
