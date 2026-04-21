@@ -12,7 +12,6 @@ import CollationReviewReportsTab from "@/components/collation/CollationReviewRep
 import LiveCollationCarousel from "@/components/collation/LiveCollationCarousel";
 import { useLiveNotice } from "@/components/feedback/LiveNoticeProvider";
 import ScreenHeader from "@/components/elections/ScreenHeader";
-import TourTarget from "@/components/tour/TourTarget";
 import { Paths } from "@/constants/paths";
 import {
   collationDummyData,
@@ -84,8 +83,6 @@ export default function CollationScreen() {
             onNotifications={() => router.push(Paths.appNotifications)}
             onHelp={() => router.push(Paths.appHelpSupport)}
           />
-
-          <TourTarget id="collation.live-card">
             <LiveCollationCarousel
               items={collationDummyData}
               activeIndex={activeIndex}
@@ -94,7 +91,7 @@ export default function CollationScreen() {
                 setActiveTab("overview");
               }}
             />
-          </TourTarget>
+        
 
           <CollationContextTabs value={activeTab} onChange={setActiveTab} />
         </View>

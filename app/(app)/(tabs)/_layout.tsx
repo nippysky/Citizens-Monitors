@@ -55,9 +55,25 @@ export default function TabsLayout() {
   return (
     <Tabs
       tabBar={(props) => (
-        <TourTarget id="app.tabbar">
+        <View style={styles.tabBarHost}>
           <BottomTabBar {...props} />
-        </TourTarget>
+
+          <View
+            pointerEvents="none"
+            style={[styles.tabBarTourLayer, { height: tabBarHeight }]}
+          >
+            <TourTarget id="app.tabbar">
+              <View
+                style={[
+                  styles.tabBarTourTarget,
+                  {
+                    height: tabBarHeight,
+                  },
+                ]}
+              />
+            </TourTarget>
+          </View>
+        </View>
       )}
       screenOptions={{
         headerShown: false,
@@ -159,6 +175,26 @@ export default function TabsLayout() {
 }
 
 const styles = StyleSheet.create({
+  tabBarHost: {
+    position: "relative",
+  },
+
+  tabBarTourLayer: {
+    ...StyleSheet.absoluteFillObject,
+    top: undefined,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "flex-end",
+  },
+
+  tabBarTourTarget: {
+    width: "100%",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    backgroundColor: "transparent",
+  },
+
   tabBar: {
     backgroundColor: "#FFFFFF",
     borderTopWidth: 1.5,

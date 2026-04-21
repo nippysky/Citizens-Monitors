@@ -1,47 +1,48 @@
+import { Pressable, StyleSheet, View } from "react-native";
+import AppText from "@/components/ui/AppText";
 import { Theme } from "@/theme";
-import { StyleSheet, Text, View } from "react-native";
 
-type Props = {
-  onPressTerms?: () => void;
-  onPressPrivacy?: () => void;
-};
-
-export default function AuthTermsNotice({
-  onPressTerms,
-  onPressPrivacy,
-}: Props) {
+export default function AuthTermsNotice() {
   return (
-    <View style={styles.wrap}>
-      <Text style={styles.text}>
-        By registering you agree to our{" "}
-        <Text style={styles.link} onPress={onPressTerms}>
-          Terms of{"\n"}Use
-        </Text>{" "}
-        &{" "}
-        <Text style={styles.link} onPress={onPressPrivacy}>
-          Privacy Policy.
-        </Text>
-      </Text>
+    <View style={styles.container}>
+      <AppText style={styles.text}>
+        By registering you agree to our:
+      </AppText>
+
+      <View style={styles.linksRow}>
+        <Pressable onPress={() => {}}>
+          <AppText style={styles.link}>Terms of Use</AppText>
+        </Pressable>
+
+        <AppText style={styles.text}> & </AppText>
+
+        <Pressable onPress={() => {}}>
+          <AppText style={styles.link}>Privacy Policy</AppText>
+        </Pressable>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
+  container: {
     alignItems: "center",
-    paddingHorizontal: 18,
+    gap: 6, // 👈 nice breathing space between lines
+    paddingHorizontal: 16,
   },
-
   text: {
-    textAlign: "center",
-    color: Theme.colors.textMuted,
     fontSize: 13,
-    lineHeight: 22,
-    fontFamily: Theme.fonts.body.regular,
+    color: Theme.colors.textMuted,
+    textAlign: "center",
   },
-
+  linksRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   link: {
+    fontSize: 13,
     color: Theme.colors.primary,
-    fontFamily: Theme.fonts.body.medium,
+    fontWeight: "600",
   },
 });

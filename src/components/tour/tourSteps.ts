@@ -13,7 +13,6 @@ export type TourStep = {
   placement?: "above" | "below" | "auto";
   highlightPadding?: StepPadding;
   highlightRadius?: number;
-  /** When set, the tooltip arrow points at the center of this tab index (0–4). */
   arrowAtTab?: 0 | 1 | 2 | 3 | 4;
 };
 
@@ -26,7 +25,7 @@ export const TOUR_STEPS: TourStep[] = [
     description:
       "Tap any date to view elections happening that day. Use the calendar to explore all events.",
     placement: "below",
-    highlightPadding: { top: 6, bottom: 6, horizontal: 8 },
+    highlightPadding: { top: 2, bottom: 2, horizontal: 4 },
     highlightRadius: 18,
   },
   {
@@ -37,8 +36,7 @@ export const TOUR_STEPS: TourStep[] = [
     description:
       "Stay ahead of upcoming elections. View dates at a glance and plan when to monitor.",
     placement: "above",
-    // Negative top inset cancels out the BottomTabBar's internal layout overhang.
-    highlightPadding: { top: -8, bottom: 0, horizontal: 0 },
+    highlightPadding: { top: 0, bottom: 0, horizontal: 0 },
     highlightRadius: 24,
     arrowAtTab: 1,
   },
@@ -50,7 +48,7 @@ export const TOUR_STEPS: TourStep[] = [
     description:
       "See live, upcoming, and completed elections in one place. Track what matters to you.",
     placement: "below",
-    highlightPadding: { top: 4, bottom: 4, horizontal: 6 },
+    highlightPadding: { top: 2, bottom: 2, horizontal: 2 },
     highlightRadius: 18,
   },
   {
@@ -61,7 +59,7 @@ export const TOUR_STEPS: TourStep[] = [
     description:
       "View live collation data from polling units and wards as results are submitted.",
     placement: "above",
-    highlightPadding: { top: -8, bottom: 0, horizontal: 0 },
+    highlightPadding: { top: 0, bottom: 0, horizontal: 0 },
     highlightRadius: 24,
     arrowAtTab: 2,
   },
@@ -73,7 +71,7 @@ export const TOUR_STEPS: TourStep[] = [
     description:
       "Get alerts on important updates, incidents, and announcements.",
     placement: "above",
-    highlightPadding: { top: -8, bottom: 0, horizontal: 0 },
+    highlightPadding: { top: 0, bottom: 0, horizontal: 0 },
     highlightRadius: 24,
     arrowAtTab: 3,
   },
@@ -85,7 +83,7 @@ export const TOUR_STEPS: TourStep[] = [
     description:
       "Manage your profile details, notifications, support, and security here.",
     placement: "above",
-    highlightPadding: { top: -8, bottom: 0, horizontal: 0 },
+    highlightPadding: { top: 0, bottom: 0, horizontal: 0 },
     highlightRadius: 24,
     arrowAtTab: 4,
   },
@@ -97,7 +95,7 @@ export const TOUR_STEPS: TourStep[] = [
     description:
       "Set up your profile, verify your account, and access your polling unit details.",
     placement: "below",
-    highlightPadding: { top: 4, bottom: 6, horizontal: 8 },
+    highlightPadding: { top: 2, bottom: 2, horizontal: 0 },
     highlightRadius: 18,
   },
 ];

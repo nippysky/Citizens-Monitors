@@ -4,7 +4,6 @@ import {
   Animated,
   Image,
   PanResponder,
-  Platform,
   Pressable,
   StyleSheet,
   View,
@@ -33,17 +32,18 @@ export default function IntroScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
-  const viewportHeight = height - insets.top - insets.bottom;
-  const footerHeight = 92;
+  const slides = useMemo(() => INTRO_SLIDES, []);
+
+  const safeBottom = Math.max(insets.bottom, 12);
+  const footerHeight = 68 + safeBottom;
 
   const phoneWidth = Math.min(width * 0.86, 360);
   const phoneHeight = phoneWidth * (525 / 390);
 
   const phoneTop = 0;
   const greenTop = phoneTop + 20;
-  const contentTop = phoneTop + phoneHeight + 25;
 
-  const slides = useMemo(() => INTRO_SLIDES, []);
+  const contentTop = phoneTop + phoneHeight + 18;
 
   const transitionTo = useCallback(
     (nextIndex: number) => {
@@ -59,13 +59,14 @@ export default function IntroScreen() {
           useNativeDriver: true,
         }),
         Animated.timing(scaleAnim, {
-          toValue: 0.96,
+          toValue: 0.968,
           duration: 180,
           useNativeDriver: true,
         }),
       ]).start(() => {
         activeIndexRef.current = nextIndex;
         setActiveIndex(nextIndex);
+
         Animated.parallel([
           Animated.timing(fadeAnim, {
             toValue: 1,
@@ -87,14 +88,13 @@ export default function IntroScreen() {
 
   const panResponder = useRef(
     PanResponder.create({
-      // ← Android needs these capture handlers to win the touch event
       onStartShouldSetPanResponder: () => false,
       onStartShouldSetPanResponderCapture: () => false,
       onMoveShouldSetPanResponder: (_, g) =>
         Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 10,
       onMoveShouldSetPanResponderCapture: (_, g) =>
         Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 10,
-      onPanResponderTerminationRequest: () => false, // ← don't let Android steal mid-swipe
+      onPanResponderTerminationRequest: () => false,
       onPanResponderRelease: (_, g) => {
         if (g.dx < -SWIPE_THRESHOLD) {
           transitionTo(activeIndexRef.current + 1);
@@ -115,6 +115,7 @@ export default function IntroScreen() {
       router.replace("/(public)/welcome");
       return;
     }
+
     transitionTo(activeIndex + 1);
   }, [activeIndex, isLast, transitionTo]);
 
@@ -123,24 +124,21 @@ export default function IntroScreen() {
   }, [activeIndex, transitionTo]);
 
   return (
-    <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
+    <SafeAreaView edges={["top"]} style={styles.safe}>
       <View
-        style={[styles.page, { width, height: viewportHeight }]}
+        style={[styles.page, { width, height }]}
         {...panResponder.panHandlers}
-        // ← tells Android to composite this layer, fixes overflow clipping
         renderToHardwareTextureAndroid
       >
-        {/* Static green background */}
         <View
-          style={[styles.greenLayer, { top: greenTop, bottom: 0 }]}
-          // ← renderToHardwareTextureAndroid fixes overflow:hidden on Android
+          style={[styles.greenLayer, { top: greenTop, bottom: footerHeight - 8 }]}
           renderToHardwareTextureAndroid
         >
           <View style={styles.greenFill} />
 
           <LinearGradient
             colors={["rgba(255,255,255,0.07)", "transparent"]}
-            style={StyleSheet.absoluteFill} // ← explicit fill, not relying on flex
+            style={StyleSheet.absoluteFill}
             start={{ x: 0.5, y: 0 }}
             end={{ x: 0.5, y: 1 }}
           />
@@ -149,7 +147,6 @@ export default function IntroScreen() {
           <View style={styles.greenBottomSlant} />
         </View>
 
-        {/* Fading + scaling phone image */}
         <Animated.View
           style={[
             styles.phoneWrap,
@@ -160,22 +157,14 @@ export default function IntroScreen() {
             },
           ]}
         >
-          {/* Shadow — platform split */}
-          <View
-            style={[
-              styles.phoneShadow,
-              { width: phoneWidth * 0.7, top: phoneHeight - 28 },
-            ]}
-          />
-          <Image
-            source={currentSlide.phoneImage}
-            style={{ width: phoneWidth, height: phoneHeight }}
-            resizeMode="contain"
-            fadeDuration={0}
-          />
+    <Image
+  source={currentSlide.phoneImage}
+  style={{ width: phoneWidth, height: phoneHeight }}
+  resizeMode="contain"
+  fadeDuration={0}
+/>
         </Animated.View>
 
-        {/* Fading copy block */}
         <Animated.View
           style={[
             styles.copyBlock,
@@ -194,6 +183,7 @@ export default function IntroScreen() {
           <View style={styles.paginationWrap}>
             {slides.map((slide, dotIndex) => {
               const isActive = dotIndex === activeIndex;
+
               return (
                 <View
                   key={slide.id}
@@ -208,9 +198,15 @@ export default function IntroScreen() {
           </View>
         </Animated.View>
 
-        {/* Static footer */}
         <View
-          style={[styles.footer, { height: footerHeight, paddingHorizontal: 24 }]}
+          style={[
+            styles.footer,
+            {
+              minHeight: footerHeight,
+              paddingBottom: Math.max(safeBottom, 16),
+              paddingHorizontal: 24,
+            },
+          ]}
         >
           {!isFirst ? (
             <Pressable
@@ -248,6 +244,7 @@ const styles = StyleSheet.create({
   },
 
   page: {
+    flex: 1,
     backgroundColor: "#F8F4DE",
     overflow: "hidden",
   },
@@ -280,8 +277,8 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: -200,
     right: -200,
-    bottom: -100,
-    height: 100,
+    bottom: -92,
+    height: 96,
     backgroundColor: "#F8F4DE",
     transform: [{ rotate: "-15deg" }],
     zIndex: 3,
@@ -295,24 +292,10 @@ const styles = StyleSheet.create({
     zIndex: 3,
   },
 
-  // Platform-correct shadow
-  phoneShadow: {
-    position: "absolute",
-    height: 24,
-    alignSelf: "center",
-    borderRadius: 50,
-    backgroundColor: "rgba(0,0,0,0.18)",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.18,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 8,
-      },
-    }),
+  phoneImage: {
+    width: "86%",
+    maxWidth: 360,
+    aspectRatio: 390 / 525,
   },
 
   copyBlock: {
@@ -368,6 +351,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     zIndex: 5,
+    paddingTop: 10,
   },
 
   ctaButton: {
