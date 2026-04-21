@@ -28,7 +28,11 @@ export default function HomeCalendarStrip({
           onPress={() => router.push(Paths.appElectionCalendar)}
         >
           <AppText style={styles.calendarLinkText}>Election Calendar</AppText>
-          <Ionicons name="chevron-forward" size={14} color={Theme.colors.primary} />
+          <Ionicons
+            name="chevron-forward"
+            size={14}
+            color={Theme.colors.primary}
+          />
         </Pressable>
         <AppText style={styles.monthLabel}>{monthLabel}</AppText>
       </View>
@@ -57,10 +61,6 @@ export default function HomeCalendarStrip({
           );
         })}
       </View>
-
-      <AppText style={styles.statusText}>
-        See elections being monitored live right now.
-      </AppText>
     </View>
   );
 }
@@ -128,11 +128,5 @@ const styles = StyleSheet.create({
   },
   dayNumberSelected: {
     color: Theme.colors.primary,
-  },
-  statusText: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: Theme.colors.textMuted,
-    marginTop: -2,
   },
 });

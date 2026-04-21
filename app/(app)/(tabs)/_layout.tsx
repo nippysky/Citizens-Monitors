@@ -1,14 +1,23 @@
-import { AntDesign, Ionicons, MaterialCommunityIcons, Octicons } from "@expo/vector-icons";
+import type { ReactNode } from "react";
+import {
+  AntDesign,
+  Ionicons,
+  MaterialCommunityIcons,
+  Octicons,
+} from "@expo/vector-icons";
+import { BottomTabBar } from "@react-navigation/bottom-tabs";
 import { Tabs } from "expo-router";
 import { Platform, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import TourTarget from "@/components/tour/TourTarget";
 import AppText from "@/components/ui/AppText";
 import { Theme } from "@/theme";
 
 type TabIconProps = {
   focused: boolean;
   label: string;
-  icon: (color: string) => React.ReactNode;
+  icon: (color: string) => ReactNode;
 };
 
 function TabIcon({ focused, label, icon }: TabIconProps) {
@@ -20,6 +29,7 @@ function TabIcon({ focused, label, icon }: TabIconProps) {
       <View style={[styles.iconPill, focused && styles.iconPillActive]}>
         {icon(iconColor)}
       </View>
+
       <AppText
         style={[
           styles.tabLabel,
@@ -36,15 +46,33 @@ function TabIcon({ focused, label, icon }: TabIconProps) {
 }
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
+
+  const bottomInset =
+    Platform.OS === "ios" ? insets.bottom : Math.max(insets.bottom, 8);
+  const tabBarHeight = 64 + bottomInset;
+
   return (
     <Tabs
+      tabBar={(props) => (
+        <TourTarget id="app.tabbar">
+          <BottomTabBar {...props} />
+        </TourTarget>
+      )}
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
         tabBarHideOnKeyboard: true,
         tabBarActiveTintColor: Theme.colors.primary,
         tabBarInactiveTintColor: Theme.colors.textMuted,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: [
+          styles.tabBar,
+          {
+            height: tabBarHeight,
+            paddingTop: 10,
+            paddingBottom: bottomInset,
+          },
+        ],
         tabBarItemStyle: styles.tabBarItem,
         tabBarIconStyle: styles.tabBarIconStyle,
       }}
@@ -57,11 +85,7 @@ export default function TabsLayout() {
             <TabIcon
               focused={focused}
               label="Home"
-              icon={(c) => (
-                <>
-                  <AntDesign name="home" size={21} color={c} />
-                </>
-              )}
+              icon={(c) => <AntDesign name="home" size={21} color={c} />}
             />
           ),
         }}
@@ -76,7 +100,11 @@ export default function TabsLayout() {
               focused={focused}
               label="Elections"
               icon={(c) => (
-                <MaterialCommunityIcons name="vote-outline" size={24} color={c} />
+                <MaterialCommunityIcons
+                  name="vote-outline"
+                  size={24}
+                  color={c}
+                />
               )}
             />
           ),
@@ -91,7 +119,9 @@ export default function TabsLayout() {
             <TabIcon
               focused={focused}
               label="Collation"
-              icon={(c) => <Ionicons name="filter-outline" size={21} color={c} />}
+              icon={(c) => (
+                <Ionicons name="filter-outline" size={21} color={c} />
+              )}
             />
           ),
         }}
@@ -105,12 +135,7 @@ export default function TabsLayout() {
             <TabIcon
               focused={focused}
               label="Pulse"
-              icon={(c) => (
-                  <Octicons name="megaphone"
-                     size={20}
-                  color={c}
-                  />
-              )}
+              icon={(c) => <Octicons name="megaphone" size={20} color={c} />}
             />
           ),
         }}
@@ -135,9 +160,6 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    height: Platform.OS === "ios" ? 88 : 72,
-    paddingTop: 10,
-    paddingBottom: Platform.OS === "ios" ? 24 : 8,
     backgroundColor: "#FFFFFF",
     borderTopWidth: 1.5,
     borderTopColor: "rgba(5, 163, 156, 0.22)",

@@ -55,7 +55,7 @@ type EvidenceItem = {
   key: string;
   uri: string;
   type: "image" | "video";
-  source: "gallery" | "live";
+  source: "gallery" | "live" | "camera";
 };
 
 function OfflineBanner() {
@@ -75,6 +75,23 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isVideoAsset(asset: ImagePicker.ImagePickerAsset) {
+  const uri = asset.uri.toLowerCase();
+  return (
+    asset.type === "video" ||
+    (asset.mimeType ?? "").startsWith("video/") ||
+    uri.endsWith(".mp4") ||
+    uri.endsWith(".mov") ||
+    uri.endsWith(".3gp") ||
+    uri.endsWith(".m4v") ||
+    uri.endsWith(".webm")
+  );
+}
+
 function IncidentTypeIcon({
   label,
   size,
@@ -84,25 +101,30 @@ function IncidentTypeIcon({
 }) {
   const glyph =
     label === "Ballot Stuffing"
-      ? <ElectionNotification/>
+      ? <ElectionNotification />
       : label === "Thuggery & Violence"
-        ? <Thuggery/>
+        ? <Thuggery />
         : label === "Underage Voting"
-          ? <UnderAge/>
+          ? <UnderAge />
           : label === "INEC Misconduct"
-            ? <MisConduct/>
+            ? <MisConduct />
             : label === "Result Alteration"
-              ? <ResultAlter/>
+              ? <ResultAlter />
               : label === "Voter Intimidation"
-                ? <VoterIntimidation/>
+                ? <VoterIntimidation />
                 : label === "Late Opening"
-                  ? <LateOpening/>
+                  ? <LateOpening />
                   : label === "Missing Materials"
-                    ? <MissingMaterial/>
-                    : <Incident/>;
+                    ? <MissingMaterial />
+                    : <Incident />;
 
   return (
-    <AppText style={[styles.incidentTypeEmoji, { fontSize: size, lineHeight: size + 2 }]}>
+    <AppText
+      style={[
+        styles.incidentTypeEmoji,
+        { fontSize: size, lineHeight: size + 2 },
+      ]}
+    >
       {glyph}
     </AppText>
   );
@@ -113,27 +135,37 @@ function SmallActionButton({
   icon,
   variant = "primary",
   onPress,
+  disabled = false,
 }: {
   title: string;
   icon?: keyof typeof Ionicons.glyphMap;
   variant?: "primary" | "secondary";
   onPress: () => void;
+  disabled?: boolean;
 }) {
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       style={[
         styles.smallActionBtn,
         variant === "primary"
           ? styles.smallActionBtnPrimary
           : styles.smallActionBtnSecondary,
+        disabled && styles.smallActionBtnDisabled,
       ]}
     >
       {icon ? (
         <Ionicons
           name={icon}
           size={14}
-          color={variant === "primary" ? "#FFFFFF" : Theme.colors.primary}
+          color={
+            disabled
+              ? "#94A3B8"
+              : variant === "primary"
+                ? "#FFFFFF"
+                : Theme.colors.primary
+          }
         />
       ) : null}
 
@@ -143,6 +175,7 @@ function SmallActionButton({
           variant === "primary"
             ? styles.smallActionBtnTextPrimary
             : styles.smallActionBtnTextSecondary,
+          disabled && styles.smallActionBtnTextDisabled,
         ]}
       >
         {title}
@@ -151,16 +184,40 @@ function SmallActionButton({
   );
 }
 
+function VideoThumb({ large = false }: { large?: boolean }) {
+  return (
+    <View style={[large ? styles.featuredVideoCard : styles.thumbnailVideoCard]}>
+      <View style={styles.videoOverlay} />
+      <View style={large ? styles.videoPlayCircle : styles.thumbnailVideoBadgeLarge}>
+        <Ionicons name="play" size={large ? 22 : 12} color="#F84C00" />
+      </View>
+
+      <View style={large ? styles.videoLabelPill : styles.thumbnailVideoLabelPill}>
+        <Ionicons
+          name="videocam-outline"
+          size={large ? 14 : 11}
+          color="#FFFFFF"
+        />
+        <AppText style={large ? styles.videoLabelText : styles.thumbnailVideoLabelText}>
+          Video
+        </AppText>
+      </View>
+    </View>
+  );
+}
+
 function EvidenceSection({
   items,
   onOpenCamera,
   onOpenGallery,
   onRemoveItem,
+  busy,
 }: {
   items: EvidenceItem[];
   onOpenCamera: () => void;
   onOpenGallery: () => void;
   onRemoveItem: (item: EvidenceItem) => void;
+  busy: boolean;
 }) {
   const featured = items[0] ?? null;
   const remaining = items.slice(1);
@@ -172,16 +229,7 @@ function EvidenceSection({
           {featured.type === "image" ? (
             <Image source={{ uri: featured.uri }} style={styles.featuredImage} />
           ) : (
-            <View style={styles.featuredVideoCard}>
-              <Image
-                source={{ uri: featured.uri }}
-                style={styles.featuredVideoPoster}
-              />
-              <View style={styles.videoOverlay} />
-              <View style={styles.videoPlayCircle}>
-                <Ionicons name="play" size={22} color="#F84C00" />
-              </View>
-            </View>
+            <VideoThumb large />
           )}
 
           <Pressable
@@ -194,25 +242,27 @@ function EvidenceSection({
       ) : (
         <View style={styles.uploadCard}>
           <View style={styles.uploadIconWrap}>
-            <Ionicons name="document-text-outline" size={18} color="#111827" />
+            <Ionicons name="images-outline" size={18} color="#111827" />
           </View>
 
-          <AppText style={styles.uploadLead}>Add Photos / Video</AppText>
+          <AppText style={styles.uploadLead}>Add Photos / Videos</AppText>
           <AppText style={styles.uploadSub}>
-            Max 5 photos · Max 3 min video · Max 200MB
+            Max 5 photos · Max 1 video · Max 1 live recording · Max 3 min
           </AppText>
 
           <View style={styles.uploadActionRow}>
             <SmallActionButton
-              title="Open Camera"
+              title={busy ? "Opening..." : "Open Camera"}
               icon="camera-outline"
               onPress={onOpenCamera}
+              disabled={busy}
             />
             <SmallActionButton
-              title="Upload from Gallery"
+              title={busy ? "Opening..." : "Upload from Gallery"}
               icon="images-outline"
               variant="secondary"
               onPress={onOpenGallery}
+              disabled={busy}
             />
           </View>
         </View>
@@ -220,21 +270,40 @@ function EvidenceSection({
 
       {featured ? (
         <View style={styles.evidenceActionBar}>
-          <Pressable onPress={onOpenCamera} style={styles.addMoreChipPrimary}>
+          <Pressable
+            onPress={onOpenCamera}
+            disabled={busy}
+            style={[
+              styles.addMoreChipPrimary,
+              busy && styles.addMoreChipDisabled,
+            ]}
+          >
             <Ionicons name="camera-outline" size={14} color="#FFFFFF" />
             <AppText style={styles.addMoreChipPrimaryText}>
-              Add photo
+              {busy ? "Opening..." : "Add media"}
             </AppText>
           </Pressable>
 
-          <Pressable onPress={onOpenGallery} style={styles.addMoreChipSecondary}>
+          <Pressable
+            onPress={onOpenGallery}
+            disabled={busy}
+            style={[
+              styles.addMoreChipSecondary,
+              busy && styles.addMoreChipDisabledSecondary,
+            ]}
+          >
             <Ionicons
               name="images-outline"
               size={14}
-              color={Theme.colors.primary}
+              color={busy ? "#94A3B8" : Theme.colors.primary}
             />
-            <AppText style={styles.addMoreChipSecondaryText}>
-              Add from gallery
+            <AppText
+              style={[
+                styles.addMoreChipSecondaryText,
+                busy && styles.addMoreChipSecondaryTextDisabled,
+              ]}
+            >
+              {busy ? "Opening..." : "Add from gallery"}
             </AppText>
           </Pressable>
         </View>
@@ -244,13 +313,11 @@ function EvidenceSection({
         <View style={styles.thumbnailGrid}>
           {remaining.map((item) => (
             <View key={item.key} style={styles.thumbnailCard}>
-              <Image source={{ uri: item.uri }} style={styles.thumbnailImage} />
-
-              {item.type === "video" ? (
-                <View style={styles.thumbnailVideoBadge}>
-                  <Ionicons name="play" size={11} color="#FFFFFF" />
-                </View>
-              ) : null}
+              {item.type === "image" ? (
+                <Image source={{ uri: item.uri }} style={styles.thumbnailImage} />
+              ) : (
+                <VideoThumb />
+              )}
 
               <Pressable
                 onPress={() => onRemoveItem(item)}
@@ -274,11 +341,13 @@ export default function ReportIncidentScreen() {
   const { width } = useWindowDimensions();
 
   const recordLiveSheetRef = useRef<BottomSheetModal>(null);
+  const pickerBusyRef = useRef(false);
 
   const [draft, setDraft] = useState<IncidentDraft | null>(null);
   const [loading, setLoading] = useState(false);
   const [viewState, setViewState] = useState<ViewState>("form");
   const [timePickerVisible, setTimePickerVisible] = useState(false);
+  const [pickerBusy, setPickerBusy] = useState(false);
 
   const isOffline = !isConnected || !isInternetReachable;
 
@@ -314,6 +383,30 @@ export default function ReportIncidentScreen() {
     await saveIncidentDraft(next);
   };
 
+  const withPickerGuard = async (action: () => Promise<void>) => {
+    if (pickerBusyRef.current) return;
+
+    pickerBusyRef.current = true;
+    setPickerBusy(true);
+
+    try {
+      await action();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to open media picker.";
+
+      showToast({
+        type: "error",
+        message:
+          "Could not open camera/gallery right now. Please try again. " + message,
+      });
+    } finally {
+      await delay(300);
+      pickerBusyRef.current = false;
+      setPickerBusy(false);
+    }
+  };
+
   const buildEvidenceItems = (): EvidenceItem[] => {
     if (!draft) return [];
 
@@ -332,15 +425,6 @@ export default function ReportIncidentScreen() {
       })),
     ];
 
-    if (draft.liveVideoUri) {
-      items.unshift({
-        key: `live-${draft.liveVideoUri}`,
-        uri: draft.liveVideoUri,
-        type: "video",
-        source: "live",
-      });
-    }
-
     return items;
   };
 
@@ -349,53 +433,23 @@ export default function ReportIncidentScreen() {
   const openCameraEvidence = async () => {
     if (!draft) return;
 
-    const allowed = await ensureCameraPermission();
-    if (!allowed) return;
+    await withPickerGuard(async () => {
+      const allowed = await ensureCameraPermission();
+      if (!allowed) return;
 
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ["images"],
-      quality: 0.9,
-      allowsEditing: false,
-    });
+      await delay(180);
 
-    if (result.canceled || !result.assets?.length) return;
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["images", "videos"],
+        quality: 0.9,
+        allowsEditing: false,
+        videoMaxDuration: 180,
+      });
 
-    const staged = await stageMediaFile({
-      sourceUri: result.assets[0].uri,
-      kind: "image",
-      mimeType: result.assets[0].mimeType ?? "image/jpeg",
-    });
+      if (result.canceled || !result.assets?.length) return;
 
-    await updateDraft({
-      ...draft,
-      imageEvidenceUris: [...draft.imageEvidenceUris, staged.localUri].slice(0, 5),
-    });
-  };
-
-  const addEvidenceFromGallery = async () => {
-    if (!draft) return;
-
-    const allowed = await ensureMediaLibraryPermission();
-    if (!allowed) return;
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images", "videos"],
-      quality: 0.85,
-      allowsEditing: false,
-      selectionLimit: 6,
-    });
-
-    if (result.canceled || !result.assets?.length) return;
-
-    const nextImages = [...draft.imageEvidenceUris];
-    const nextVideos = [...draft.videoEvidenceUris];
-
-    for (const asset of result.assets) {
-      const isVideo =
-        asset.type === "video" ||
-        (asset.mimeType ?? "").startsWith("video/") ||
-        asset.uri.toLowerCase().includes(".mp4") ||
-        asset.uri.toLowerCase().includes(".mov");
+      const asset = result.assets[0];
+      const isVideo = isVideoAsset(asset);
 
       const staged = await stageMediaFile({
         sourceUri: asset.uri,
@@ -404,18 +458,73 @@ export default function ReportIncidentScreen() {
       });
 
       if (isVideo) {
-        if (nextVideos.length < 1) {
-          nextVideos.push(staged.localUri);
+        if (draft.videoEvidenceUris.length >= 1) {
+          showToast({
+            type: "success",
+            message: "You can attach only one camera/gallery video here.",
+          });
+          return;
         }
-      } else if (nextImages.length < 5) {
-        nextImages.push(staged.localUri);
-      }
-    }
 
-    await updateDraft({
-      ...draft,
-      imageEvidenceUris: nextImages.slice(0, 5),
-      videoEvidenceUris: nextVideos.slice(0, 1),
+        await updateDraft({
+          ...draft,
+          videoEvidenceUris: [...draft.videoEvidenceUris, staged.localUri].slice(0, 1),
+        });
+        return;
+      }
+
+      await updateDraft({
+        ...draft,
+        imageEvidenceUris: [...draft.imageEvidenceUris, staged.localUri].slice(0, 5),
+      });
+    });
+  };
+
+  const addEvidenceFromGallery = async () => {
+    if (!draft) return;
+
+    await withPickerGuard(async () => {
+      const allowed = await ensureMediaLibraryPermission();
+      if (!allowed) return;
+
+      await delay(180);
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images", "videos"],
+        quality: 0.85,
+        allowsEditing: false,
+        allowsMultipleSelection: true,
+        selectionLimit: 6,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+
+      const nextImages = [...draft.imageEvidenceUris];
+      const nextVideos = [...draft.videoEvidenceUris];
+
+      for (const asset of result.assets) {
+        const isVideo = isVideoAsset(asset);
+
+        const staged = await stageMediaFile({
+          sourceUri: asset.uri,
+          kind: isVideo ? "video" : "image",
+          mimeType: asset.mimeType ?? (isVideo ? "video/mp4" : "image/jpeg"),
+        });
+
+        if (isVideo) {
+          if (nextVideos.length < 1) {
+            nextVideos.push(staged.localUri);
+          }
+        } else if (nextImages.length < 5) {
+          nextImages.push(staged.localUri);
+        }
+      }
+
+      await updateDraft({
+        ...draft,
+        imageEvidenceUris: nextImages.slice(0, 5),
+        videoEvidenceUris: nextVideos.slice(0, 1),
+      });
     });
   };
 
@@ -589,7 +698,7 @@ export default function ReportIncidentScreen() {
                   },
                 ]}
               >
-                Tap to start recording now at your polling unit
+                Tap to open live camera recording for this polling unit
               </AppText>
             </View>
           </View>
@@ -721,11 +830,12 @@ export default function ReportIncidentScreen() {
             onRemoveItem={(item) => {
               void handleRemoveEvidenceItem(item);
             }}
+            busy={pickerBusy}
           />
         </View>
 
         <AppText style={styles.warningText}>
-          The picture/video must be incident happening at your polling unit.
+          The photo/video must be the incident happening at your polling unit.
         </AppText>
 
         <View style={styles.falseReportCard}>
@@ -1046,6 +1156,10 @@ const styles = StyleSheet.create({
     borderColor: Theme.colors.primary,
   },
 
+  smallActionBtnDisabled: {
+    opacity: 0.7,
+  },
+
   smallActionBtnText: {
     fontSize: 12,
     lineHeight: 16,
@@ -1058,6 +1172,10 @@ const styles = StyleSheet.create({
 
   smallActionBtnTextSecondary: {
     color: Theme.colors.primary,
+  },
+
+  smallActionBtnTextDisabled: {
+    color: "#94A3B8",
   },
 
   featuredEvidenceCard: {
@@ -1077,20 +1195,22 @@ const styles = StyleSheet.create({
 
   featuredVideoCard: {
     flex: 1,
-    backgroundColor: "#DCEFF0",
+    backgroundColor: "#0F172A",
     alignItems: "center",
     justifyContent: "center",
   },
 
-  featuredVideoPoster: {
+  thumbnailVideoCard: {
     width: "100%",
     height: "100%",
-    resizeMode: "cover",
+    backgroundColor: "#0F172A",
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   videoOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(15, 23, 42, 0.16)",
+    backgroundColor: "rgba(15, 23, 42, 0.24)",
   },
 
   videoPlayCircle: {
@@ -1101,6 +1221,56 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.88)",
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  thumbnailVideoBadgeLarge: {
+    position: "absolute",
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  videoLabelPill: {
+    position: "absolute",
+    left: 12,
+    bottom: 12,
+    minHeight: 28,
+    borderRadius: 999,
+    backgroundColor: "rgba(17,24,39,0.72)",
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  thumbnailVideoLabelPill: {
+    position: "absolute",
+    left: 6,
+    bottom: 6,
+    minHeight: 20,
+    borderRadius: 999,
+    backgroundColor: "rgba(17,24,39,0.72)",
+    paddingHorizontal: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+
+  videoLabelText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+
+  thumbnailVideoLabelText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    lineHeight: 12,
+    fontFamily: Theme.fonts.body.semibold,
   },
 
   featuredRemoveBtn: {
@@ -1159,6 +1329,19 @@ const styles = StyleSheet.create({
     fontFamily: Theme.fonts.body.semibold,
   },
 
+  addMoreChipDisabled: {
+    opacity: 0.7,
+  },
+
+  addMoreChipDisabledSecondary: {
+    borderColor: "#CBD5E1",
+    backgroundColor: "#FFFFFF",
+  },
+
+  addMoreChipSecondaryTextDisabled: {
+    color: "#94A3B8",
+  },
+
   thumbnailGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1179,18 +1362,6 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
     resizeMode: "cover",
-  },
-
-  thumbnailVideoBadge: {
-    position: "absolute",
-    left: 6,
-    bottom: 6,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: "#F15A24",
-    alignItems: "center",
-    justifyContent: "center",
   },
 
   thumbnailRemoveBtn: {
@@ -1240,7 +1411,7 @@ const styles = StyleSheet.create({
   },
 
   submitBtn: {
-    marginTop: 4,
-    marginVertical: 0,
+    marginTop: 20,
+    marginBottom: 100,
   },
 });

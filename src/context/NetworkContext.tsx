@@ -75,9 +75,9 @@ const MAX_VISIBLE_TOASTS = 3;
 function getToastDuration(type: ToastType): number | null {
   switch (type) {
     case "network-offline":
-      return null;
+      return 3000;
     case "network-online":
-      return 4000;
+      return 3000;
     case "error":
       return 5000;
     case "live-election":
@@ -134,7 +134,7 @@ export function NetworkProvider({ children }: Props) {
   const [isInternetReachable, setIsInternetReachable] = useState(true);
   const [toastQueue, setToastQueue] = useState<ToastData[]>([]);
 
-  const wasConnectedRef = useRef(true);
+  const wasOnlineRef = useRef(true);
   const toastTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>(
     {}
   );
@@ -166,6 +166,24 @@ export function NetworkProvider({ children }: Props) {
     setToastQueue((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
 
+  const dismissToastsByType = useCallback((types: ToastType[]) => {
+    setToastQueue((prev) => {
+      const idsToRemove = prev
+        .filter((toast) => types.includes(toast.type))
+        .map((toast) => toast.id);
+
+      idsToRemove.forEach((id) => {
+        const timer = toastTimersRef.current[id];
+        if (timer) {
+          clearTimeout(timer);
+          delete toastTimersRef.current[id];
+        }
+      });
+
+      return prev.filter((toast) => !types.includes(toast.type));
+    });
+  }, []);
+
   const showToast = useCallback((toast: Omit<ToastData, "id">) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
@@ -175,7 +193,35 @@ export function NetworkProvider({ children }: Props) {
     };
 
     setToastQueue((prev) => {
-      const duplicateIndex = prev.findIndex(
+      const filteredPrev = prev.filter((item) => {
+        if (
+          toast.type === "network-offline" &&
+          (item.type === "network-offline" || item.type === "network-online")
+        ) {
+          const timer = toastTimersRef.current[item.id];
+          if (timer) {
+            clearTimeout(timer);
+            delete toastTimersRef.current[item.id];
+          }
+          return false;
+        }
+
+        if (
+          toast.type === "network-online" &&
+          (item.type === "network-offline" || item.type === "network-online")
+        ) {
+          const timer = toastTimersRef.current[item.id];
+          if (timer) {
+            clearTimeout(timer);
+            delete toastTimersRef.current[item.id];
+          }
+          return false;
+        }
+
+        return true;
+      });
+
+      const duplicateIndex = filteredPrev.findIndex(
         (item) =>
           item.type === toast.type &&
           item.title === toast.title &&
@@ -187,11 +233,11 @@ export function NetworkProvider({ children }: Props) {
       const merged =
         duplicateIndex >= 0
           ? [
-              ...prev.slice(0, duplicateIndex),
+              ...filteredPrev.slice(0, duplicateIndex),
               nextToast,
-              ...prev.slice(duplicateIndex + 1),
+              ...filteredPrev.slice(duplicateIndex + 1),
             ]
-          : [...prev, nextToast];
+          : [...filteredPrev, nextToast];
 
       return sortToastsByPriority(merged);
     });
@@ -216,8 +262,8 @@ export function NetworkProvider({ children }: Props) {
     });
 
     Object.keys(toastTimersRef.current).forEach((toastId) => {
-      const stillVisible = visibleToasts.some((toast) => toast.id === toastId);
-      if (!stillVisible) {
+      const stillExists = toastQueue.some((toast) => toast.id === toastId);
+      if (!stillExists) {
         clearTimeout(toastTimersRef.current[toastId]);
         delete toastTimersRef.current[toastId];
       }
@@ -228,27 +274,30 @@ export function NetworkProvider({ children }: Props) {
     const unsubscribe = NetInfo.addEventListener((state: NetInfoState) => {
       const connected = state.isConnected ?? false;
       const reachable = state.isInternetReachable ?? connected;
+      const online = connected && reachable;
 
       setIsConnected(connected);
       setIsInternetReachable(reachable);
 
-      if (!wasConnectedRef.current && connected && reachable) {
-        showToast({
-          type: "network-online",
-          title: "You're back online!",
-          subtitle: "Syncing latest data...",
-        });
+      if (wasOnlineRef.current !== online) {
+        if (!online) {
+          dismissToastsByType(["network-offline", "network-online"]);
+          showToast({
+            type: "network-offline",
+            title: "No internet connection",
+            subtitle: "Don't worry — you can still browse cached data.",
+          });
+        } else {
+          dismissToastsByType(["network-offline", "network-online"]);
+          showToast({
+            type: "network-online",
+            title: "You're back online!",
+            subtitle: "Syncing latest data...",
+          });
+        }
       }
 
-      if (wasConnectedRef.current && !connected) {
-        showToast({
-          type: "network-offline",
-          title: "No internet connection",
-          subtitle: "Don't worry — you can still browse cached data.",
-        });
-      }
-
-      wasConnectedRef.current = connected;
+      wasOnlineRef.current = online;
     });
 
     return () => {
@@ -256,7 +305,7 @@ export function NetworkProvider({ children }: Props) {
       Object.values(toastTimersRef.current).forEach(clearTimeout);
       toastTimersRef.current = {};
     };
-  }, [showToast]);
+  }, [showToast, dismissToastsByType]);
 
   const activeToasts = useMemo(
     () => toastQueue.slice(0, MAX_VISIBLE_TOASTS),

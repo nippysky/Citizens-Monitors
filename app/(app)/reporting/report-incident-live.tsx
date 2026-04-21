@@ -1,5 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
-import { CameraView } from "expo-camera";
+import {
+  CameraView,
+  useCameraPermissions,
+  useMicrophonePermissions,
+} from "expo-camera";
 import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -7,7 +11,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
-import { ensureCameraPermission } from "@/lib/permissions";
 import { stageMediaFile } from "@/lib/offlineMedia";
 import {
   getIncidentDraft,
@@ -19,115 +22,204 @@ export default function ReportIncidentLiveScreen() {
   const cameraRef = useRef<CameraView>(null);
   const insets = useSafeAreaInsets();
 
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const [microphonePermission, requestMicrophonePermission] =
+    useMicrophonePermissions();
+
+  const [cameraReady, setCameraReady] = useState(false);
   const [recording, setRecording] = useState(false);
-  const [hasStartedAttempt, setHasStartedAttempt] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [incidentType, setIncidentType] = useState("");
+  const [permissionBusy, setPermissionBusy] = useState(false);
+
+  const isMountedRef = useRef(true);
+  const discardRequestedRef = useRef(false);
+  const recordingRef = useRef(false);
+  const savingRef = useRef(false);
 
   useEffect(() => {
-    let mounted = true;
+    isMountedRef.current = true;
 
-    const checkPermission = async () => {
-      const granted = await ensureCameraPermission();
-      if (!mounted) return;
-
-      setHasPermission(granted);
+    const hydrate = async () => {
+      const draft = await getIncidentDraft();
+      if (!isMountedRef.current) return;
+      setIncidentType(draft?.incidentType ?? "");
     };
 
-    void checkPermission();
+    void hydrate();
 
     return () => {
-      mounted = false;
+      isMountedRef.current = false;
     };
   }, []);
 
-  const requestAgain = useCallback(async () => {
-    const granted = await ensureCameraPermission();
-    setHasPermission(granted);
+  useEffect(() => {
+    recordingRef.current = recording;
+  }, [recording]);
+
+  useEffect(() => {
+    savingRef.current = saving;
+  }, [saving]);
+
+  const requestAllPermissions = useCallback(async () => {
+    if (permissionBusy) {
+      return Boolean(
+        cameraPermission?.granted === true &&
+          microphonePermission?.granted === true
+      );
+    }
+
+    setPermissionBusy(true);
+
+    try {
+      const cam = cameraPermission?.granted
+        ? cameraPermission
+        : await requestCameraPermission();
+
+      const mic = microphonePermission?.granted
+        ? microphonePermission
+        : await requestMicrophonePermission();
+
+      return Boolean(cam?.granted && mic?.granted);
+    } finally {
+      if (isMountedRef.current) {
+        setPermissionBusy(false);
+      }
+    }
+  }, [
+    cameraPermission,
+    microphonePermission,
+    permissionBusy,
+    requestCameraPermission,
+    requestMicrophonePermission,
+  ]);
+
+  const saveRecordingResult = useCallback(async (uri: string) => {
+    if (savingRef.current) return;
+
+    setSaving(true);
+
+    try {
+      const staged = await stageMediaFile({
+        sourceUri: uri,
+        kind: "video",
+        mimeType: "video/mp4",
+      });
+
+      await saveLiveVideoUri(staged.localUri);
+
+      const draft = await getIncidentDraft();
+      if (draft) {
+        await saveIncidentDraft({
+          ...draft,
+          liveVideoUri: staged.localUri,
+        });
+      }
+
+      router.replace(Paths.reportIncidentLiveReview);
+    } finally {
+      if (isMountedRef.current) {
+        setSaving(false);
+      }
+    }
   }, []);
 
   const startRecording = useCallback(async () => {
-    if (!hasPermission || recording) return;
+    if (recordingRef.current || savingRef.current) return;
+    if (!cameraReady) return;
+
+    const granted = await requestAllPermissions();
+    if (!granted) return;
+    if (!cameraRef.current) return;
 
     try {
+      discardRequestedRef.current = false;
       setRecording(true);
 
-      const result = await cameraRef.current?.recordAsync({
+      const result = await cameraRef.current.recordAsync({
         maxDuration: 180,
       });
 
-      if (result?.uri) {
-        const staged = await stageMediaFile({
-          sourceUri: result.uri,
-          kind: "video",
-          mimeType: "video/mp4",
-        });
+      if (isMountedRef.current) {
+        setRecording(false);
+      }
 
-        await saveLiveVideoUri(staged.localUri);
+      if (!result?.uri) return;
 
-        const draft = await getIncidentDraft();
-        if (draft) {
-          await saveIncidentDraft({
-            ...draft,
-            liveVideoUri: staged.localUri,
-          });
-        }
-
-        router.replace(Paths.reportIncident);
+      if (discardRequestedRef.current) {
+        router.back();
         return;
       }
 
-      setRecording(false);
+      await saveRecordingResult(result.uri);
     } catch {
-      setRecording(false);
+      if (isMountedRef.current) {
+        setRecording(false);
+      }
     }
-  }, [hasPermission, recording]);
-
-  useEffect(() => {
-    if (hasPermission !== true) return;
-    if (hasStartedAttempt) return;
-
-    setHasStartedAttempt(true);
-
-    const timer = setTimeout(() => {
-      void startRecording();
-    }, 250);
-
-    return () => clearTimeout(timer);
-  }, [hasPermission, hasStartedAttempt, startRecording]);
+  }, [cameraReady, requestAllPermissions, saveRecordingResult]);
 
   const stopRecording = useCallback(() => {
+    if (!recordingRef.current) return;
+
     try {
       cameraRef.current?.stopRecording();
     } catch {
-      setRecording(false);
+      if (isMountedRef.current) {
+        setRecording(false);
+      }
     }
   }, []);
 
   const discardRecording = useCallback(() => {
-    try {
-      if (recording) {
-        cameraRef.current?.stopRecording();
-      }
-    } catch {
-      // no-op
-    } finally {
-      setRecording(false);
-      router.back();
-    }
-  }, [recording]);
+    if (savingRef.current) return;
 
-  if (hasPermission === null) {
+    if (recordingRef.current) {
+      discardRequestedRef.current = true;
+
+      try {
+        cameraRef.current?.stopRecording();
+      } catch {
+        if (isMountedRef.current) {
+          setRecording(false);
+        }
+        router.back();
+      }
+
+      return;
+    }
+
+    router.back();
+  }, []);
+
+  const hasFullPermission =
+    cameraPermission?.granted === true && microphonePermission?.granted === true;
+
+  if (!cameraPermission || !microphonePermission) {
     return <View style={styles.loadingScreen} />;
   }
 
-  if (hasPermission === false) {
+  if (!hasFullPermission) {
     return (
       <View style={styles.permissionWrap}>
-        <AppText style={styles.permissionTitle}>Camera access needed</AppText>
+        <AppText style={styles.permissionTitle}>
+          Camera and microphone needed
+        </AppText>
 
-        <Pressable onPress={requestAgain} style={styles.permissionBtn}>
+        <AppText style={styles.permissionSubtitle}>
+          Please allow camera and microphone access so you can record live incident video with sound.
+        </AppText>
+
+        <Pressable
+          onPress={requestAllPermissions}
+          style={[
+            styles.permissionBtn,
+            permissionBusy && styles.permissionBtnDisabled,
+          ]}
+          disabled={permissionBusy}
+        >
           <AppText style={styles.permissionBtnText}>
-            Grant camera access
+            {permissionBusy ? "Requesting..." : "Grant access"}
           </AppText>
         </Pressable>
       </View>
@@ -141,7 +233,34 @@ export default function ReportIncidentLiveScreen() {
         style={styles.camera}
         facing="back"
         mode="video"
+        onCameraReady={() => setCameraReady(true)}
       />
+
+      <View
+        style={[
+          styles.topOverlay,
+          {
+            paddingTop: Math.max(insets.top, 12),
+          },
+        ]}
+      >
+        <Pressable onPress={discardRecording} style={styles.topBackBtn}>
+          <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
+        </Pressable>
+
+        <View style={styles.topMeta}>
+          <AppText style={styles.topMetaTitle}>Live Incident Recording</AppText>
+          <AppText style={styles.topMetaSubtitle}>
+            {incidentType || "Incident type not selected"}
+          </AppText>
+        </View>
+      </View>
+
+      {!cameraReady ? (
+        <View style={styles.readyOverlay}>
+          <AppText style={styles.readyText}>Preparing camera...</AppText>
+        </View>
+      ) : null}
 
       <View
         style={[
@@ -151,15 +270,55 @@ export default function ReportIncidentLiveScreen() {
           },
         ]}
       >
-        <View style={styles.recordingControlsRow}>
-          <Pressable onPress={stopRecording} style={styles.stopBtn}>
-            <Ionicons name="square" size={11} color="#FFFFFF" />
-            <AppText style={styles.stopText}>Stop & Submit</AppText>
-          </Pressable>
+        <View style={styles.statusRow}>
+          <View style={[styles.liveDot, recording && styles.liveDotActive]} />
+          <AppText style={styles.statusText}>
+            {saving
+              ? "Saving video..."
+              : recording
+                ? "Recording live..."
+                : cameraReady
+                  ? "Camera ready"
+                  : "Preparing camera..."}
+          </AppText>
+        </View>
 
-          <Pressable onPress={discardRecording} style={styles.discardBtn}>
+        <View style={styles.recordingControlsRow}>
+          {!recording ? (
+            <Pressable
+              onPress={startRecording}
+              style={[
+                styles.startBtn,
+                (!cameraReady || saving || permissionBusy) &&
+                  styles.startBtnDisabled,
+              ]}
+              disabled={!cameraReady || saving || permissionBusy}
+            >
+              <Ionicons name="radio-button-on" size={14} color="#FFFFFF" />
+              <AppText style={styles.startText}>
+                {saving
+                  ? "Saving..."
+                  : permissionBusy
+                    ? "Preparing..."
+                    : "Start Recording"}
+              </AppText>
+            </Pressable>
+          ) : (
+            <Pressable onPress={stopRecording} style={styles.stopBtn}>
+              <Ionicons name="square" size={11} color="#FFFFFF" />
+              <AppText style={styles.stopText}>Stop & Submit</AppText>
+            </Pressable>
+          )}
+
+          <Pressable
+            onPress={discardRecording}
+            style={[styles.discardBtn, saving && styles.discardBtnDisabled]}
+            disabled={saving}
+          >
             <Ionicons name="close" size={18} color="#5C6470" />
-            <AppText style={styles.discardText}>Discard</AppText>
+            <AppText style={styles.discardText}>
+              {recording ? "Discard" : "Cancel"}
+            </AppText>
           </Pressable>
         </View>
       </View>
@@ -182,14 +341,96 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
+  topOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  topBackBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(15, 23, 42, 0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  topMeta: {
+    flex: 1,
+    borderRadius: 16,
+    backgroundColor: "rgba(15, 23, 42, 0.5)",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+
+  topMetaTitle: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    lineHeight: 18,
+    fontFamily: "Inter-SemiBold",
+  },
+
+  topMetaSubtitle: {
+    color: "rgba(255,255,255,0.88)",
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: "Inter-Medium",
+  },
+
+  readyOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+
+  readyText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    lineHeight: 18,
+    fontFamily: "Inter-SemiBold",
+  },
+
   bottomControls: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
     paddingHorizontal: 12,
-    paddingTop: 10,
+    paddingTop: 12,
     backgroundColor: "rgba(247, 246, 242, 0.94)",
+    gap: 10,
+  },
+
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+
+  liveDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#B8BDC7",
+  },
+
+  liveDotActive: {
+    backgroundColor: "#F84C00",
+  },
+
+  statusText: {
+    color: "#3D4652",
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: "Inter-SemiBold",
   },
 
   recordingControlsRow: {
@@ -198,9 +439,32 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
+  startBtn: {
+    flex: 1,
+    minHeight: 50,
+    borderRadius: 16,
+    backgroundColor: "#05A39C",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    gap: 10,
+  },
+
+  startBtnDisabled: {
+    backgroundColor: "#8DBFBC",
+  },
+
+  startText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    lineHeight: 20,
+    fontFamily: "Inter-SemiBold",
+  },
+
   stopBtn: {
     flex: 1,
-    minHeight: 48,
+    minHeight: 50,
     borderRadius: 16,
     backgroundColor: "#F84C00",
     alignItems: "center",
@@ -219,7 +483,7 @@ const styles = StyleSheet.create({
 
   discardBtn: {
     flex: 1,
-    minHeight: 48,
+    minHeight: 50,
     borderRadius: 16,
     backgroundColor: "#F7F7F5",
     borderWidth: 1.2,
@@ -229,6 +493,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     paddingHorizontal: 14,
+  },
+
+  discardBtnDisabled: {
+    opacity: 0.7,
   },
 
   discardText: {
@@ -252,6 +520,16 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     color: "#111827",
     fontFamily: "LeagueSpartan-Bold",
+    textAlign: "center",
+  },
+
+  permissionSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#4B5563",
+    fontFamily: "Inter-Regular",
+    textAlign: "center",
+    maxWidth: 320,
   },
 
   permissionBtn: {
@@ -261,6 +539,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  permissionBtnDisabled: {
+    opacity: 0.7,
   },
 
   permissionBtnText: {

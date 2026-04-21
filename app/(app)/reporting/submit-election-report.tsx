@@ -1368,7 +1368,7 @@ const styles = StyleSheet.create({
     color: Theme.colors.textMuted,
   },
   submitBtn: {
-    marginTop: 4,
-    marginVertical: 0,
+    marginTop: 20,
+    marginBottom: 100,
   },
 });

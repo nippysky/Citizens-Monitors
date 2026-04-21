@@ -1,4 +1,3 @@
-// ─── src/app/(app)/(tabs)/pulse.tsx ───────────────────────────────────────────
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { router } from "expo-router";
 import { useCallback, useRef, useState } from "react";
@@ -12,6 +11,7 @@ import PulseScopeTabs, {
 import PulseForYouTab from "@/components/pulse/PulseForYouTab";
 import PulsePostButton from "@/components/pulse/PulsePostButton";
 import SharePulseOpinionSheet from "@/components/pulse/SharePulseOpinionSheet";
+import TourTarget from "@/components/tour/TourTarget";
 import { Paths } from "@/constants/paths";
 import { pulseReviewReports, PulseDiscussionPost } from "@/data/pulse";
 import { Theme } from "@/theme";
@@ -23,7 +23,6 @@ export default function PulseScreen() {
   const [scrolling, setScrolling] = useState(false);
   const shareSheetRef = useRef<BottomSheetModal>(null);
 
-  // User-created posts — kept in parent so they persist across tab switches
   const [userPosts, setUserPosts] = useState<PulseDiscussionPost[]>([]);
 
   const handleOpenShareSheet = useCallback(() => {
@@ -55,7 +54,6 @@ export default function PulseScreen() {
   return (
     <AppGradientScreen scroll={false}>
       <View style={styles.container}>
-        {/* ── Top section ── */}
         <View style={styles.topSection}>
           <ScreenHeader
             title="Pulse"
@@ -63,18 +61,19 @@ export default function PulseScreen() {
             onHelp={() => router.push(Paths.appHelpSupport)}
           />
 
-          <PulseScopeTabs
-            value={activeTab}
-            onChange={setActiveTab}
-            reviewCount={pulseReviewReports.length}
-          />
+          <TourTarget id="pulse.scope-tabs">
+            <PulseScopeTabs
+              value={activeTab}
+              onChange={setActiveTab}
+              reviewCount={pulseReviewReports.length}
+            />
+          </TourTarget>
 
           <AppText style={styles.subtitle}>
             Stay informed. Stay vigilant. Every update matters.
           </AppText>
         </View>
 
-        {/* ── Body ── */}
         <View style={styles.body}>
           {activeTab === "for-you" && (
             <PulseForYouTab
@@ -86,7 +85,6 @@ export default function PulseScreen() {
           {activeTab === "review-collation" && <PulseReviewCollationTab />}
         </View>
 
-        {/* ── Floating post button (For You only) ── */}
         {activeTab === "for-you" ? (
           <PulsePostButton
             onPress={handleOpenShareSheet}

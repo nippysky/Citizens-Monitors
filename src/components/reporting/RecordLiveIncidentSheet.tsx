@@ -48,24 +48,30 @@ function IncidentTypeIcon({
 }) {
   const glyph =
     label === "Ballot Stuffing"
-      ? <ElectionNotification/>
+      ? <ElectionNotification />
       : label === "Thuggery & Violence"
-        ? <Thuggery/>
+        ? <Thuggery />
         : label === "Underage Voting"
-          ? <UnderAge/>
+          ? <UnderAge />
           : label === "INEC Misconduct"
-            ? <MisConduct/>
+            ? <MisConduct />
             : label === "Result Alteration"
-              ? <ResultAlter/>
+              ? <ResultAlter />
               : label === "Voter Intimidation"
-                ? <VoterIntimidation/>
+                ? <VoterIntimidation />
                 : label === "Late Opening"
-                  ? <LateOpening/>
+                  ? <LateOpening />
                   : label === "Missing Materials"
-                    ? <MissingMaterial/>
-                    : <Incident/>;
+                    ? <MissingMaterial />
+                    : <Incident />;
+
   return (
-    <AppText style={[styles.incidentTypeEmoji, { fontSize: size, lineHeight: size + 2 }]}>
+    <AppText
+      style={[
+        styles.incidentTypeEmoji,
+        { fontSize: size, lineHeight: size + 2 },
+      ]}
+    >
       {glyph}
     </AppText>
   );
@@ -110,6 +116,8 @@ const RecordLiveIncidentSheet = forwardRef<BottomSheetModal, Props>(
       }
       onClose?.();
     };
+
+    const canStart = Boolean(selectedIncidentType?.trim());
 
     return (
       <BottomSheetModal
@@ -208,15 +216,32 @@ const RecordLiveIncidentSheet = forwardRef<BottomSheetModal, Props>(
           <View style={styles.geoCard}>
             <Ionicons name="location" size={22} color="#E45858" />
             <AppText style={styles.geoCardText}>
-              Geo-tagged: {geoLabel || "Polling unit location verified"} ·
-              {" "}Recording will be timestamped automatically
+              Geo-tagged: {geoLabel || "Polling unit location verified"} · Recording
+              will be timestamped automatically
             </AppText>
           </View>
 
+          {!canStart ? (
+            <View style={styles.helperCard}>
+              <Ionicons
+                name="information-circle-outline"
+                size={16}
+                color={Theme.colors.primary}
+              />
+              <AppText style={styles.helperText}>
+                Select an incident type to enable live recording.
+              </AppText>
+            </View>
+          ) : null}
+
           <AppButton
-            title="◉ Start Recording"
+            title={canStart ? "◉ Start Recording" : "Select Incident Type First"}
             onPress={onStartRecording}
-            style={styles.startRecordingBtn}
+            style={[
+              styles.startRecordingBtn,
+              !canStart && styles.startRecordingBtnDisabled,
+            ]}
+            disabled={!canStart}
           />
         </BottomSheetScrollView>
       </BottomSheetModal>
@@ -347,11 +372,34 @@ const styles = StyleSheet.create({
     fontFamily: Theme.fonts.body.medium,
   },
 
+  helperCard: {
+    marginTop: 14,
+    borderRadius: 14,
+    backgroundColor: "rgba(5,163,156,0.08)",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  helperText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.body.medium,
+  },
+
   startRecordingBtn: {
     marginTop: 18,
     marginVertical: 0,
     minHeight: 56,
     borderRadius: 16,
     backgroundColor: "#F84C00",
+  },
+
+  startRecordingBtnDisabled: {
+    backgroundColor: "#C9CCD3",
   },
 });

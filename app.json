@@ -9,13 +9,15 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.citizenmonitors",
+      "bundleIdentifier": "com.citizenmonitors.app",
       "infoPlist": {
         "NSCameraUsageDescription": "Citizen Monitor uses your camera so you can capture election evidence, signed result sheets, and incident reports.",
         "NSPhotoLibraryUsageDescription": "Citizen Monitor uses your photo library so you can attach election photos and videos from your gallery.",
         "NSMicrophoneUsageDescription": "Citizen Monitor uses your microphone when recording live incident videos and cumulative result announcement videos.",
         "NSLocationWhenInUseUsageDescription": "Citizen Monitor uses your location to verify that reports and evidence are submitted from the correct polling area.",
-        "LSApplicationQueriesSchemes": ["mailto"]
+        "LSApplicationQueriesSchemes": [
+          "mailto"
+        ]
       }
     },
     "android": {
@@ -26,14 +28,15 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.citizenmonitors",
+      "package": "com.citizenmonitors.app",
+      "googleServicesFile": "./google-services.json",
       "permissions": [
-        "CAMERA",
-        "RECORD_AUDIO",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "READ_MEDIA_IMAGES",
-        "READ_MEDIA_VIDEO"
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO"
       ]
     },
     "web": {
@@ -72,6 +75,12 @@
           "locationWhenInUsePermission": "Citizen Monitor uses your location to verify that reports are submitted from the correct polling area."
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "default"
+        }
+      ],
       "expo-font",
       "expo-dev-client",
       "expo-video",
@@ -80,6 +89,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "05dda0f0-269c-4a9d-bbd1-58f9244b69b9"
+      }
     }
   }
 }

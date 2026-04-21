@@ -1,10 +1,3 @@
-// ─── src/app/(app)/(tabs)/collation.tsx ───────────────────────────────────────
-// Fixed:
-// 1. Live notice action now opens CommencementBottomSheet correctly
-// 2. Notice now receives real context data from the active collation item
-// 3. Dev + production flow now share the same notice plumbing cleanly
-// ─────────────────────────────────────────────────────────────────────────────
-
 import { useEffect, useMemo, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { StyleSheet, View } from "react-native";
@@ -19,6 +12,7 @@ import CollationReviewReportsTab from "@/components/collation/CollationReviewRep
 import LiveCollationCarousel from "@/components/collation/LiveCollationCarousel";
 import { useLiveNotice } from "@/components/feedback/LiveNoticeProvider";
 import ScreenHeader from "@/components/elections/ScreenHeader";
+import TourTarget from "@/components/tour/TourTarget";
 import { Paths } from "@/constants/paths";
 import {
   collationDummyData,
@@ -42,22 +36,15 @@ export default function CollationScreen() {
         "review-reports",
         "discussions",
       ];
-
       const incoming = params.tab as CollationTabKey;
-
-      if (validTabs.includes(incoming)) {
-        setActiveTab(incoming);
-      }
+      if (validTabs.includes(incoming)) setActiveTab(incoming);
     }
 
     if (params.collationId) {
       const idx = collationDummyData.findIndex(
         (c) => c.id === params.collationId
       );
-
-      if (idx >= 0) {
-        setActiveIndex(idx);
-      }
+      if (idx >= 0) setActiveIndex(idx);
     }
   }, [params.tab, params.collationId]);
 
@@ -98,14 +85,16 @@ export default function CollationScreen() {
             onHelp={() => router.push(Paths.appHelpSupport)}
           />
 
-          <LiveCollationCarousel
-            items={collationDummyData}
-            activeIndex={activeIndex}
-            onIndexChange={(index) => {
-              setActiveIndex(index);
-              setActiveTab("overview");
-            }}
-          />
+          <TourTarget id="collation.live-card">
+            <LiveCollationCarousel
+              items={collationDummyData}
+              activeIndex={activeIndex}
+              onIndexChange={(index) => {
+                setActiveIndex(index);
+                setActiveTab("overview");
+              }}
+            />
+          </TourTarget>
 
           <CollationContextTabs value={activeTab} onChange={setActiveTab} />
         </View>

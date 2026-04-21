@@ -31,6 +31,7 @@ export const Paths = {
   submitElectionReport: "/(app)/reporting/submit-election-report",
   reportIncident: "/(app)/reporting/report-incident",
   reportIncidentLive: "/(app)/reporting/report-incident-live",
+  reportIncidentLiveReview: "/(app)/reporting/report-incident-live-review",
 
   voterCitizenAcademy: "/(app)/voter-essentials/CitizenAcademy",
   voterDonateSupport: "/(app)/voter-essentials/DonateSupport",
@@ -61,11 +62,9 @@ export const Paths = {
       params: { id },
     }),
 
-
-      pressCoverageDetails: (id: string) =>
+  pressCoverageDetails: (id: string) =>
     ({
       pathname: "/(app)/press-coverage/[id]" as const,
       params: { id },
     }),
 } as const;
-

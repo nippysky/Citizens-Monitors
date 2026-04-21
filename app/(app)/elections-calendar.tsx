@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
 import { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
@@ -10,7 +9,6 @@ import BackButton from "@/components/ui/BackButton";
 import AppText from "@/components/ui/AppText";
 import CalendarDayCell from "@/components/elections/CalenderDayCell";
 import EmptyElectionCalendarState from "@/components/elections/EmptyElectionCalenderState";
-import { Paths } from "@/constants/paths";
 import { useElections } from "@/context/ElectionsContext";
 import {
   addMonths,
@@ -210,7 +208,6 @@ export default function ElectionsCalendarScreen() {
                 <ElectionCard
                   key={item.id}
                   item={item}
-                  onPress={() => router.push(Paths.electionDetails(item.id))}
                 />
               ))}
 

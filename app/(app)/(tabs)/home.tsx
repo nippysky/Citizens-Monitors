@@ -13,8 +13,11 @@ import VoterEssentialsModal from "@/components/home/VoterEssentialsModal";
 import HomeCalendarStrip from "@/components/home/HomeCalenderStrip";
 import VoterEssentialsSection from "@/components/home/VoterEssentialSection";
 import TabBarSpacer from "@/components/layout/TabBarSpacer";
+import TourTarget from "@/components/tour/TourTarget";
+import AppText from "@/components/ui/AppText";
 import { useAuth } from "@/context/AuthContext";
 import { useNetwork } from "@/context/NetworkContext";
+import { useTourScrollReset } from "@/context/TourContext";
 import {
   buildFiveDayWindow,
   defaultHomeDate,
@@ -31,6 +34,8 @@ function roleLabelFromRole(role: typeof mockRole): string {
   return "Volunteer";
 }
 
+const HOME_TOUR_TARGET_IDS = ["home.calendar-strip"];
+
 export default function HomeScreen() {
   const { user } = useAuth();
   const { showToast, isConnected } = useNetwork();
@@ -41,6 +46,10 @@ export default function HomeScreen() {
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
 
   const hasNavigatedRef = useRef(false);
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  // Snap to top when the home tour step becomes active.
+  useTourScrollReset(scrollViewRef, HOME_TOUR_TARGET_IDS);
 
   const calendarItems = useMemo(
     () => buildFiveDayWindow(selectedDate),
@@ -138,6 +147,7 @@ export default function HomeScreen() {
         />
 
         <ScrollView
+          ref={scrollViewRef}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
@@ -159,12 +169,20 @@ export default function HomeScreen() {
               roleLabel={roleLabelFromRole(mockRole)}
             />
 
-            <HomeCalendarStrip
-              items={calendarItems}
-              selectedKey={selectedKey}
-              monthLabel={monthLabel}
-              onSelect={handleSelectDay}
-            />
+            <View style={styles.calendarBlock}>
+              <TourTarget id="home.calendar-strip">
+                <HomeCalendarStrip
+                  items={calendarItems}
+                  selectedKey={selectedKey}
+                  monthLabel={monthLabel}
+                  onSelect={handleSelectDay}
+                />
+              </TourTarget>
+
+              <AppText style={styles.calendarStatus}>
+                See elections being monitored live right now.
+              </AppText>
+            </View>
 
             {selectedContent.hasElection ? (
               <ElectionCarousel items={selectedContent.electionCards} />
@@ -178,7 +196,9 @@ export default function HomeScreen() {
 
           <View style={styles.whiteSection}>
             {selectedContent.electionUpdates.length > 0 && (
-              <CollationUpdatesSection items={selectedContent.electionUpdates} />
+              <CollationUpdatesSection
+                items={selectedContent.electionUpdates}
+              />
             )}
 
             {selectedContent.discussions.length > 0 && (
@@ -221,6 +241,14 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     gap: 16,
     paddingBottom: 20,
+  },
+  calendarBlock: {
+    gap: 8,
+  },
+  calendarStatus: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Theme.colors.textMuted,
   },
   whiteSection: {
     flex: 1,

@@ -1,15 +1,8 @@
-// ─── src/app/(app)/(tabs)/me.tsx ──────────────────────────────────────────────
-// ┌──────────────────────────────────────────────────────────────────────────┐
-// │  To test different user views, change DEV_USER_TYPE in src/data/me.ts:  │
-// │    "observer-pending"  │ "observer-verified"  │ "volunteer"             │
-// │    "public-viewer"                                                      │
-// └──────────────────────────────────────────────────────────────────────────┘
-
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useMemo, useRef, useState } from "react";
-import { Alert, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppScreenLoader from "@/components/feedback/AppScreenLoader";
@@ -35,9 +28,11 @@ import PVCVerificationBottomSheet from "@/components/me/PVCVerificationBottomShe
 import BankDetailsBottomSheet, {
   BankFormState,
 } from "@/components/me/BankDetailsBottomSheet";
+import TourTarget from "@/components/tour/TourTarget";
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
 import { useAuth } from "@/context/AuthContext";
+import { useTour, useTourScrollReset } from "@/context/TourContext";
 import {
   getMeAccountItems,
   getMeBanner,
@@ -49,8 +44,6 @@ import {
 } from "@/data/me";
 import { Theme } from "@/theme";
 import { BirthdayValue, Gender } from "@/types/onboarding";
-
-/* ───── Static data ───── */
 
 const DEFAULT_BIRTHDAY: BirthdayValue = {
   day: 4,
@@ -87,19 +80,22 @@ const bankOptions = [
   "Wema Bank",
 ];
 
-/* ───── Screen ───── */
+// Step 7's target — when active we scroll the Me screen back to top.
+const ME_TOUR_TARGET_IDS = ["me.my-account"];
 
 export default function MeScreen() {
   const { signOut } = useAuth();
   const { showToast } = useToastContext();
+  const { resetTour, startTour } = useTour();
+
   const [loading, setLoading] = useState(false);
 
-  // Dynamic content driven by mockMeUser (controlled by DEV_USER_TYPE)
+  const scrollViewRef = useRef<ScrollView>(null);
+  useTourScrollReset(scrollViewRef, ME_TOUR_TARGET_IDS);
+
   const banner = useMemo(() => getMeBanner(mockMeUser), []);
   const accountItems = useMemo(() => getMeAccountItems(mockMeUser), []);
   const otherItems = useMemo(() => getMeOtherItems(), []);
-
-  /* ── Form states ── */
 
   const [profileForm, setProfileForm] = useState<ProfileFormState>({
     firstName: "Ifeoluwa",
@@ -139,8 +135,6 @@ export default function MeScreen() {
     accountFullName: "",
   });
 
-  /* ── Sheet refs ── */
-
   const profileSheetRef = useRef<BottomSheetModal>(null);
   const securitySheetRef = useRef<BottomSheetModal>(null);
   const pollingUnitSheetRef = useRef<BottomSheetModal>(null);
@@ -149,18 +143,14 @@ export default function MeScreen() {
   const pvcSheetRef = useRef<BottomSheetModal>(null);
   const bankSheetRef = useRef<BottomSheetModal>(null);
 
-  // Sub-sheet refs for ProfileBottomSheet
   const birthdaySheetRef = useRef<BottomSheetModal>(null);
   const nationalitySheetRef = useRef<BottomSheetModal>(null);
   const genderSheetRef = useRef<BottomSheetModal>(null);
-
-  /* ── Cascading polling data ── */
 
   const stateOptions = useMemo(() => Object.keys(pollingData), []);
 
   const lgaOptions = useMemo(() => {
     if (!pollingUnitForm.state) return [];
-
     return Object.keys(
       pollingData[pollingUnitForm.state as PollingStateKey] ?? {}
     );
@@ -168,9 +158,7 @@ export default function MeScreen() {
 
   const wardOptions = useMemo(() => {
     if (!pollingUnitForm.state || !pollingUnitForm.lga) return [];
-
     const sk = pollingUnitForm.state as PollingStateKey;
-
     return Object.keys(
       pollingData[sk]?.[
         pollingUnitForm.lga as keyof (typeof pollingData)[typeof sk]
@@ -186,20 +174,12 @@ export default function MeScreen() {
     ) {
       return [];
     }
-
     const sk = pollingUnitForm.state as PollingStateKey;
     const lk = pollingUnitForm.lga as keyof (typeof pollingData)[typeof sk];
     const wk =
       pollingUnitForm.ward as keyof (typeof pollingData)[typeof sk][typeof lk];
-
     return pollingData[sk]?.[lk]?.[wk] ?? [];
-  }, [
-    pollingUnitForm.state,
-    pollingUnitForm.lga,
-    pollingUnitForm.ward,
-  ]);
-
-  /* ── Helpers ── */
+  }, [pollingUnitForm.state, pollingUnitForm.lga, pollingUnitForm.ward]);
 
   const runSave = async (
     message: string,
@@ -212,62 +192,54 @@ export default function MeScreen() {
     showToast({ message, type: "success" });
   };
 
-  /* ── Menu handler ── */
+  const handleDevReplayTour = async () => {
+    if (!__DEV__) return;
+    await resetTour();
+    router.navigate(Paths.appHome);
+    setTimeout(() => startTour(), 350);
+  };
 
   const handleItemPress = (item: MeMenuItem) => {
     switch (item.id) {
       case "personal-profile":
         profileSheetRef.current?.present();
         return;
-
       case "security":
         securitySheetRef.current?.present();
         return;
-
       case "polling-unit":
         pollingUnitSheetRef.current?.present();
         return;
-
       case "polling-unit-locator":
         router.push(Paths.voterPollingUnitLocator);
         return;
-
       case "notifications":
         notificationSheetRef.current?.present();
         return;
-
       case "upgrade-user":
         observerSheetRef.current?.present();
         return;
-
       case "pvc-verification":
         pvcSheetRef.current?.present();
         return;
-
       case "bank-details":
         bankSheetRef.current?.present();
         return;
-
       case "citizen-academy":
         router.push(Paths.voterCitizenAcademy);
         return;
-
       case "archive-reports":
         router.push(Paths.appArchiveReports);
         return;
-
       case "digital-vault":
         router.push(Paths.appDigitalVault);
         return;
-
       case "support-faq":
         router.push(Paths.appHelpSupport);
         return;
-
       case "feedback":
         showToast({ message: "Feedback flow coming next.", type: "success" });
         return;
-
       case "sign-out":
         Alert.alert("Sign Out", "Are you sure you want to log out?", [
           { text: "Cancel", style: "cancel" },
@@ -288,8 +260,6 @@ export default function MeScreen() {
     observerSheetRef.current?.present();
   };
 
-  /* ── Render ── */
-
   return (
     <SafeAreaView edges={["top"]} style={styles.safe}>
       <View style={styles.screen}>
@@ -300,25 +270,48 @@ export default function MeScreen() {
         />
 
         <ScrollView
+          ref={scrollViewRef}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.content}
           bounces
         >
           <View style={styles.headerWrap}>
-            <MeHeader user={mockMeUser} />
+            <Pressable
+              onLongPress={handleDevReplayTour}
+              delayLongPress={700}
+              disabled={!__DEV__}
+            >
+              <MeHeader user={mockMeUser} />
+            </Pressable>
           </View>
 
           <MeProfileCard banner={banner} onPress={handleBannerPress} />
 
-          <View style={styles.sectionBlock}>
-            <AppText style={styles.sectionTitle}>MY ACCOUNT</AppText>
-            <MeSection items={accountItems} onItemPress={handleItemPress} />
-          </View>
+          <TourTarget id="me.my-account">
+            <View style={styles.sectionBlock}>
+              <AppText style={styles.sectionTitle}>MY ACCOUNT</AppText>
+              <MeSection items={accountItems} onItemPress={handleItemPress} />
+            </View>
+          </TourTarget>
 
           <View style={styles.sectionBlock}>
             <AppText style={styles.sectionTitle}>OTHERS</AppText>
             <MeSection items={otherItems} onItemPress={handleItemPress} />
           </View>
+
+          {__DEV__ ? (
+            <Pressable
+              onPress={handleDevReplayTour}
+              style={({ pressed }) => [
+                styles.devButton,
+                pressed && styles.devButtonPressed,
+              ]}
+            >
+              <AppText style={styles.devButtonText}>
+                🔄 Replay App Tour (Dev)
+              </AppText>
+            </Pressable>
+          ) : null}
 
           <TabBarSpacer />
         </ScrollView>
@@ -416,40 +409,41 @@ export default function MeScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: "#EEF5DB",
-  },
-
-  screen: {
-    flex: 1,
-    backgroundColor: "#F7F7F2",
-  },
-
-  gradientBg: {
-    ...StyleSheet.absoluteFillObject,
-  },
-
+  safe: { flex: 1, backgroundColor: "#EEF5DB" },
+  screen: { flex: 1, backgroundColor: "#F7F7F2" },
+  gradientBg: { ...StyleSheet.absoluteFillObject },
   content: {
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 18,
     backgroundColor: "transparent",
   },
-
-  headerWrap: {
-    marginBottom: 14,
-  },
-
-  sectionBlock: {
-    gap: 12,
-    marginTop: 18,
-  },
-
+  headerWrap: { marginBottom: 14 },
+  sectionBlock: { gap: 12, marginTop: 18 },
   sectionTitle: {
     fontSize: 14,
     lineHeight: 18,
     color: "rgba(17,26,50,0.68)",
+    fontFamily: Theme.fonts.body.semibold,
+  },
+  devButton: {
+    marginTop: 28,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    backgroundColor: "#111A32",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  devButtonPressed: { opacity: 0.85 },
+  devButtonText: {
+    fontSize: 13,
+    color: "#FFFFFF",
     fontFamily: Theme.fonts.body.semibold,
   },
 });

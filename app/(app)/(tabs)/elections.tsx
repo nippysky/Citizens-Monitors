@@ -18,9 +18,11 @@ import ElectionStatusPill from "@/components/elections/ElectionStatusPill";
 import ElectionScopeTabs from "@/components/elections/ElectionScopeTab";
 import ScreenHeader from "@/components/elections/ScreenHeader";
 import TabBarSpacer from "@/components/layout/TabBarSpacer";
+import TourTarget from "@/components/tour/TourTarget";
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
 import { useElections } from "@/context/ElectionsContext";
+import { useTourScrollReset } from "@/context/TourContext";
 import {
   electionStatusPills,
   electionsDummyData,
@@ -33,8 +35,14 @@ import {
 } from "@/data/elections";
 import { Theme } from "@/theme";
 
+const ELECTIONS_TOUR_TARGET_IDS = ["elections.first-card"];
+
 export default function ElectionsScreen() {
   const filterSheetRef = useRef<BottomSheetModal>(null);
+  const cardsScrollRef = useRef<ScrollView>(null);
+
+  // Snap to top of card list when the elections-card tour step becomes active.
+  useTourScrollReset(cardsScrollRef, ELECTIONS_TOUR_TARGET_IDS);
 
   const badgeOpacity = useRef(new Animated.Value(0)).current;
   const badgeTranslateY = useRef(new Animated.Value(-6)).current;
@@ -114,7 +122,6 @@ export default function ElectionsScreen() {
       }),
     ]).start(() => {
       setScope(nextScope);
-
       contentTranslateY.setValue(-8);
       contentScale.setValue(0.996);
 
@@ -157,7 +164,6 @@ export default function ElectionsScreen() {
               <AppText style={styles.discoverTitle}>{headline}</AppText>
               <AppText style={styles.discoverSubtitle}>{rangeLabel}</AppText>
             </View>
-
             <View style={styles.iconRow}>
               <Pressable onPress={() => router.push(Paths.appElectionCalendar)}>
                 <Ionicons
@@ -166,7 +172,6 @@ export default function ElectionsScreen() {
                   color={Theme.colors.textMuted}
                 />
               </Pressable>
-
               <Pressable onPress={() => filterSheetRef.current?.present()}>
                 <Ionicons
                   name="options-outline"
@@ -200,14 +205,12 @@ export default function ElectionsScreen() {
                     {formatDisplayDate(selectedCalendarDateKey)}
                   </AppText>
                 </View>
-
                 <View style={styles.activeDateActions}>
                   {selectedCalendarDateKey !== todayKey ? (
                     <Pressable onPress={handleJumpToToday}>
                       <AppText style={styles.actionText}>Today</AppText>
                     </Pressable>
                   ) : null}
-
                   <Pressable onPress={clearSelectedCalendarDateKey}>
                     <AppText style={styles.actionText}>Clear</AppText>
                   </Pressable>
@@ -247,25 +250,35 @@ export default function ElectionsScreen() {
           ]}
         >
           <ScrollView
+            ref={cardsScrollRef}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.cardsWrap}
           >
             {filteredItems.length > 0 ? (
-              filteredItems.map((item) => (
-                <ElectionCard
-                  key={item.id}
-                  item={item}
-                  onLivePress={() =>
-                    router.push({
-                      pathname: Paths.appCollation,
-                      params: { collationId: item.id },
-                    })
-                  }
-                  onConcludedPress={() =>
-                    router.push(Paths.electionDetails(item.id))
-                  }
-                />
-              ))
+              filteredItems.map((item, index) => {
+                const card = (
+                  <ElectionCard
+                    item={item}
+                    onLivePress={() =>
+                      router.push({
+                        pathname: Paths.appCollation,
+                        params: { collationId: item.id },
+                      })
+                    }
+                    onConcludedPress={() =>
+                      router.push(Paths.electionDetails(item.id))
+                    }
+                  />
+                );
+
+                return index === 0 ? (
+                  <TourTarget key={item.id} id="elections.first-card">
+                    {card}
+                  </TourTarget>
+                ) : (
+                  <View key={item.id}>{card}</View>
+                );
+              })
             ) : (
               <View style={styles.emptyWrap}>
                 <AppText style={styles.emptyTitle}>No elections found</AppText>
@@ -274,7 +287,6 @@ export default function ElectionsScreen() {
                 </AppText>
               </View>
             )}
-
             <TabBarSpacer />
           </ScrollView>
         </Animated.View>
@@ -292,60 +304,35 @@ export default function ElectionsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-
-  topSection: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    gap: 16,
-  },
-
+  container: { flex: 1 },
+  topSection: { paddingHorizontal: 16, paddingTop: 8, gap: 16 },
   discoverWrap: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
   },
-
-  discoverTextBlock: {
-    flex: 1,
-    gap: 2,
-  },
-
+  discoverTextBlock: { flex: 1, gap: 2 },
   discoverTitle: {
     fontSize: 16,
     lineHeight: 22,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
   },
-
   discoverSubtitle: {
     fontSize: 14,
     lineHeight: 20,
     color: Theme.colors.textMuted,
     fontFamily: Theme.fonts.body.medium,
   },
-
-  iconRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-
-  activeDateWrap: {
-    marginTop: -6,
-    overflow: "hidden",
-  },
-
+  iconRow: { flexDirection: "row", alignItems: "center", gap: 14 },
+  activeDateWrap: { marginTop: -6, overflow: "hidden" },
   activeDateRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
   },
-
   activeDatePill: {
     flexDirection: "row",
     alignItems: "center",
@@ -355,32 +342,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     backgroundColor: "rgba(25,183,176,0.12)",
   },
-
   activeDateText: {
     fontSize: 13,
     lineHeight: 18,
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.semibold,
   },
-
   activeDateActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
   },
-
   actionText: {
     fontSize: 13.5,
     lineHeight: 18,
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.semibold,
   },
-
-  pillsRow: {
-    gap: 12,
-    paddingRight: 8,
-  },
-
+  pillsRow: { gap: 12, paddingRight: 8 },
   feedSection: {
     flex: 1,
     backgroundColor: "#FFFFFF",
@@ -388,25 +367,14 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     marginTop: 8,
   },
-
-  cardsWrap: {
-    gap: 16,
-    paddingBottom: 16,
-  },
-
-  emptyWrap: {
-    paddingTop: 30,
-    alignItems: "center",
-    gap: 8,
-  },
-
+  cardsWrap: { gap: 16, paddingBottom: 16 },
+  emptyWrap: { paddingTop: 30, alignItems: "center", gap: 8 },
   emptyTitle: {
     fontSize: 20,
     lineHeight: 24,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.heading.bold,
   },
-
   emptySubtitle: {
     maxWidth: 280,
     textAlign: "center",
