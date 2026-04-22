@@ -73,11 +73,11 @@ function DiscussionCard({ item }: { item: DiscussionItem }) {
   );
 }
 
-export default function DiscussionRoomSection({ items }: Props) {
+export default function PulseAndDiscourseSection({ items }: Props) {
   return (
     <View style={styles.wrap}>
       <View style={styles.headerRow}>
-        <AppText style={styles.sectionTitle}>Discussion room</AppText>
+        <AppText style={styles.sectionTitle}>Pulse & Discourse</AppText>
         <Pressable onPress={() => router.push(Paths.appPulse)} hitSlop={8}>
           <AppText style={styles.seeAll}>SEE ALL</AppText>
         </Pressable>

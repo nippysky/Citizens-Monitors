@@ -169,6 +169,7 @@ const mockNews: NewsItem[] = [
 ];
 
 // ── Voter Essentials ──
+// Keep ALL items here for the "View All" modal.
 export const allVoterEssentials: VoterEssentialItem[] = [
   {
     id: "ve-1",
@@ -238,10 +239,23 @@ export const allVoterEssentials: VoterEssentialItem[] = [
   },
 ];
 
-/** Returns 6 random voter essentials (shuffled each render) */
+// Fixed home-screen set — always show these exact 6 in this exact order.
+export const featuredVoterEssentials: VoterEssentialItem[] = [
+  allVoterEssentials[0], // Citizen Academy
+  allVoterEssentials[1], // Digital Election Vault
+  allVoterEssentials[2], // News & Insights
+  allVoterEssentials[3], // Donate to Support
+  allVoterEssentials[4], // Press Coverage
+  allVoterEssentials[5], // Polling Unit Locator
+];
+
+/**
+ * Backward-compatible helper used by the home page.
+ * Name kept the same so nothing breaks, but it is no longer random.
+ * It always returns the fixed 6 curated essentials shown in the design.
+ */
 export function getRandomVoterEssentials(): VoterEssentialItem[] {
-  const shuffled = [...allVoterEssentials].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, 6);
+  return featuredVoterEssentials;
 }
 
 // ── Seed dates ──

@@ -62,6 +62,10 @@ export const stateOptions = [
   "Kaduna",
 ];
 
+/**
+ * Kept for compatibility with the existing context / bottom sheet shape.
+ * In the new polling-unit-only Elections screen, only `status` is effectively used.
+ */
 export const defaultElectionFilters: ElectionFilterState = {
   status: "all",
   fromDate: "",
@@ -146,18 +150,24 @@ function offsetDateKey(daysFromToday: number): string {
   return toDateKeyLocal(date);
 }
 
-function createElectionItem(
-  input: Omit<ElectionItem, "date">
-): ElectionItem {
+function createElectionItem(input: Omit<ElectionItem, "date">): ElectionItem {
   return {
     ...input,
     date: formatCardDate(input.startDate),
   };
 }
 
+/**
+ * DEV / dummy elections data:
+ * collapsed into one single "your polling unit elections" stream
+ * so the UI matches the new product direction.
+ *
+ * We intentionally keep `scope` on the type for production readiness,
+ * but all current dummy items use `polling-unit`.
+ */
 export const electionsDummyData: ElectionItem[] = [
   createElectionItem({
-    id: "polling-live-today",
+    id: "pu-live-today",
     title: "2026 House of Assembly election",
     status: "live",
     type: "State House of Assembly",
@@ -169,7 +179,7 @@ export const electionsDummyData: ElectionItem[] = [
     startDate: offsetDateKey(0),
   }),
   createElectionItem({
-    id: "polling-upcoming-tomorrow",
+    id: "pu-upcoming-1",
     title: "2026 House of Assembly election",
     status: "upcoming",
     type: "State House of Assembly",
@@ -180,10 +190,21 @@ export const electionsDummyData: ElectionItem[] = [
     startDate: offsetDateKey(1),
   }),
   createElectionItem({
-    id: "polling-upcoming-next-week",
+    id: "pu-upcoming-3",
     title: "2026 House of Assembly election",
     status: "upcoming",
-    type: "State House of Assembly",
+    type: "House of Reps",
+    location: "National",
+    ctaLabel: "View Details",
+    state: "Lagos",
+    scope: "polling-unit",
+    startDate: offsetDateKey(3),
+  }),
+  createElectionItem({
+    id: "pu-upcoming-7",
+    title: "2026 House of Assembly election",
+    status: "upcoming",
+    type: "Governorship",
     location: "National",
     ctaLabel: "View Details",
     state: "Lagos",
@@ -191,61 +212,39 @@ export const electionsDummyData: ElectionItem[] = [
     startDate: offsetDateKey(7),
   }),
   createElectionItem({
-    id: "all-live-today",
-    title: "2026 House of Assembly election",
-    status: "live",
-    type: "State House of Assembly",
-    location: "National",
-    partiesCount: 46,
-    ctaLabel: "Monitor Election",
-    state: "Abuja",
-    scope: "all-elections",
-    startDate: offsetDateKey(0),
-  }),
-  createElectionItem({
-    id: "all-upcoming-3",
-    title: "2026 House of Assembly election",
-    status: "upcoming",
-    type: "House of Reps",
-    location: "National",
-    ctaLabel: "View Details",
-    state: "Kano",
-    scope: "all-elections",
-    startDate: offsetDateKey(3),
-  }),
-  createElectionItem({
-    id: "all-upcoming-10",
-    title: "2026 House of Assembly election",
-    status: "upcoming",
-    type: "Governorship",
-    location: "National",
-    ctaLabel: "View Details",
-    state: "Rivers",
-    scope: "all-elections",
-    startDate: offsetDateKey(10),
-  }),
-  createElectionItem({
-    id: "all-concluded-2",
+    id: "pu-concluded-2",
     title: "2026 House of Assembly election",
     status: "concluded",
     type: "Local Government",
     location: "National",
     partiesCount: 46,
     ctaLabel: "View Reports",
-    state: "Oyo",
-    scope: "all-elections",
+    state: "Lagos",
+    scope: "polling-unit",
     startDate: offsetDateKey(-2),
   }),
   createElectionItem({
-    id: "all-concluded-9",
+    id: "pu-concluded-5",
     title: "2026 House of Assembly election",
     status: "concluded",
     type: "State House of Assembly",
     location: "National",
     partiesCount: 46,
     ctaLabel: "View Reports",
-    state: "Kaduna",
-    scope: "all-elections",
+    state: "Lagos",
+    scope: "polling-unit",
+    startDate: offsetDateKey(-5),
+  }),
+  createElectionItem({
+    id: "pu-concluded-9",
+    title: "2026 House of Assembly election",
+    status: "concluded",
+    type: "House of Reps",
+    location: "National",
+    partiesCount: 46,
+    ctaLabel: "View Reports",
+    state: "Lagos",
+    scope: "polling-unit",
     startDate: offsetDateKey(-9),
   }),
 ];
@@ -278,26 +277,6 @@ function matchesStatus(
   return item.status === status;
 }
 
-function matchesType(item: ElectionItem, types: ElectionType[]): boolean {
-  if (types.length === 0) return true;
-  return types.includes(item.type);
-}
-
-function matchesState(item: ElectionItem, state: string): boolean {
-  if (!state || state === "All states") return true;
-  return item.state === state;
-}
-
-function matchesDateRange(
-  item: ElectionItem,
-  fromDate: string,
-  toDate: string
-): boolean {
-  if (fromDate && item.startDate < fromDate) return false;
-  if (toDate && item.startDate > toDate) return false;
-  return true;
-}
-
 function matchesSelectedDate(
   item: ElectionItem,
   selectedDateKey: string | null
@@ -306,6 +285,13 @@ function matchesSelectedDate(
   return item.startDate === selectedDateKey;
 }
 
+/**
+ * Simplified for the new polling-unit-only elections experience:
+ * - scope is still honored for production readiness
+ * - selected calendar date is honored
+ * - status pill filter is honored
+ * - advanced dummy filters (type/state/from/to) are ignored in this new UX
+ */
 export function filterElections(
   elections: ElectionItem[],
   scope: ElectionScopeTab,
@@ -316,9 +302,6 @@ export function filterElections(
     return (
       matchesScope(item, scope) &&
       matchesStatus(item, filters.status) &&
-      matchesType(item, filters.electionTypes) &&
-      matchesState(item, filters.state) &&
-      matchesDateRange(item, filters.fromDate, filters.toDate) &&
       matchesSelectedDate(item, selectedDateKey)
     );
   });
@@ -343,12 +326,17 @@ export function getHighlightedDateKeysForMonth(
 
   return new Set(
     baseItems
-      .filter((item) => isSameMonth(parseDateKeyLocal(item.startDate), visibleMonth))
+      .filter((item) =>
+        isSameMonth(parseDateKeyLocal(item.startDate), visibleMonth)
+      )
       .map((item) => item.startDate)
   );
 }
 
-export function getEmptyCalendarSubtitle(selectedDateKey: string, todayKey: string): string {
+export function getEmptyCalendarSubtitle(
+  selectedDateKey: string,
+  todayKey: string
+): string {
   if (selectedDateKey > todayKey) {
     return "Citizen Monitor have not commence operate then.";
   }

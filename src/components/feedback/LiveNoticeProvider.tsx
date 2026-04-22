@@ -187,23 +187,24 @@ export function LiveNoticeProvider({ children }: { children: ReactNode }) {
       ) : null}
 
       {rendered ? (
-        <GlobalLiveNotice
-          visible={visible}
-          message={message}
-          actionLabel={actionLabel}
-          onPressAction={() => {
-            if (customOnPress) {
-              customOnPress();
-            } else {
-              openCommencement(noticeContext);
-            }
+<GlobalLiveNotice
+  visible={visible}
+  message={message}
+  actionLabel={actionLabel}
+  onPressAction={() => {
+    if (customOnPress) {
+      customOnPress();
+    } else {
+      openCommencement(noticeContext);
+    }
 
-            requestAnimationFrame(() => {
-              hideNotice();
-            });
-          }}
-          onHide={() => setRendered(false)}
-        />
+    requestAnimationFrame(() => {
+      hideNotice();
+    });
+  }}
+  onClose={hideNotice} // 👈 ADD THIS
+  onHide={() => setRendered(false)}
+/>
       ) : null}
 
       <CommencementBottomSheet

@@ -15,7 +15,6 @@ import AppGradientScreen from "@/components/app/AppGradientScreen";
 import ElectionCard from "@/components/elections/ElectionCard";
 import ElectionFiltersBottomSheet from "@/components/elections/ElectionFiltersBottomSheet";
 import ElectionStatusPill from "@/components/elections/ElectionStatusPill";
-import ElectionScopeTabs from "@/components/elections/ElectionScopeTab";
 import ScreenHeader from "@/components/elections/ScreenHeader";
 import TabBarSpacer from "@/components/layout/TabBarSpacer";
 import TourTarget from "@/components/tour/TourTarget";
@@ -28,32 +27,26 @@ import {
   electionsDummyData,
   filterElections,
   formatDisplayDate,
-  getElectionDateRangeLabel,
-  getElectionHeadline,
   parseDateKeyLocal,
   startOfMonth,
 } from "@/data/elections";
 import { Theme } from "@/theme";
 
 const ELECTIONS_TOUR_TARGET_IDS = ["elections.first-card"];
+const FIXED_SCOPE = "polling-unit" as const;
+const FIXED_HEADLINE = "Discover your polling unit elections";
+const FIXED_RANGE_LABEL = "Dec 2024 - Nov 2025";
 
 export default function ElectionsScreen() {
   const filterSheetRef = useRef<BottomSheetModal>(null);
   const cardsScrollRef = useRef<ScrollView>(null);
 
-  // Snap to top of card list when the elections-card tour step becomes active.
   useTourScrollReset(cardsScrollRef, ELECTIONS_TOUR_TARGET_IDS);
 
   const badgeOpacity = useRef(new Animated.Value(0)).current;
   const badgeTranslateY = useRef(new Animated.Value(-6)).current;
 
-  const contentOpacity = useRef(new Animated.Value(1)).current;
-  const contentTranslateY = useRef(new Animated.Value(0)).current;
-  const contentScale = useRef(new Animated.Value(1)).current;
-
   const {
-    scope,
-    setScope,
     filters,
     setFilters,
     resetFilters,
@@ -67,14 +60,11 @@ export default function ElectionsScreen() {
   const filteredItems = useMemo(() => {
     return filterElections(
       electionsDummyData,
-      scope,
+      FIXED_SCOPE,
       filters,
       selectedCalendarDateKey
     );
-  }, [filters, scope, selectedCalendarDateKey]);
-
-  const headline = useMemo(() => getElectionHeadline(scope), [scope]);
-  const rangeLabel = useMemo(() => getElectionDateRangeLabel(scope), [scope]);
+  }, [filters, selectedCalendarDateKey]);
 
   useEffect(() => {
     Animated.parallel([
@@ -98,56 +88,6 @@ export default function ElectionsScreen() {
     setVisibleCalendarMonth(startOfMonth(parseDateKeyLocal(todayKey)));
   };
 
-  const handleScopeChange = (nextScope: typeof scope): void => {
-    if (nextScope === scope) return;
-
-    Animated.parallel([
-      Animated.timing(contentOpacity, {
-        toValue: 0,
-        duration: 120,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
-      }),
-      Animated.timing(contentTranslateY, {
-        toValue: 8,
-        duration: 120,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
-      }),
-      Animated.timing(contentScale, {
-        toValue: 0.992,
-        duration: 120,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      setScope(nextScope);
-      contentTranslateY.setValue(-8);
-      contentScale.setValue(0.996);
-
-      Animated.parallel([
-        Animated.timing(contentOpacity, {
-          toValue: 1,
-          duration: 190,
-          easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(contentTranslateY, {
-          toValue: 0,
-          duration: 190,
-          easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(contentScale, {
-          toValue: 1,
-          duration: 190,
-          easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ]).start();
-    });
-  };
-
   return (
     <AppGradientScreen>
       <View style={styles.container}>
@@ -157,22 +97,32 @@ export default function ElectionsScreen() {
             onHelp={() => router.push(Paths.appHelpSupport)}
           />
 
-          <ElectionScopeTabs value={scope} onChange={handleScopeChange} />
-
           <View style={styles.discoverWrap}>
             <View style={styles.discoverTextBlock}>
-              <AppText style={styles.discoverTitle}>{headline}</AppText>
-              <AppText style={styles.discoverSubtitle}>{rangeLabel}</AppText>
+              <AppText style={styles.discoverTitle}>{FIXED_HEADLINE}</AppText>
+              <AppText style={styles.discoverSubtitle}>
+                {FIXED_RANGE_LABEL}
+              </AppText>
             </View>
+
             <View style={styles.iconRow}>
-              <Pressable onPress={() => router.push(Paths.appElectionCalendar)}>
+              <Pressable
+                onPress={() => router.push(Paths.appElectionCalendar)}
+                hitSlop={10}
+                style={({ pressed }) => pressed && styles.iconPressed}
+              >
                 <Ionicons
                   name="calendar-outline"
                   size={28}
                   color={Theme.colors.textMuted}
                 />
               </Pressable>
-              <Pressable onPress={() => filterSheetRef.current?.present()}>
+
+              <Pressable
+                onPress={() => filterSheetRef.current?.present()}
+                hitSlop={10}
+                style={({ pressed }) => pressed && styles.iconPressed}
+              >
                 <Ionicons
                   name="options-outline"
                   size={28}
@@ -205,12 +155,14 @@ export default function ElectionsScreen() {
                     {formatDisplayDate(selectedCalendarDateKey)}
                   </AppText>
                 </View>
+
                 <View style={styles.activeDateActions}>
                   {selectedCalendarDateKey !== todayKey ? (
                     <Pressable onPress={handleJumpToToday}>
                       <AppText style={styles.actionText}>Today</AppText>
                     </Pressable>
                   ) : null}
+
                   <Pressable onPress={clearSelectedCalendarDateKey}>
                     <AppText style={styles.actionText}>Clear</AppText>
                   </Pressable>
@@ -219,36 +171,23 @@ export default function ElectionsScreen() {
             ) : null}
           </Animated.View>
 
-          {scope === "all-elections" ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.pillsRow}
-            >
-              {electionStatusPills.map((status) => (
-                <ElectionStatusPill
-                  key={status}
-                  value={status}
-                  selected={filters.status === status}
-                  onPress={() => setFilters({ ...filters, status })}
-                />
-              ))}
-            </ScrollView>
-          ) : null}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.pillsRow}
+          >
+            {electionStatusPills.map((status) => (
+              <ElectionStatusPill
+                key={status}
+                value={status}
+                selected={filters.status === status}
+                onPress={() => setFilters({ ...filters, status })}
+              />
+            ))}
+          </ScrollView>
         </View>
 
-        <Animated.View
-          style={[
-            styles.feedSection,
-            {
-              opacity: contentOpacity,
-              transform: [
-                { translateY: contentTranslateY },
-                { scale: contentScale },
-              ],
-            },
-          ]}
-        >
+        <View style={styles.feedSection}>
           <ScrollView
             ref={cardsScrollRef}
             showsVerticalScrollIndicator={false}
@@ -283,13 +222,14 @@ export default function ElectionsScreen() {
               <View style={styles.emptyWrap}>
                 <AppText style={styles.emptyTitle}>No elections found</AppText>
                 <AppText style={styles.emptySubtitle}>
-                  Adjust your filters or try another calendar date.
+                  Try another date or choose a different status.
                 </AppText>
               </View>
             )}
+
             <TabBarSpacer />
           </ScrollView>
-        </Animated.View>
+        </View>
 
         <ElectionFiltersBottomSheet
           sheetRef={filterSheetRef}
@@ -304,35 +244,64 @@ export default function ElectionsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  topSection: { paddingHorizontal: 16, paddingTop: 8, gap: 16 },
+  container: {
+    flex: 1,
+  },
+
+  topSection: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    gap: 16,
+  },
+
   discoverWrap: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
   },
-  discoverTextBlock: { flex: 1, gap: 2 },
+
+  discoverTextBlock: {
+    flex: 1,
+    gap: 2,
+  },
+
   discoverTitle: {
     fontSize: 16,
     lineHeight: 22,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
   },
+
   discoverSubtitle: {
     fontSize: 14,
     lineHeight: 20,
     color: Theme.colors.textMuted,
     fontFamily: Theme.fonts.body.medium,
   },
-  iconRow: { flexDirection: "row", alignItems: "center", gap: 14 },
-  activeDateWrap: { marginTop: -6, overflow: "hidden" },
+
+  iconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+
+  iconPressed: {
+    opacity: 0.72,
+  },
+
+  activeDateWrap: {
+    marginTop: -6,
+    overflow: "hidden",
+  },
+
   activeDateRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
   },
+
   activeDatePill: {
     flexDirection: "row",
     alignItems: "center",
@@ -342,24 +311,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     backgroundColor: "rgba(25,183,176,0.12)",
   },
+
   activeDateText: {
     fontSize: 13,
     lineHeight: 18,
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.semibold,
   },
+
   activeDateActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
   },
+
   actionText: {
     fontSize: 13.5,
     lineHeight: 18,
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.semibold,
   },
-  pillsRow: { gap: 12, paddingRight: 8 },
+
+  pillsRow: {
+    gap: 12,
+    paddingRight: 8,
+  },
+
   feedSection: {
     flex: 1,
     backgroundColor: "#FFFFFF",
@@ -367,14 +344,25 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     marginTop: 8,
   },
-  cardsWrap: { gap: 16, paddingBottom: 16 },
-  emptyWrap: { paddingTop: 30, alignItems: "center", gap: 8 },
+
+  cardsWrap: {
+    gap: 16,
+    paddingBottom: 16,
+  },
+
+  emptyWrap: {
+    paddingTop: 30,
+    alignItems: "center",
+    gap: 8,
+  },
+
   emptyTitle: {
     fontSize: 20,
     lineHeight: 24,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.heading.bold,
   },
+
   emptySubtitle: {
     maxWidth: 280,
     textAlign: "center",

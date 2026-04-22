@@ -1,14 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import AppGradientScreen from "@/components/app/AppGradientScreen";
+import CalendarDayCell from "@/components/elections/CalenderDayCell";
 import ElectionCard from "@/components/elections/ElectionCard";
+import EmptyElectionCalendarState from "@/components/elections/EmptyElectionCalenderState";
 import TabBarSpacer from "@/components/layout/TabBarSpacer";
 import BackButton from "@/components/ui/BackButton";
 import AppText from "@/components/ui/AppText";
-import CalendarDayCell from "@/components/elections/CalenderDayCell";
-import EmptyElectionCalendarState from "@/components/elections/EmptyElectionCalenderState";
+import { Paths } from "@/constants/paths";
 import { useElections } from "@/context/ElectionsContext";
 import {
   addMonths,
@@ -26,6 +28,7 @@ import {
 import { Theme } from "@/theme";
 
 const weekDays = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+const FIXED_SCOPE = "polling-unit" as const;
 
 function buildCalendarMatrix(monthDate: Date): Date[][] {
   const firstDayOfMonth = startOfMonth(monthDate);
@@ -48,7 +51,6 @@ function buildCalendarMatrix(monthDate: Date): Date[][] {
 
 export default function ElectionsCalendarScreen() {
   const {
-    scope,
     filters,
     todayKey,
     visibleCalendarMonth,
@@ -63,7 +65,6 @@ export default function ElectionsCalendarScreen() {
     if (selectedCalendarDateKey) {
       return parseDateKeyLocal(selectedCalendarDateKey);
     }
-
     return today;
   }, [selectedCalendarDateKey, today]);
 
@@ -76,22 +77,22 @@ export default function ElectionsCalendarScreen() {
     () =>
       getCalendarFilteredElections(
         electionsDummyData,
-        scope,
+        FIXED_SCOPE,
         filters,
         toDateKeyLocal(selectedDate)
       ),
-    [filters, scope, selectedDate]
+    [filters, selectedDate]
   );
 
   const highlightedDateKeys = useMemo(
     () =>
       getHighlightedDateKeysForMonth(
         electionsDummyData,
-        scope,
+        FIXED_SCOPE,
         filters,
         visibleCalendarMonth
       ),
-    [visibleCalendarMonth, filters, scope]
+    [visibleCalendarMonth, filters]
   );
 
   const hasItems = selectedItems.length > 0;
@@ -168,8 +169,12 @@ export default function ElectionsCalendarScreen() {
                   const key = toDateKeyLocal(dateItem);
                   const label = String(dateItem.getDate()).padStart(2, "0");
                   const selected = isSameDay(dateItem, selectedDate);
-                  const inVisibleMonth = isSameMonth(dateItem, visibleCalendarMonth);
-                  const highlighted = inVisibleMonth && highlightedDateKeys.has(key);
+                  const inVisibleMonth = isSameMonth(
+                    dateItem,
+                    visibleCalendarMonth
+                  );
+                  const highlighted =
+                    inVisibleMonth && highlightedDateKeys.has(key);
 
                   return (
                     <CalendarDayCell
@@ -208,6 +213,15 @@ export default function ElectionsCalendarScreen() {
                 <ElectionCard
                   key={item.id}
                   item={item}
+                  onLivePress={() =>
+                    router.push({
+                      pathname: Paths.appCollation,
+                      params: { collationId: item.id },
+                    })
+                  }
+                  onConcludedPress={() =>
+                    router.push(Paths.electionDetails(item.id))
+                  }
                 />
               ))}
 

@@ -4,34 +4,57 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import DiscussionRoomSection from "@/components/home/DiscussionRoomSection";
 import ElectionCarousel from "@/components/home/ElectionCarousel";
 import HomeHeader from "@/components/home/HomeHeader";
+import HomeCalendarStrip from "@/components/home/HomeCalenderStrip";
 import LatestNewsSection from "@/components/home/LatestNewsSection";
 import QuietDayBanner from "@/components/home/QuietDayBanner";
 import VoterEssentialsModal from "@/components/home/VoterEssentialsModal";
-import HomeCalendarStrip from "@/components/home/HomeCalenderStrip";
 import VoterEssentialsSection from "@/components/home/VoterEssentialSection";
+import CollationUpdatesSection from "@/components/home/CollationUpdatesSection";
+import PulseAndDiscourseSection from "@/components/home/PulseAndDiscourseSection";
 import TabBarSpacer from "@/components/layout/TabBarSpacer";
 import TourTarget from "@/components/tour/TourTarget";
 import AppText from "@/components/ui/AppText";
 import { useAuth } from "@/context/AuthContext";
 import { useNetwork } from "@/context/NetworkContext";
 import { useTourScrollReset } from "@/context/TourContext";
-import {
-  buildFiveDayWindow,
-  defaultHomeDate,
-  homeContentByDate,
-  mockRole,
-} from "@/data/home";
+import { defaultHomeDate, homeContentByDate, mockRole } from "@/data/home";
 import { Theme } from "@/theme";
 import { CalendarDayItem } from "@/types/home";
-import CollationUpdatesSection from "@/components/home/CollationUpdatesSection";
 
 function roleLabelFromRole(role: typeof mockRole): string {
   if (role === "observer") return "Observer";
   if (role === "public-viewer") return "Public Viewer";
   return "Volunteer";
+}
+
+function formatDateKey(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function buildStableCalendarWindow(anchorDate: Date, daysEachSide = 15): CalendarDayItem[] {
+  const items: CalendarDayItem[] = [];
+
+  for (let offset = -daysEachSide; offset <= daysEachSide; offset++) {
+    const date = new Date(anchorDate);
+    date.setDate(anchorDate.getDate() + offset);
+
+    items.push({
+      key: formatDateKey(date),
+      date,
+      weekdayShort: date
+        .toLocaleDateString("en-US", { weekday: "short" })
+        .toUpperCase(),
+      dayNumber: String(date.getDate()),
+      monthLabel: date.toLocaleDateString("en-US", {
+        month: "long",
+        year: "numeric",
+      }),
+    });
+  }
+
+  return items;
 }
 
 const HOME_TOUR_TARGET_IDS = ["home.calendar-strip"];
@@ -48,15 +71,16 @@ export default function HomeScreen() {
   const hasNavigatedRef = useRef(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // Snap to top when the home tour step becomes active.
   useTourScrollReset(scrollViewRef, HOME_TOUR_TARGET_IDS);
 
+  const calendarAnchorRef = useRef(defaultHomeDate);
+
   const calendarItems = useMemo(
-    () => buildFiveDayWindow(selectedDate),
-    [selectedDate]
+    () => buildStableCalendarWindow(calendarAnchorRef.current, 15),
+    []
   );
 
-  const selectedKey = selectedDate.toISOString().slice(0, 10);
+  const selectedKey = useMemo(() => formatDateKey(selectedDate), [selectedDate]);
 
   const selectedContent = homeContentByDate[selectedKey] ?? {
     dateKey: selectedKey,
@@ -76,7 +100,8 @@ export default function HomeScreen() {
   const monthLabel = useMemo(
     () =>
       selectedDate.toLocaleDateString("en-US", {
-        month: "long",
+        month: "short",
+        day: "numeric",
         year: "numeric",
       }),
     [selectedDate]
@@ -84,9 +109,9 @@ export default function HomeScreen() {
 
   const firstName = user?.firstName ?? "Ifeoluwa";
 
-  const handleSelectDay = (item: CalendarDayItem): void => {
+  const handleSelectDay = useCallback((item: CalendarDayItem): void => {
     setSelectedDate(item.date);
-  };
+  }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -137,6 +162,8 @@ export default function HomeScreen() {
     return () => clearTimeout(timer);
   }, [voterEssentialsVisible, pendingRoute]);
 
+  const hasElection = selectedContent.hasElection;
+
   return (
     <SafeAreaView edges={["top"]} style={styles.safe}>
       <View style={styles.root}>
@@ -163,6 +190,7 @@ export default function HomeScreen() {
             />
           }
         >
+          {/* ───── TOP SECTION ───── */}
           <View style={styles.topSection}>
             <HomeHeader
               firstName={firstName}
@@ -184,25 +212,33 @@ export default function HomeScreen() {
               </AppText>
             </View>
 
-            {selectedContent.hasElection ? (
+            {hasElection ? (
               <ElectionCarousel items={selectedContent.electionCards} />
-            ) : selectedContent.quietDay ? (
+            ) : (
               <QuietDayBanner
-                title={selectedContent.quietDay.title}
-                subtitle={selectedContent.quietDay.subtitle}
+                title={selectedContent.quietDay?.title ?? "QUIET DAY!"}
+                subtitle={
+                  selectedContent.quietDay?.subtitle ??
+                  "No voting events happening today."
+                }
               />
-            ) : null}
+            )}
           </View>
 
+          {/* ───── CONTENT SECTION ───── */}
           <View style={styles.whiteSection}>
-            {selectedContent.electionUpdates.length > 0 && (
+            {/* ONLY show if election exists */}
+            {hasElection && selectedContent.electionUpdates.length > 0 && (
               <CollationUpdatesSection
                 items={selectedContent.electionUpdates}
               />
             )}
 
+            {/* ALWAYS show */}
             {selectedContent.discussions.length > 0 && (
-              <DiscussionRoomSection items={selectedContent.discussions} />
+              <PulseAndDiscourseSection
+                items={selectedContent.discussions}
+              />
             )}
 
             {selectedContent.news.length > 0 && (
@@ -243,11 +279,11 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   calendarBlock: {
-    gap: 8,
+    gap: 10,
   },
   calendarStatus: {
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 12.5,
+    lineHeight: 17,
     color: Theme.colors.textMuted,
   },
   whiteSection: {
