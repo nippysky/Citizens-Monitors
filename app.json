@@ -10,14 +10,18 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.citizenmonitors.app",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "infoPlist": {
         "NSCameraUsageDescription": "Citizen Monitor uses your camera so you can capture election evidence, signed result sheets, and incident reports.",
         "NSPhotoLibraryUsageDescription": "Citizen Monitor uses your photo library so you can attach election photos and videos from your gallery.",
         "NSMicrophoneUsageDescription": "Citizen Monitor uses your microphone when recording live incident videos and cumulative result announcement videos.",
         "NSLocationWhenInUseUsageDescription": "Citizen Monitor uses your location to verify that reports and evidence are submitted from the correct polling area.",
-        "LSApplicationQueriesSchemes": [
-          "mailto"
-        ]
+        "LSApplicationQueriesSchemes": ["mailto"],
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
       }
     },
     "android": {
@@ -45,6 +49,14 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
+        }
+      ],
       [
         "expo-splash-screen",
         {

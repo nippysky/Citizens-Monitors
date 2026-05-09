@@ -18,6 +18,7 @@ import {
   addForegroundNotificationListener,
   addNotificationResponseListener,
 } from "@/lib/notifications";
+import AppQueryProvider from "@/providers/AppQueryProvider";
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -148,6 +149,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#F7F4EA" }}>
       <SafeAreaProvider>
         <BottomSheetModalProvider>
+        <AppQueryProvider>
           <AuthProvider>
             <ToastProvider>
               <StatusBar
@@ -164,6 +166,7 @@ export default function RootLayout() {
               />
             </ToastProvider>
           </AuthProvider>
+        </AppQueryProvider>
         </BottomSheetModalProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

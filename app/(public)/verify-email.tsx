@@ -16,10 +16,12 @@ import AppText from "@/components/ui/AppText";
 import BackButton from "@/components/ui/BackButton";
 import { Paths } from "@/constants/paths";
 import { useAppToast } from "@/hooks/useAppToast";
+import { useResendVerificationTokenMutation } from "@/hooks/useResendVerificationTokenMutation";
+import { useVerifyEmailMutation } from "@/hooks/useVerifyEmailMutation";
 import CheckIcon from "@/svgs/app/CheckIcon";
 import { Theme } from "@/theme";
 
-const OTP_LENGTH = 5;
+const OTP_LENGTH = 6;
 const INITIAL_SECONDS = 60;
 
 type VerifyFlow = "sign-up" | "reset-password";
@@ -30,24 +32,31 @@ export default function VerifyEmailScreen() {
     flow?: VerifyFlow;
   }>();
 
-  const email = params.email ?? "yourname@gmail.com";
+  const email = typeof params.email === "string" ? params.email : "";
   const flow: VerifyFlow =
     params.flow === "reset-password" ? "reset-password" : "sign-up";
 
   const { showToast } = useAppToast();
 
+  const verifyEmailMutation = useVerifyEmailMutation();
+  const resendVerificationTokenMutation = useResendVerificationTokenMutation();
+
   const [code, setCode] = useState<string[]>(Array(OTP_LENGTH).fill(""));
   const [secondsLeft, setSecondsLeft] = useState(INITIAL_SECONDS);
-  const [loading, setLoading] = useState(false);
 
   const inputRefs = useRef<(TextInput | null)[]>([]);
+
+  const joinedCode = useMemo(() => code.join(""), [code]);
 
   const isComplete = useMemo(
     () => code.every((digit) => digit.length === 1),
     [code]
   );
-  const joinedCode = code.join("");
-  const canResend = secondsLeft === 0;
+
+  const isLoading =
+    verifyEmailMutation.isPending || resendVerificationTokenMutation.isPending;
+
+  const canResend = secondsLeft === 0 && !isLoading;
 
   useEffect(() => {
     if (secondsLeft === 0) return;
@@ -58,6 +67,7 @@ export default function VerifyEmailScreen() {
           clearInterval(timer);
           return 0;
         }
+
         return prev - 1;
       });
     }, 1000);
@@ -69,15 +79,39 @@ export default function VerifyEmailScreen() {
     inputRefs.current[index]?.focus();
   };
 
+  const resetCode = (): void => {
+    setCode(Array(OTP_LENGTH).fill(""));
+    requestAnimationFrame(() => focusInput(0));
+  };
+
   const handleChangeDigit = (index: number, rawValue: string): void => {
-    const value = rawValue.replace(/[^0-9]/g, "").slice(0, 1);
+    const digits = rawValue.replace(/[^0-9]/g, "");
+
+    if (!digits) {
+      const next = [...code];
+      next[index] = "";
+      setCode(next);
+      return;
+    }
 
     const next = [...code];
-    next[index] = value;
+
+    /**
+     * Supports both normal single-digit typing and OTP paste/autofill.
+     */
+    digits
+      .slice(0, OTP_LENGTH - index)
+      .split("")
+      .forEach((digit, offset) => {
+        next[index + offset] = digit;
+      });
+
     setCode(next);
 
-    if (value && index < OTP_LENGTH - 1) {
-      focusInput(index + 1);
+    const nextFocusIndex = Math.min(index + digits.length, OTP_LENGTH - 1);
+
+    if (nextFocusIndex < OTP_LENGTH) {
+      focusInput(nextFocusIndex);
     }
   };
 
@@ -91,75 +125,103 @@ export default function VerifyEmailScreen() {
   };
 
   const handleResend = async (): Promise<void> => {
-    setLoading(true);
+    if (!canResend) return;
 
-    await new Promise((resolve) => setTimeout(resolve, 1200));
+    if (!email) {
+      showToast({
+        type: "error",
+        message: "Email address is missing. Please start again.",
+      });
 
-    setLoading(false);
-    setCode(Array(OTP_LENGTH).fill(""));
-    setSecondsLeft(INITIAL_SECONDS);
+      router.replace(Paths.signUp);
+      return;
+    }
 
-    showToast({
-      type: "success",
-      message:
-        flow === "reset-password"
-          ? "Password reset code resent to your email."
-          : "OTP resent to your email.",
-    });
+    try {
+      const response = await resendVerificationTokenMutation.mutateAsync({
+        email,
+      });
 
-    focusInput(0);
+      resetCode();
+      setSecondsLeft(INITIAL_SECONDS);
+
+      showToast({
+        type: "success",
+        message:
+          response.message ??
+          (flow === "reset-password"
+            ? "Password reset code resent to your email."
+            : "Verification code resent successfully"),
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to resend verification code.";
+
+      showToast({
+        type: "error",
+        message,
+      });
+
+      console.log("Resend verification token error:", error);
+    }
   };
 
   const handleVerify = async (): Promise<void> => {
-    if (!isComplete) return;
+    if (!isComplete || isLoading) return;
 
-    try {
-      setLoading(true);
-
-      await new Promise((resolve) => setTimeout(resolve, 1800));
-
-      setLoading(false);
-
-      if (joinedCode === "12345") {
-        if (flow === "reset-password") {
-          showToast({
-            type: "success",
-            message: "Email verified. Set your new password.",
-          });
-
-          setTimeout(() => {
-            router.replace({
-              pathname: Paths.setPassword,
-              params: { email, flow: "reset-password" },
-            });
-          }, 450);
-
-          return;
-        }
-
-        showToast({
-          type: "success",
-          message: "Email verified. Let’s complete your profile.",
-        });
-
-        setTimeout(() => {
-          router.replace({
-            pathname: Paths.onboarding,
-            params: { email },
-          });
-        }, 450);
-      } else {
-        showToast({
-          type: "error",
-          message: "Wrong verification code.",
-        });
-      }
-    } catch {
-      setLoading(false);
+    if (!email) {
       showToast({
         type: "error",
-        message: "Unable to verify code.",
+        message: "Email address is missing. Please start again.",
       });
+
+      router.replace(Paths.signUp);
+      return;
+    }
+
+    try {
+      const response = await verifyEmailMutation.mutateAsync({
+        email,
+        verificationCode: joinedCode,
+      });
+
+      if (flow === "reset-password") {
+        showToast({
+          type: "success",
+          message: response.message ?? "Email verified. Set your new password.",
+        });
+
+        router.replace({
+          pathname: Paths.setPassword,
+          params: { email, flow: "reset-password" },
+        });
+
+        return;
+      }
+
+      showToast({
+        type: "success",
+        message:
+          response.message ??
+          "Email verified successfully. Let’s complete your profile.",
+      });
+
+      router.replace({
+        pathname: Paths.onboarding,
+        params: { email },
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to verify code.";
+
+      showToast({
+        type: "error",
+        message,
+      });
+
+      console.log("Verify email error:", error);
     }
   };
 
@@ -173,8 +235,12 @@ export default function VerifyEmailScreen() {
             <View style={styles.introBlock}>
               <AppText variant="title">Verify Email</AppText>
               <AppText style={styles.introText}>
-                Check your inbox & spam folder. We just sent a 5-digit code to{" "}
-                <AppText style={styles.emailText}>{email}</AppText>.
+                Check your inbox & spam folder. We just sent a {OTP_LENGTH}
+                -digit code to{" "}
+                <AppText style={styles.emailText}>
+                  {email || "your email"}
+                </AppText>
+                .
               </AppText>
             </View>
           </View>
@@ -190,8 +256,8 @@ export default function VerifyEmailScreen() {
             <AppButton
               title="Verify Email"
               onPress={handleVerify}
-              disabled={!isComplete || loading}
-              loading={loading}
+              disabled={!isComplete || isLoading}
+              loading={verifyEmailMutation.isPending}
             />
           </View>
 
@@ -205,7 +271,7 @@ export default function VerifyEmailScreen() {
         </View>
       </AuthShell>
 
-      <AppScreenLoader visible={loading} />
+      <AppScreenLoader visible={isLoading} />
     </>
   );
 }

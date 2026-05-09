@@ -1,5 +1,4 @@
 import { router } from "expo-router";
-import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import AuthMetaAction from "@/components/auth/AuthMetaAction";
@@ -14,60 +13,59 @@ import DividerText from "@/components/ui/DividerText";
 import { EmailIcon, LockIcon } from "@/components/ui/InputIcons";
 import SocialButton from "@/components/ui/SocialButton";
 import { Paths } from "@/constants/paths";
-import { useAuth } from "@/context/AuthContext";
 import { useAppToast } from "@/hooks/useAppToast";
+import { useRegisterMutation } from "@/hooks/useRegisterMutation";
 import { useSignUpForm } from "@/hooks/useSignUpForms";
 import { Theme } from "@/theme";
 
 export default function SignUpScreen() {
   const { control, handleSubmit, formState } = useSignUpForm();
   const { showToast } = useAppToast();
-  const { signIn } = useAuth();
-  const [loading, setLoading] = useState(false);
+  const registerMutation = useRegisterMutation();
+
+  const isLoading = formState.isSubmitting || registerMutation.isPending;
 
   const onSubmit = handleSubmit(async (values) => {
+    const email = values.email.trim().toLowerCase();
+
     try {
-      setLoading(true);
-
-      await new Promise((resolve) => setTimeout(resolve, 1800));
-
-      signIn({
-        id: "local-user",
-        email: values.email,
+      const response = await registerMutation.mutateAsync({
+        email,
+        password: values.password,
+        confirmPassword: values.confirmPassword,
       });
-
-      setLoading(false);
 
       showToast({
         type: "success",
-        message: "Account created. Verify your email.",
+        message:
+          response.message ??
+          "Registration successful! Please check your email for the verification code.",
       });
 
-      setTimeout(() => {
-        router.push({
-          pathname: Paths.verifyEmail,
-          params: { email: values.email },
-        });
-      }, 450);
+      router.push({
+        pathname: Paths.verifyEmail,
+        params: { email },
+      });
     } catch (error) {
-      setLoading(false);
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to continue sign up.";
 
       showToast({
         type: "error",
-        message: "Unable to continue sign up.",
+        message,
       });
 
-      console.log("Sign up simulation error:", error);
+      console.log("Register error:", error);
     }
   });
 
   const handleGoogleContinue = (): void => {
-    signIn({
-      id: "google-user",
-      email: "googleuser@example.com",
+    showToast({
+      type: "error",
+      message: "Google sign up is not available yet.",
     });
-
-    router.push(Paths.setPassword);
   };
 
   return (
@@ -121,11 +119,23 @@ export default function SignUpScreen() {
               startIcon={<LockIcon />}
             />
 
+            <ControlledTextField
+              control={control}
+              name="confirmPassword"
+              label="Confirm Password"
+              placeholder="Confirm your password"
+              secureTextEntry
+              secureToggle
+              autoCapitalize="none"
+              autoCorrect={false}
+              startIcon={<LockIcon />}
+            />
+
             <AppButton
               title="Sign Up"
               onPress={onSubmit}
-              loading={formState.isSubmitting || loading}
-              disabled={!formState.isValid || loading}
+              loading={isLoading}
+              disabled={!formState.isValid || isLoading}
             />
           </View>
 
@@ -135,7 +145,7 @@ export default function SignUpScreen() {
         </View>
       </AuthShell>
 
-      <AppScreenLoader visible={loading} />
+      <AppScreenLoader visible={isLoading} />
     </>
   );
 }
