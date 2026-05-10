@@ -1,4 +1,3 @@
-// ─── src/components/pulse/SharePulseOpinionSheet.tsx ──────────────────────────
 import {
   BottomSheetBackdrop,
   BottomSheetModal,
@@ -7,6 +6,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { forwardRef, useMemo, useState } from "react";
 import { Image, Pressable, StyleSheet, Switch, View } from "react-native";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AppButton from "@/components/ui/AppButton";
@@ -15,76 +15,168 @@ import AppText from "@/components/ui/AppText";
 import { PickedMedia, useCollationMedia } from "@/hooks/useCollationMedia";
 import { useAppToast } from "@/hooks/useAppToast";
 import { useOfflineSync } from "@/context/OfflineSyncContext";
+import {
+  pulseQueryKeys,
+  useCreatePulsePostMutation,
+  useGenerateAnonymousUsernameMutation,
+  usePulseViewerQuery,
+} from "@/hooks/api/usePulseQueries";
 import { Theme } from "@/theme";
 import ProfileAvatar from "@/svgs/app/profile/ProfileAvatar";
 
-type Audience = "my-lga" | "my-ward";
-
 type Props = {
   onSubmitted?: () => void;
-  onPayload?: (payload: {
-    body: string;
-    audience: Audience;
-    anonymous: boolean;
-    imageUri?: string;
-  }) => void;
 };
 
+function getFullName(firstName?: string, lastName?: string): string {
+  const name = [firstName, lastName].filter(Boolean).join(" ").trim();
+  return name || "Citizen";
+}
+
+function shouldQueueAfterError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+
+  const message = error.message.toLowerCase();
+
+  return (
+    message.includes("unable to reach") ||
+    message.includes("network") ||
+    message.includes("connection") ||
+    message.includes("timeout")
+  );
+}
+
 const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
-  function SharePulseOpinionSheet({ onSubmitted, onPayload }, ref) {
+  function SharePulseOpinionSheet({ onSubmitted }, ref) {
     const insets = useSafeAreaInsets();
+    const queryClient = useQueryClient();
+
     const { showToast } = useAppToast();
-    const { enqueue } = useOfflineSync();
+    const { enqueue, isOnline } = useOfflineSync();
     const { pickImageFromGallery, busy } = useCollationMedia();
 
+    const viewerQuery = usePulseViewerQuery();
+    const createPostMutation = useCreatePulsePostMutation();
+    const generateAnonymousMutation = useGenerateAnonymousUsernameMutation();
+
+    const viewer = viewerQuery.data;
+    const realName = getFullName(viewer?.firstName, viewer?.lastName);
+    const profileImageUrl = viewer?.profileImage?.url;
+    const resolvedAnonymousName =
+      viewer?.anonymousUsername || "Anonymous Citizen";
+
     const [body, setBody] = useState("");
-    const [audience, setAudience] = useState<Audience>("my-lga");
     const [anonymous, setAnonymous] = useState(false);
     const [imgAsset, setImgAsset] = useState<PickedMedia | null>(null);
 
     const snaps = useMemo(() => ["85%"], []);
-    const canSubmit = body.trim().length > 3;
+    const canSubmit =
+      body.trim().length > 3 && !createPostMutation.isPending && !busy;
 
     const close = () => {
-      if (ref && typeof ref !== "function" && ref.current) ref.current.dismiss();
+      if (ref && typeof ref !== "function" && ref.current) {
+        ref.current.dismiss();
+      }
+    };
+
+    const reset = () => {
+      setBody("");
+      setAnonymous(false);
+      setImgAsset(null);
     };
 
     const attachImage = async () => {
-      const r = await pickImageFromGallery();
-      if (!r.ok) {
-        showToast({ type: "error", message: r.error });
+      const result = await pickImageFromGallery();
+
+      if (!result.ok) {
+        showToast({ type: "error", message: result.error });
         return;
       }
-      if (r.data) setImgAsset(r.data);
+
+      if (result.data) {
+        setImgAsset(result.data);
+      }
     };
 
-    const submit = () => {
+    const submit = async () => {
+      const trimmedBody = body.trim();
+
       if (!canSubmit) {
         showToast({ type: "error", message: "Write something first." });
         return;
       }
-      onPayload?.({
-        body: body.trim(),
-        audience,
-        anonymous,
-        imageUri: imgAsset?.uri,
-      });
-      enqueue({
-        type: "opinion",
-        payload: {
-          body: body.trim(),
-          audience,
-          anonymous,
-          imageUri: imgAsset?.uri ?? null,
-          source: "pulse",
-        },
-      });
-      onSubmitted?.();
-      setBody("");
-      setAudience("my-lga");
-      setAnonymous(false);
-      setImgAsset(null);
-      close();
+
+      if (anonymous && !viewer?.anonymousUsername && isOnline) {
+        try {
+          await generateAnonymousMutation.mutateAsync();
+        } catch {
+          // Non-blocking. Backend can still accept useAnonymousDisplay.
+        }
+      }
+
+      const payload = {
+        body: trimmedBody,
+        visibilityScope: "ward" as const,
+        useAnonymousDisplay: anonymous,
+        imageUri: imgAsset?.uri ?? null,
+      };
+
+      if (!isOnline) {
+        enqueue({
+          type: "pulse-create-post",
+          payload,
+        });
+
+        showToast({
+          type: "success",
+          message: "Post saved offline. It will sync automatically.",
+        });
+
+        reset();
+        close();
+        onSubmitted?.();
+        return;
+      }
+
+      try {
+        await createPostMutation.mutateAsync(payload);
+
+        showToast({
+          type: "success",
+          message: "Post submitted successfully.",
+        });
+
+        reset();
+        close();
+        onSubmitted?.();
+
+        void queryClient.invalidateQueries({ queryKey: pulseQueryKeys.posts });
+      } catch (error) {
+        if (shouldQueueAfterError(error)) {
+          enqueue({
+            type: "pulse-create-post",
+            payload,
+          });
+
+          showToast({
+            type: "success",
+            message: "Post saved offline. It will sync automatically.",
+          });
+
+          reset();
+          close();
+          onSubmitted?.();
+          return;
+        }
+
+        showToast({
+          type: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Unable to submit post.",
+        });
+      }
     };
 
     return (
@@ -116,20 +208,28 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
             { paddingBottom: insets.bottom + 18 },
           ]}
         >
-          {/* ── Header with avatar ── */}
           <View style={st.header}>
             <View style={st.headerLeft}>
               <View style={st.avatarWrap}>
-                <ProfileAvatar width={32} height={32} />
+                {profileImageUrl ? (
+                  <Image source={{ uri: profileImageUrl }} style={st.avatar} />
+                ) : (
+                  <ProfileAvatar width={32} height={32} />
+                )}
               </View>
-              <AppText style={st.headerTitle}>Share Your Opinion</AppText>
+              <View>
+                <AppText style={st.headerTitle}>Share Your Opinion</AppText>
+                <AppText style={st.headerSubtitle}>
+                  Posting within your ward
+                </AppText>
+              </View>
             </View>
+
             <Pressable onPress={close} hitSlop={8} style={st.closeBtn}>
               <Ionicons name="close" size={22} color={Theme.colors.textMuted} />
             </Pressable>
           </View>
 
-          {/* Guidelines */}
           <View style={st.guideBox}>
             <View style={st.guideIcon}>
               <Ionicons
@@ -145,11 +245,10 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
             </AppText>
           </View>
 
-          {/* Input */}
           <View style={st.sec}>
             <AppText style={st.label}>Your Opinion</AppText>
             <AppInput
-              placeholder="What's happening.."
+              placeholder="What's happening in your ward?"
               value={body}
               onChangeText={setBody}
               multiline
@@ -158,7 +257,6 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
             />
           </View>
 
-          {/* Attach image */}
           <View style={st.sec}>
             <Pressable onPress={attachImage} style={st.attachBtn}>
               <Ionicons
@@ -168,6 +266,7 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
               />
               <AppText style={st.attachText}>Attach Image</AppText>
             </Pressable>
+
             {imgAsset?.uri ? (
               <View style={st.previewWrap}>
                 <Image source={{ uri: imgAsset.uri }} style={st.preview} />
@@ -181,47 +280,31 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
             ) : null}
           </View>
 
-          {/* Audience */}
-          <View style={st.sec}>
-            <AppText style={st.label}>Who can see this post?</AppText>
-            <View style={st.audRow}>
-              <Pressable
-                onPress={() => setAudience("my-lga")}
-                style={[st.audPill, audience === "my-lga" && st.audPillOn]}
-              >
-                <AppText
-                  style={[
-                    st.audText,
-                    audience === "my-lga" && st.audTextOn,
-                  ]}
-                >
-                  My LGA
-                </AppText>
-              </Pressable>
-              <Pressable
-                onPress={() => setAudience("my-ward")}
-                style={[st.audPill, audience === "my-ward" && st.audPillOn]}
-              >
-                <AppText
-                  style={[
-                    st.audText,
-                    audience === "my-ward" && st.audTextOn,
-                  ]}
-                >
-                  My Ward
-                </AppText>
-              </Pressable>
+          <View style={st.scopeCard}>
+            <View style={st.scopeIcon}>
+              <Ionicons
+                name="people-outline"
+                size={18}
+                color={Theme.colors.primary}
+              />
+            </View>
+            <View style={st.scopeTextWrap}>
+              <AppText style={st.scopeTitle}>Ward visibility</AppText>
+              <AppText style={st.scopeText}>
+                This post will only be visible within your ward pulse feed.
+              </AppText>
             </View>
           </View>
 
-          {/* Anonymous toggle */}
           <View style={st.switchRow}>
             <View style={st.switchTextWrap}>
-              <AppText style={st.switchTitle}>Stay Anonymous</AppText>
+              <AppText style={st.switchTitle}>Post Anonymously</AppText>
               <AppText style={st.switchSubtitle}>
-                Your identity is protected. This post will be posted as{" "}
-                <AppText style={st.switchBold}>IronEagle345</AppText>, and not
-                as <AppText style={st.switchBold}>Adeyemi</AppText>.
+                This post will be shown as{" "}
+                <AppText style={st.switchBold}>
+                  {anonymous ? resolvedAnonymousName : realName}
+                </AppText>
+                .
               </AppText>
             </View>
             <Switch
@@ -233,12 +316,11 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
             />
           </View>
 
-          {/* Submit */}
           <AppButton
-            title="Submit Post"
+            title={isOnline ? "Submit Post" : "Save Offline"}
             onPress={submit}
             disabled={!canSubmit}
-            loading={busy}
+            loading={busy || createPostMutation.isPending}
             style={{ marginVertical: 0 }}
           />
         </BottomSheetScrollView>
@@ -257,8 +339,6 @@ const st = StyleSheet.create({
   },
   handle: { backgroundColor: "rgba(17,26,50,0.12)", width: 44 },
   content: { paddingHorizontal: 16, paddingTop: 8, gap: 18 },
-
-  /* Header with avatar */
   header: {
     minHeight: 54,
     flexDirection: "row",
@@ -271,17 +351,29 @@ const st = StyleSheet.create({
     gap: 10,
   },
   avatarWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     overflow: "hidden",
     backgroundColor: "#EEF2F6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
   },
   headerTitle: {
     fontSize: 18,
     lineHeight: 24,
     fontFamily: Theme.fonts.heading.semibold,
     color: Theme.colors.text,
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Theme.colors.textMuted,
   },
   closeBtn: {
     width: 38,
@@ -291,7 +383,6 @@ const st = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
   guideBox: {
     borderRadius: 18,
     backgroundColor: "#CDEFE4",
@@ -315,7 +406,6 @@ const st = StyleSheet.create({
     lineHeight: 19,
     color: Theme.colors.text,
   },
-
   sec: { gap: 10 },
   label: {
     fontSize: 15,
@@ -325,7 +415,6 @@ const st = StyleSheet.create({
   },
   taWrap: { minHeight: 140, alignItems: "flex-start", paddingTop: 14 },
   ta: { minHeight: 100, textAlignVertical: "top" },
-
   attachBtn: {
     minHeight: 44,
     borderRadius: 16,
@@ -349,32 +438,39 @@ const st = StyleSheet.create({
     backgroundColor: "#EEF2F6",
   },
   removePreview: { position: "absolute", top: 8, right: 8 },
-
-  audRow: { flexDirection: "row", gap: 10 },
-  audPill: {
-    minHeight: 38,
-    borderRadius: 12,
-    paddingHorizontal: 18,
-    backgroundColor: "#F4F5F7",
+  scopeCard: {
+    borderRadius: 18,
+    backgroundColor: "rgba(25,183,176,0.08)",
     borderWidth: 1,
-    borderColor: "#DDE3EA",
+    borderColor: "rgba(25,183,176,0.16)",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    flexDirection: "row",
+    gap: 12,
+  },
+  scopeIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(255,255,255,0.72)",
     alignItems: "center",
     justifyContent: "center",
   },
-  audPillOn: {
-    backgroundColor: "#F3FFFD",
-    borderColor: Theme.colors.primary,
+  scopeTextWrap: {
+    flex: 1,
+    gap: 3,
   },
-  audText: {
+  scopeTitle: {
     fontSize: 14,
+    lineHeight: 19,
     color: Theme.colors.text,
-    fontFamily: Theme.fonts.body.medium,
-  },
-  audTextOn: {
-    color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.semibold,
   },
-
+  scopeText: {
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: Theme.colors.textMuted,
+  },
   switchRow: {
     flexDirection: "row",
     alignItems: "flex-start",

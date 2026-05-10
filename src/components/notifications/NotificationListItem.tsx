@@ -1,51 +1,156 @@
-import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
-import { NotificationItem } from "@/data/notifications";
+import { AppNotification } from "@/lib/api/notifications.api";
 import { Theme } from "@/theme";
 
 type Props = {
-  item: NotificationItem;
+  item: AppNotification;
   isLast?: boolean;
+  onPress?: (item: AppNotification) => void;
 };
 
-function getIconName(kind: NotificationItem["kind"]): keyof typeof Ionicons.glyphMap {
-  switch (kind) {
-    case "incident":
+function getIconName(type: AppNotification["type"]): keyof typeof Ionicons.glyphMap {
+  switch (type) {
+    case "incident-upload":
       return "warning-outline";
+    case "result-upload":
+      return "checkmark-done-outline";
     case "announcement":
       return "megaphone-outline";
+    case "comment":
+      return "chatbubble-ellipses-outline";
+    case "election":
+      return "flag-outline";
     case "update":
-      return "notifications-outline";
-    case "result":
+    case "system":
     default:
-      return "checkmark-done-outline";
+      return "notifications-outline";
   }
 }
 
-export default function NotificationListItem({ item, isLast = false }: Props) {
-  const handlePress = () => {
+function getIconColor(type: AppNotification["type"]): string {
+  switch (type) {
+    case "incident-upload":
+      return "#F15A24";
+    case "result-upload":
+      return Theme.colors.primary;
+    case "announcement":
+      return "#7C3AED";
+    case "comment":
+      return "#2563EB";
+    case "election":
+      return "#0F766E";
+    case "update":
+    case "system":
+    default:
+      return Theme.colors.primary;
+  }
+}
+
+function formatNotificationTime(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const diffMs = Date.now() - date.getTime();
+  const diffMinutes = Math.max(0, Math.floor(diffMs / 60_000));
+
+  if (diffMinutes < 1) return "Just now";
+  if (diffMinutes < 60) return `${diffMinutes} min ago`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} hr ago`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) {
+    return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
+  }
+
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year:
+      date.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+  });
+}
+
+export default function NotificationListItem({
+  item,
+  isLast = false,
+  onPress,
+}: Props) {
+  const unread = !item.isRead;
+  const iconColor = getIconColor(item.type);
+  const metaText = item.info || item.message;
+
+  const handlePress = (): void => {
+    if (onPress) {
+      onPress(item);
+      return;
+    }
+
     router.push(Paths.appNotificationDetails(item.id));
   };
 
   return (
-    <Pressable onPress={handlePress} style={[styles.row, isLast && styles.rowLast]}>
+    <Pressable
+      onPress={handlePress}
+      style={({ pressed }) => [
+        styles.row,
+        unread && styles.rowUnread,
+        isLast && styles.rowLast,
+        pressed && styles.rowPressed,
+      ]}
+    >
       <View style={styles.leftRail}>
-        <View style={styles.iconWrap}>
-          <Ionicons name={getIconName(item.kind)} size={18} color="#FFFFFF" />
+        <View
+          style={[
+            styles.iconOuterWrap,
+            unread && { backgroundColor: `${iconColor}16` },
+          ]}
+        >
+          <View style={[styles.iconWrap, { backgroundColor: iconColor }]}>
+            <Ionicons name={getIconName(item.type)} size={18} color="#FFFFFF" />
+          </View>
         </View>
 
-        {!isLast ? <View style={styles.connector} /> : <View style={styles.connectorSpacer} />}
+        {!isLast ? (
+          <View
+            style={[
+              styles.connector,
+              unread && { backgroundColor: iconColor },
+            ]}
+          />
+        ) : (
+          <View style={styles.connectorSpacer} />
+        )}
       </View>
 
       <View style={styles.contentWrap}>
-        <AppText style={styles.timeText}>{item.timeAgo}</AppText>
+        <View style={styles.timeRow}>
+          <AppText style={styles.timeText}>
+            {formatNotificationTime(item.createdAt)}
+          </AppText>
+
+          {unread ? (
+            <View style={styles.unreadPill}>
+              <View style={styles.unreadDot} />
+              <AppText style={styles.unreadText}>Unread</AppText>
+            </View>
+          ) : null}
+        </View>
 
         <View style={styles.titleRow}>
-          <AppText numberOfLines={2} style={styles.title}>
+          <AppText
+            numberOfLines={2}
+            style={[styles.title, unread && styles.titleUnread]}
+          >
             {item.title}
           </AppText>
 
@@ -56,15 +161,14 @@ export default function NotificationListItem({ item, isLast = false }: Props) {
           />
         </View>
 
-        {item.actorLabel || item.location ? (
+        {metaText ? (
           <View style={styles.metaRow}>
-            {item.actorLabel ? (
-              <AppText style={styles.actorLabel}>{item.actorLabel}</AppText>
-            ) : null}
-
-            {item.location ? (
-              <AppText style={styles.locationText}>{item.location}</AppText>
-            ) : null}
+            <AppText
+              numberOfLines={2}
+              style={[styles.locationText, unread && styles.locationUnread]}
+            >
+              {metaText}
+            </AppText>
           </View>
         ) : null}
       </View>
@@ -78,6 +182,16 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: 12,
     paddingBottom: 18,
+    borderRadius: 18,
+  },
+
+  rowUnread: {
+    backgroundColor: "rgba(25, 183, 176, 0.045)",
+  },
+
+  rowPressed: {
+    opacity: 0.78,
+    transform: [{ scale: 0.997 }],
   },
 
   rowLast: {
@@ -85,26 +199,41 @@ const styles = StyleSheet.create({
   },
 
   leftRail: {
-    width: 30,
+    width: 34,
     alignItems: "center",
+    paddingTop: 2,
+  },
+
+  iconOuterWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2,
   },
 
   iconWrap: {
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: Theme.colors.primary,
     alignItems: "center",
     justifyContent: "center",
     zIndex: 2,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 2,
   },
 
   connector: {
     width: 2,
     flex: 1,
-    minHeight: 36,
-    backgroundColor: Theme.colors.primary,
+    minHeight: 38,
+    backgroundColor: "rgba(25, 183, 176, 0.34)",
     marginTop: 4,
+    borderRadius: 99,
   },
 
   connectorSpacer: {
@@ -115,6 +244,15 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 6,
     paddingTop: 2,
+    paddingRight: 2,
+  },
+
+  timeRow: {
+    minHeight: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
   },
 
   timeText: {
@@ -122,6 +260,30 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: Theme.colors.textMuted,
     fontFamily: Theme.fonts.body.medium,
+  },
+
+  unreadPill: {
+    minHeight: 22,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    backgroundColor: "rgba(25, 183, 176, 0.1)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+
+  unreadDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Theme.colors.primary,
+  },
+
+  unreadText: {
+    fontSize: 10.5,
+    lineHeight: 14,
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.body.semibold,
   },
 
   titleRow: {
@@ -138,6 +300,11 @@ const styles = StyleSheet.create({
     fontFamily: Theme.fonts.body.semibold,
   },
 
+  titleUnread: {
+    color: "#061A24",
+    fontFamily: Theme.fonts.body.semibold,
+  },
+
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -145,17 +312,15 @@ const styles = StyleSheet.create({
     gap: 4,
   },
 
-  actorLabel: {
+  locationText: {
+    flex: 1,
     fontSize: 15,
     lineHeight: 22,
-    color: Theme.colors.primary,
+    color: Theme.colors.textMuted,
     fontFamily: Theme.fonts.body.medium,
   },
 
-  locationText: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: Theme.colors.text,
-    fontFamily: Theme.fonts.body.medium,
+  locationUnread: {
+    color: "rgba(17, 26, 50, 0.78)",
   },
 });

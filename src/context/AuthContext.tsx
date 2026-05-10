@@ -18,6 +18,7 @@ import {
   saveAuthSession,
 } from "@/lib/auth/authSessionStorage";
 import { AuthState, AuthUser } from "@/types/auth";
+import { clearCachedMyProfile } from "@/lib/profile/profileCache";
 
 type SignInOptions = {
   hasCompletedOnboarding?: boolean;
@@ -150,19 +151,19 @@ export function AuthProvider({ children }: Props) {
     []
   );
 
-  const signOut = useCallback(async () => {
-    clearApiAccessToken();
+const signOut = useCallback(async () => {
+  clearApiAccessToken();
 
-    setState({
-      isAuthenticated: false,
-      isOnboardingComplete: false,
-      isRestoring: false,
-      token: null,
-      user: null,
-    });
+  setState({
+    isAuthenticated: false,
+    isOnboardingComplete: false,
+    isRestoring: false,
+    token: null,
+    user: null,
+  });
 
-    await clearAuthSession();
-  }, []);
+  await Promise.all([clearAuthSession(), clearCachedMyProfile()]);
+}, []);
 
   const completeOnboarding = useCallback(
     async (userPatch?: Partial<AuthUser>, options?: CompleteOnboardingOptions) => {

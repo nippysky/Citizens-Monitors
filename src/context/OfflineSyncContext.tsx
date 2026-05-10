@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
   ReactNode,
@@ -11,6 +12,15 @@ import {
   useState,
 } from "react";
 
+import {
+  createPulseComment,
+  createPulsePost,
+  likePulseComment,
+  likePulsePost,
+  PulseVisibilityScope,
+} from "@/lib/api/pulse.api";
+import { pulseQueryKeys } from "@/hooks/api/usePulseQueries";
+
 export type QueuedActionType =
   | "flag-report"
   | "comment"
@@ -19,7 +29,11 @@ export type QueuedActionType =
   | "confirm-report"
   | "submit-election-report"
   | "submit-incident-report"
-  | "submit-incident-feedback";
+  | "submit-incident-feedback"
+  | "pulse-create-post"
+  | "pulse-like-post"
+  | "pulse-create-comment"
+  | "pulse-like-comment";
 
 export type QueuedAction = {
   id: string;
@@ -39,6 +53,7 @@ type OfflineSyncContextValue = {
 };
 
 const STORAGE_KEY = "@citizen_monitors/offline_queue";
+
 const OfflineSyncContext = createContext<OfflineSyncContextValue | null>(null);
 
 async function persistQueue(items: QueuedAction[]) {
@@ -49,16 +64,68 @@ async function persistQueue(items: QueuedAction[]) {
   }
 }
 
-/**
- * Replace this with your real backend sync implementation.
- * Important: payload should contain staged file URIs only, not file blobs/base64.
- */
+function getString(payload: Record<string, unknown>, key: string): string {
+  const value = payload[key];
+  return typeof value === "string" ? value : "";
+}
+
+function getBoolean(payload: Record<string, unknown>, key: string): boolean {
+  return payload[key] === true;
+}
+
+function getVisibilityScope(
+  payload: Record<string, unknown>
+): PulseVisibilityScope {
+  return payload.visibilityScope === "lga" ? "lga" : "ward";
+}
+
 async function syncQueuedAction(item: QueuedAction): Promise<boolean> {
   try {
-    // simulate real async work (network call later)
-    await new Promise((resolve) => setTimeout(resolve, 300));
-
     switch (item.type) {
+      case "pulse-create-post": {
+        await createPulsePost({
+          body: getString(item.payload, "body"),
+          visibilityScope: getVisibilityScope(item.payload),
+          useAnonymousDisplay: getBoolean(item.payload, "useAnonymousDisplay"),
+          imageUri: getString(item.payload, "imageUri") || null,
+        });
+
+        return true;
+      }
+
+      case "pulse-like-post": {
+        const postId = getString(item.payload, "postId");
+        if (!postId) return true;
+
+        await likePulsePost(postId);
+        return true;
+      }
+
+      case "pulse-create-comment": {
+        const postId = getString(item.payload, "postId");
+        const body = getString(item.payload, "body");
+
+        if (!postId || !body) return true;
+
+        await createPulseComment({
+          postId,
+          body,
+          useAnonymousDisplay: getBoolean(item.payload, "useAnonymousDisplay"),
+        });
+
+        return true;
+      }
+
+      case "pulse-like-comment": {
+        const postId = getString(item.payload, "postId");
+        const commentId = getString(item.payload, "commentId");
+
+        if (!postId || !commentId) return true;
+
+        await likePulseComment({ postId, commentId });
+        return true;
+      }
+
       case "submit-election-report":
       case "submit-incident-report":
       case "submit-incident-feedback":
@@ -67,8 +134,7 @@ async function syncQueuedAction(item: QueuedAction): Promise<boolean> {
       case "opinion":
       case "like":
       case "confirm-report":
-        // TODO: plug real API here
-        return true;
+        return false;
 
       default:
         return false;
@@ -80,6 +146,8 @@ async function syncQueuedAction(item: QueuedAction): Promise<boolean> {
 }
 
 export function OfflineSyncProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
+
   const [queue, setQueue] = useState<QueuedAction[]>([]);
   const [isOnline, setIsOnline] = useState(true);
   const syncingRef = useRef(false);
@@ -99,7 +167,9 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsub = NetInfo.addEventListener((state) => {
-      setIsOnline(!!state.isConnected && !!state.isInternetReachable);
+      setIsOnline(
+        Boolean(state.isConnected) && state.isInternetReachable !== false
+      );
     });
 
     return unsub;
@@ -135,12 +205,17 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
 
     const run = async () => {
       let currentQueue = [...queue];
+      let didSyncPulse = false;
 
       for (const item of pending) {
         const ok = await syncQueuedAction(item);
 
         if (!ok) {
           continue;
+        }
+
+        if (item.type.startsWith("pulse-")) {
+          didSyncPulse = true;
         }
 
         currentQueue = currentQueue.map((entry) =>
@@ -151,11 +226,19 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
         await persistQueue(currentQueue);
       }
 
+      const compacted = currentQueue.filter((item) => !item.synced);
+      setQueue(compacted);
+      await persistQueue(compacted);
+
+      if (didSyncPulse) {
+        void queryClient.invalidateQueries({ queryKey: pulseQueryKeys.posts });
+      }
+
       syncingRef.current = false;
     };
 
     void run();
-  }, [isOnline, queue]);
+  }, [isOnline, queue, queryClient]);
 
   const pendingCount = useMemo(
     () => queue.filter((item) => !item.synced).length,

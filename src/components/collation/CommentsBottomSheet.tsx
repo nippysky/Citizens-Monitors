@@ -1,4 +1,3 @@
-// ─── src/components/collation/CommentsBottomSheet.tsx ─────────────────────────
 import {
   BottomSheetBackdrop,
   BottomSheetModal,
@@ -11,6 +10,14 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AppText from "@/components/ui/AppText";
+import { useOfflineSync } from "@/context/OfflineSyncContext";
+import {
+  useCreatePulseCommentMutation,
+  useLikePulseCommentMutation,
+  usePulseCommentsQuery,
+  usePulseViewerQuery,
+} from "@/hooks/api/usePulseQueries";
+import { PulseComment } from "@/lib/api/pulse.api";
 import { Theme } from "@/theme";
 
 export type DiscussionComment = {
@@ -20,46 +27,221 @@ export type DiscussionComment = {
   minutesAgo: number;
   likes: number;
   shares: number;
+  isLikedByCurrentUser?: boolean;
+  pendingSync?: boolean;
 };
 
 type Props = {
-  comments: DiscussionComment[];
-  onSubmitComment: (text: string) => void;
+  postId?: string | null;
+  comments?: DiscussionComment[];
+  onSubmitComment?: (text: string) => void;
 };
 
+function getMinutesAgo(dateValue?: string): number {
+  if (!dateValue) return 0;
+
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return 0;
+
+  return Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000));
+}
+
+function mapPulseComment(comment: PulseComment): DiscussionComment {
+  return {
+    id: comment.id,
+    author: comment.author.displayName,
+    body: comment.body,
+    minutesAgo: getMinutesAgo(comment.createdAt),
+    likes: comment.likesCount,
+    shares: 0,
+    isLikedByCurrentUser: comment.isLikedByCurrentUser,
+  };
+}
+
+function getViewerName(params: {
+  firstName?: string;
+  lastName?: string;
+  anonymousUsername?: string;
+  anonymous?: boolean;
+}): string {
+  if (params.anonymous) {
+    return params.anonymousUsername || "Anonymous Citizen";
+  }
+
+  const name = [params.firstName, params.lastName].filter(Boolean).join(" ");
+
+  return name || "@You";
+}
+
 const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
-  function CommentsBottomSheet({ comments, onSubmitComment }, ref) {
+  function CommentsBottomSheet({ postId, comments = [], onSubmitComment }, ref) {
     const insets = useSafeAreaInsets();
     const snapPoints = useMemo(() => ["75%", "92%"], []);
-    const [text, setText] = useState("");
 
-    // Local like state
+    const { enqueue, isOnline, queue } = useOfflineSync();
+
+    const commentsQuery = usePulseCommentsQuery(postId);
+    const createCommentMutation = useCreatePulseCommentMutation(postId);
+    const likeCommentMutation = useLikePulseCommentMutation(postId);
+    const viewerQuery = usePulseViewerQuery();
+
+    const [text, setText] = useState("");
     const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
     const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
 
+    const apiComments = useMemo(
+      () => commentsQuery.data?.comments.map(mapPulseComment) ?? [],
+      [commentsQuery.data]
+    );
+
+    const pendingComments = useMemo<DiscussionComment[]>(() => {
+      if (!postId) return [];
+
+      const viewer = viewerQuery.data;
+
+      return queue
+        .filter(
+          (item) =>
+            item.type === "pulse-create-comment" &&
+            !item.synced &&
+            item.payload.postId === postId
+        )
+        .map((item) => ({
+          id: item.id,
+          author: getViewerName({
+            firstName: viewer?.firstName,
+            lastName: viewer?.lastName,
+            anonymousUsername: viewer?.anonymousUsername,
+            anonymous: item.payload.useAnonymousDisplay === true,
+          }),
+          body: typeof item.payload.body === "string" ? item.payload.body : "",
+          minutesAgo: getMinutesAgo(new Date(item.createdAt).toISOString()),
+          likes: 0,
+          shares: 0,
+          pendingSync: true,
+        }))
+        .reverse();
+    }, [postId, queue, viewerQuery.data]);
+
+    const resolvedComments = postId
+      ? [...pendingComments, ...apiComments]
+      : comments;
+
     const close = useCallback(() => {
-      if (ref && typeof ref !== "function" && ref.current) ref.current.dismiss();
+      if (ref && typeof ref !== "function" && ref.current) {
+        ref.current.dismiss();
+      }
     }, [ref]);
 
-    const submit = useCallback(() => {
+    const submit = useCallback(async () => {
       const trimmed = text.trim();
       if (!trimmed) return;
-      onSubmitComment(trimmed);
-      setText("");
-    }, [text, onSubmitComment]);
 
-    const toggleLike = useCallback((id: string, baseLikes: number) => {
-      setLikedIds((prev) => {
-        const next = new Set(prev);
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
-        return next;
-      });
-      setLikeCounts((prev) => {
-        const liked = likedIds.has(id);
-        return { ...prev, [id]: liked ? (prev[id] ?? baseLikes) - 1 : (prev[id] ?? baseLikes) + 1 };
-      });
-    }, [likedIds]);
+      if (!postId) {
+        onSubmitComment?.(trimmed);
+        setText("");
+        return;
+      }
+
+      const payload = {
+        postId,
+        body: trimmed,
+        useAnonymousDisplay: false,
+      };
+
+      if (!isOnline) {
+        enqueue({
+          type: "pulse-create-comment",
+          payload,
+        });
+
+        setText("");
+        return;
+      }
+
+      try {
+        await createCommentMutation.mutateAsync({
+          body: trimmed,
+          useAnonymousDisplay: false,
+        });
+
+        setText("");
+      } catch (error) {
+        enqueue({
+          type: "pulse-create-comment",
+          payload,
+        });
+
+        setText("");
+        console.log("Pulse comment queued:", error);
+      }
+    }, [
+      createCommentMutation,
+      enqueue,
+      isOnline,
+      onSubmitComment,
+      postId,
+      text,
+    ]);
+
+    const toggleLike = useCallback(
+      async (comment: DiscussionComment) => {
+        if (comment.pendingSync) return;
+
+        const already =
+          likedIds.has(comment.id) || comment.isLikedByCurrentUser === true;
+        const nextLiked = !already;
+
+        setLikedIds((prev) => {
+          const next = new Set(prev);
+
+          if (nextLiked) {
+            next.add(comment.id);
+          } else {
+            next.delete(comment.id);
+          }
+
+          return next;
+        });
+
+        setLikeCounts((prev) => ({
+          ...prev,
+          [comment.id]: Math.max(
+            0,
+            (prev[comment.id] ?? comment.likes) + (nextLiked ? 1 : -1)
+          ),
+        }));
+
+        if (!postId) return;
+
+        if (!isOnline) {
+          enqueue({
+            type: "pulse-like-comment",
+            payload: {
+              postId,
+              commentId: comment.id,
+            },
+          });
+
+          return;
+        }
+
+        try {
+          await likeCommentMutation.mutateAsync(comment.id);
+        } catch (error) {
+          enqueue({
+            type: "pulse-like-comment",
+            payload: {
+              postId,
+              commentId: comment.id,
+            },
+          });
+
+          console.log("Pulse comment like queued:", error);
+        }
+      },
+      [enqueue, isOnline, likeCommentMutation, likedIds, postId]
+    );
 
     const canSend = text.trim().length > 0;
 
@@ -74,48 +256,112 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
         backdropComponent={(p) => (
-          <BottomSheetBackdrop {...p} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.3} pressBehavior="close" />
+          <BottomSheetBackdrop
+            {...p}
+            appearsOnIndex={0}
+            disappearsOnIndex={-1}
+            opacity={0.3}
+            pressBehavior="close"
+          />
         )}
         handleIndicatorStyle={styles.handle}
         backgroundStyle={styles.bg}
       >
-        {/* Header */}
         <View style={styles.header}>
-          <AppText style={styles.headerTitle}>Comments</AppText>
+          <View>
+            <AppText style={styles.headerTitle}>Comments</AppText>
+            {postId && !isOnline ? (
+              <AppText style={styles.headerSubtitle}>
+                Offline comments will sync automatically
+              </AppText>
+            ) : null}
+          </View>
+
           <Pressable onPress={close} hitSlop={8} style={styles.closeBtn}>
             <Ionicons name="close" size={22} color={Theme.colors.textMuted} />
           </Pressable>
         </View>
 
-        {/* Comment list */}
         <BottomSheetFlatList
-          data={comments}
-          keyExtractor={(c) => c.id}
+          data={resolvedComments}
+          keyExtractor={(comment) => comment.id}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContent}
           keyboardShouldPersistTaps="handled"
+          refreshing={commentsQuery.isRefetching}
+          onRefresh={() => {
+            if (postId) {
+              void commentsQuery.refetch();
+            }
+          }}
+          ListEmptyComponent={
+            commentsQuery.isLoading ? null : (
+              <View style={styles.emptyWrap}>
+                <Ionicons
+                  name="chatbubbles-outline"
+                  size={32}
+                  color={Theme.colors.textMuted}
+                />
+                <AppText style={styles.emptyTitle}>No comments yet</AppText>
+                <AppText style={styles.emptyText}>
+                  Be the first to respond to this pulse update.
+                </AppText>
+              </View>
+            )
+          }
           renderItem={({ item }) => {
-            const isLiked = likedIds.has(item.id);
+            const isLiked =
+              likedIds.has(item.id) || item.isLikedByCurrentUser === true;
             const displayLikes = likeCounts[item.id] ?? item.likes;
 
             return (
               <View style={styles.commentCard}>
                 <View style={styles.commentHead}>
                   <View style={styles.commentAuthorRow}>
-                    <Ionicons name="chatbox-ellipses-outline" size={14} color={Theme.colors.textMuted} />
-                    <AppText style={styles.commentAuthor}>{item.author}</AppText>
+                    <Ionicons
+                      name={
+                        item.pendingSync
+                          ? "cloud-upload-outline"
+                          : "chatbox-ellipses-outline"
+                      }
+                      size={14}
+                      color={Theme.colors.textMuted}
+                    />
+                    <AppText style={styles.commentAuthor}>
+                      {item.author}
+                    </AppText>
                   </View>
-                  <AppText style={styles.commentTime}>{item.minutesAgo} min ago</AppText>
+                  <AppText style={styles.commentTime}>
+                    {item.pendingSync
+                      ? "Pending sync"
+                      : `${item.minutesAgo} min ago`}
+                  </AppText>
                 </View>
+
                 <AppText style={styles.commentBody}>{item.body}</AppText>
+
                 <View style={styles.commentActions}>
-                  <Pressable onPress={() => toggleLike(item.id, item.likes)} style={styles.likeBtn} hitSlop={6}>
+                  <Pressable
+                    onPress={() => {
+                      void toggleLike(item);
+                    }}
+                    style={styles.likeBtn}
+                    hitSlop={6}
+                    disabled={item.pendingSync}
+                  >
                     <Ionicons
                       name={isLiked ? "thumbs-up" : "thumbs-up-outline"}
                       size={15}
-                      color={isLiked ? Theme.colors.primary : Theme.colors.textMuted}
+                      color={
+                        isLiked ? Theme.colors.primary : Theme.colors.textMuted
+                      }
                     />
-                    <AppText style={[styles.likeText, isLiked && { color: Theme.colors.primary }]}>
+                    <AppText
+                      style={[
+                        styles.likeText,
+                        isLiked && { color: Theme.colors.primary },
+                      ]}
+                    >
                       {displayLikes} Likes
                     </AppText>
                   </Pressable>
@@ -125,11 +371,19 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
           }}
         />
 
-        {/* ── Sticky input — always visible in white container ── */}
-        <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 10 }]}>
+        <View
+          style={[
+            styles.inputContainer,
+            { paddingBottom: insets.bottom + 10 },
+          ]}
+        >
           <View style={styles.inputRow}>
             <View style={styles.inputIconWrap}>
-              <Ionicons name="chatbubbles-outline" size={20} color={Theme.colors.textMuted} />
+              <Ionicons
+                name="chatbubbles-outline"
+                size={20}
+                color={Theme.colors.textMuted}
+              />
             </View>
             <View style={styles.inputFieldWrap}>
               <BottomSheetTextInput
@@ -139,20 +393,28 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
                 onChangeText={setText}
                 style={styles.input}
                 returnKeyType="send"
-                onSubmitEditing={submit}
+                onSubmitEditing={() => {
+                  void submit();
+                }}
                 multiline
               />
             </View>
           </View>
 
-          {/* Submit button — visible when text is entered */}
           <Pressable
-            onPress={submit}
-            disabled={!canSend}
+            onPress={() => {
+              void submit();
+            }}
+            disabled={!canSend || createCommentMutation.isPending}
             style={[styles.submitBtn, !canSend && styles.submitBtnDisabled]}
           >
-            <AppText style={[styles.submitBtnText, !canSend && styles.submitBtnTextDisabled]}>
-              Submit Comment
+            <AppText
+              style={[
+                styles.submitBtnText,
+                !canSend && styles.submitBtnTextDisabled,
+              ]}
+            >
+              {isOnline ? "Submit Comment" : "Save Offline"}
             </AppText>
           </Pressable>
         </View>
@@ -164,11 +426,14 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
 export default CommentsBottomSheet;
 
 const styles = StyleSheet.create({
-  bg: { backgroundColor: Theme.colors.background, borderTopLeftRadius: 28, borderTopRightRadius: 28 },
+  bg: {
+    backgroundColor: Theme.colors.background,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+  },
   handle: { backgroundColor: "rgba(17,26,50,0.12)", width: 44 },
-
   header: {
-    minHeight: 54,
+    minHeight: 58,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -176,11 +441,30 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.colors.border,
   },
-  headerTitle: { fontSize: 18, lineHeight: 24, fontFamily: Theme.fonts.heading.semibold, color: Theme.colors.text },
-  closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.74)", alignItems: "center", justifyContent: "center" },
-
-  listContent: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12, gap: 0 },
-
+  headerTitle: {
+    fontSize: 18,
+    lineHeight: 24,
+    fontFamily: Theme.fonts.heading.semibold,
+    color: Theme.colors.text,
+  },
+  headerSubtitle: {
+    fontSize: 11.5,
+    lineHeight: 16,
+    color: Theme.colors.textMuted,
+  },
+  closeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.74)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 12,
+  },
   commentCard: {
     borderBottomWidth: 1,
     borderBottomColor: Theme.colors.border,
@@ -188,16 +472,47 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     gap: 6,
   },
-  commentHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  commentHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   commentAuthorRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  commentAuthor: { fontSize: 14, lineHeight: 18, color: Theme.colors.text, fontFamily: Theme.fonts.body.semibold },
+  commentAuthor: {
+    fontSize: 14,
+    lineHeight: 18,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.semibold,
+  },
   commentTime: { fontSize: 11, lineHeight: 14, color: Theme.colors.textMuted },
   commentBody: { fontSize: 14, lineHeight: 22, color: Theme.colors.text },
-  commentActions: { flexDirection: "row", alignItems: "center", gap: 16, paddingTop: 2 },
+  commentActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    paddingTop: 2,
+  },
   likeBtn: { flexDirection: "row", alignItems: "center", gap: 5 },
   likeText: { fontSize: 12, lineHeight: 16, color: Theme.colors.textMuted },
-
-  /* ── Sticky input container ── */
+  emptyWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 48,
+    gap: 8,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    lineHeight: 22,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+  emptyText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Theme.colors.textMuted,
+    textAlign: "center",
+    maxWidth: 240,
+  },
   inputContainer: {
     backgroundColor: Theme.colors.surface,
     borderTopWidth: 1,
@@ -231,8 +546,6 @@ const styles = StyleSheet.create({
     color: Theme.colors.text,
     maxHeight: 100,
   },
-
-  /* Submit button */
   submitBtn: {
     minHeight: 44,
     borderRadius: 14,

@@ -1,5 +1,9 @@
 import { apiRequest } from "@/lib/api/http";
 import { getRegistrationDevicePayload } from "@/lib/device/getRegistrationDevicePayload";
+import {
+  normalizePvcImageForUpload,
+  NormalizedPvcImage,
+} from "@/lib/media/normalizePvcImage";
 
 export type MobileUserRole = "observer" | "volunteer" | "public-viewer";
 
@@ -158,7 +162,7 @@ export type SubmitObserverRoleResponse = {
   user: MobileUser;
 };
 
-type ReactNativeFile = {
+type ReactNativeUploadFile = {
   uri: string;
   name: string;
   type: string;
@@ -172,55 +176,18 @@ function cleanText(value: string): string {
   return value.trim();
 }
 
-function getFileExtension(uri: string): string {
-  const cleanUri = uri.split("?")[0] ?? uri;
-  const extension = cleanUri.split(".").pop()?.toLowerCase();
-
-  if (!extension || extension.length > 5) {
-    return "jpg";
-  }
-
-  return extension;
-}
-
-function getMimeType(uri: string): string {
-  const extension = getFileExtension(uri);
-
-  switch (extension) {
-    case "png":
-      return "image/png";
-    case "webp":
-      return "image/webp";
-    case "heic":
-    case "heif":
-      return "image/heic";
-    case "jpeg":
-    case "jpg":
-    default:
-      return "image/jpeg";
-  }
-}
-
-function createImageFile(uri: string, fallbackName: string): ReactNativeFile {
-  const extension = getFileExtension(uri);
-
-  return {
-    uri,
-    name: `${fallbackName}.${extension}`,
-    type: getMimeType(uri),
-  };
-}
-
-function appendImageFile(
+function appendUploadFile(
   formData: FormData,
   fieldName: string,
-  uri: string,
-  fallbackName: string
+  file: NormalizedPvcImage
 ): void {
-  formData.append(
-    fieldName,
-    createImageFile(uri, fallbackName) as unknown as Blob
-  );
+  const uploadFile: ReactNativeUploadFile = {
+    uri: file.uri,
+    name: file.name,
+    type: file.type,
+  };
+
+  formData.append(fieldName, uploadFile as unknown as Blob);
 }
 
 export async function registerUser(
@@ -353,7 +320,7 @@ export async function selectRole(
 ): Promise<SelectRoleResponse> {
   return apiRequest<SelectRoleResponse>("/auth/select-role", {
     method: "POST",
-    auth: false,
+    auth: true,
     body: {
       email: normalizeEmail(payload.email),
       role: payload.role,
@@ -364,15 +331,21 @@ export async function selectRole(
 export async function submitObserverRole(
   payload: SubmitObserverRolePayload
 ): Promise<SubmitObserverRoleResponse> {
+  const [frontPvc, backPvc] = await Promise.all([
+    normalizePvcImageForUpload(payload.frontPvcUri, "front"),
+    normalizePvcImageForUpload(payload.backPvcUri, "back"),
+  ]);
+
   const formData = new FormData();
 
   formData.append("email", normalizeEmail(payload.email));
-  appendImageFile(formData, "observerId[]", payload.frontPvcUri, "front-pvc");
-  appendImageFile(formData, "observerId[]", payload.backPvcUri, "back-pvc");
+  appendUploadFile(formData, "observerId[]", frontPvc);
+  appendUploadFile(formData, "observerId[]", backPvc);
 
   return apiRequest<SubmitObserverRoleResponse>("/auth/observer-role", {
     method: "POST",
-    auth: false,
+    auth: true,
     body: formData,
+    timeoutMs: 180_000,
   });
 }

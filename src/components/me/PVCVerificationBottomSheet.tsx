@@ -1,9 +1,3 @@
-// ─── src/components/me/PVCVerificationBottomSheet.tsx ─────────────────────────
-// Shows full image preview with Replace/Remove overlay when PVC is selected,
-// consistent with ObserverRegistrationBottomSheet upload cards.
-// Updated: now uses centralized permission helpers + app toast.
-// ─────────────────────────────────────────────────────────────────────────────
-
 import {
   BottomSheetBackdrop,
   BottomSheetModal,
@@ -33,23 +27,28 @@ import { Theme } from "@/theme";
 
 type Props = {
   pvcVerifiedDate?: string;
-  onSubmit: (frontUri: string, backUri: string) => void;
+  onSubmit: (frontUri: string, backUri: string) => Promise<void> | void;
+  saving?: boolean;
 };
 
 const PVCVerificationBottomSheet = forwardRef<BottomSheetModal, Props>(
-  function PVCVerificationBottomSheet({ pvcVerifiedDate, onSubmit }, ref) {
+  function PVCVerificationBottomSheet(
+    { pvcVerifiedDate, onSubmit, saving = false },
+    ref
+  ) {
     const insets = useSafeAreaInsets();
     const { showToast } = useAppToast();
-    const snaps = useMemo(() => ["85%"], []);
+    const snapPoints = useMemo(() => ["85%"], []);
 
     const [frontUri, setFrontUri] = useState<string | null>(null);
     const [backUri, setBackUri] = useState<string | null>(null);
-    const [busy, setBusy] = useState(false);
+    const [localSubmitting, setLocalSubmitting] = useState(false);
     const [activeChooserSide, setActiveChooserSide] = useState<
       "front" | "back" | null
     >(null);
 
-    const isVerified = !!pvcVerifiedDate;
+    const isVerified = Boolean(pvcVerifiedDate);
+    const isSubmitting = saving || localSubmitting;
 
     const close = () => {
       if (ref && typeof ref !== "function" && ref.current) {
@@ -61,8 +60,6 @@ const PVCVerificationBottomSheet = forwardRef<BottomSheetModal, Props>(
       setActiveChooserSide(null);
     }, []);
 
-    /* ── Pick / Capture ── */
-
     const setImage = useCallback(
       (side: "front" | "back", uri: string) => {
         if (side === "front") {
@@ -71,13 +68,14 @@ const PVCVerificationBottomSheet = forwardRef<BottomSheetModal, Props>(
             type: "success",
             message: "Front PVC image added.",
           });
-        } else {
-          setBackUri(uri);
-          showToast({
-            type: "success",
-            message: "Back PVC image added.",
-          });
+          return;
         }
+
+        setBackUri(uri);
+        showToast({
+          type: "success",
+          message: "Back PVC image added.",
+        });
       },
       [showToast]
     );
@@ -93,13 +91,15 @@ const PVCVerificationBottomSheet = forwardRef<BottomSheetModal, Props>(
           const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ["images"],
             allowsEditing: false,
-            quality: Platform.OS === "ios" ? 0.9 : 0.85,
+            quality: Platform.OS === "ios" ? 0.88 : 0.82,
           });
 
           if (!result.canceled && result.assets?.length) {
             setImage(side, result.assets[0].uri);
           }
-        } catch {
+        } catch (error) {
+          console.log("PVC gallery picker error:", error);
+
           showToast({
             type: "error",
             message: "Could not open gallery.",
@@ -120,13 +120,15 @@ const PVCVerificationBottomSheet = forwardRef<BottomSheetModal, Props>(
           const result = await ImagePicker.launchCameraAsync({
             mediaTypes: ["images"],
             allowsEditing: false,
-            quality: Platform.OS === "ios" ? 0.9 : 0.85,
+            quality: Platform.OS === "ios" ? 0.88 : 0.82,
           });
 
           if (!result.canceled && result.assets?.length) {
             setImage(side, result.assets[0].uri);
           }
-        } catch {
+        } catch (error) {
+          console.log("PVC camera picker error:", error);
+
           showToast({
             type: "error",
             message: "Could not open camera.",
@@ -138,51 +140,58 @@ const PVCVerificationBottomSheet = forwardRef<BottomSheetModal, Props>(
 
     const showUploadOptions = useCallback(
       (side: "front" | "back") => {
+        if (isSubmitting) return;
+
         if (Platform.OS === "ios") {
           ActionSheetIOS.showActionSheetWithOptions(
             {
               options: ["Cancel", "Take Photo", "Choose from Gallery"],
               cancelButtonIndex: 0,
             },
-            (i) => {
-              if (i === 1) {
+            (index) => {
+              if (index === 1) {
                 void takePhoto(side);
               }
-              if (i === 2) {
+
+              if (index === 2) {
                 void pickFromGallery(side);
               }
             }
           );
+
           return;
         }
 
         setActiveChooserSide(side);
       },
-      [pickFromGallery, takePhoto]
+      [isSubmitting, pickFromGallery, takePhoto]
     );
 
     const removeImage = useCallback(
       (side: "front" | "back") => {
+        if (isSubmitting) return;
+
         if (side === "front") {
           setFrontUri(null);
           showToast({
             type: "success",
             message: "Front PVC image removed.",
           });
-        } else {
-          setBackUri(null);
-          showToast({
-            type: "success",
-            message: "Back PVC image removed.",
-          });
+          return;
         }
+
+        setBackUri(null);
+        showToast({
+          type: "success",
+          message: "Back PVC image removed.",
+        });
       },
-      [showToast]
+      [isSubmitting, showToast]
     );
 
-    /* ── Submit ── */
-
     const handleSubmit = async () => {
+      if (isSubmitting) return;
+
       if (!frontUri || !backUri) {
         showToast({
           type: "error",
@@ -191,26 +200,35 @@ const PVCVerificationBottomSheet = forwardRef<BottomSheetModal, Props>(
         return;
       }
 
-      setBusy(true);
-      await new Promise((r) => setTimeout(r, 800));
-      setBusy(false);
-      onSubmit(frontUri, backUri);
-      close();
+      try {
+        setLocalSubmitting(true);
+
+        await onSubmit(frontUri, backUri);
+
+        setFrontUri(null);
+        setBackUri(null);
+        setActiveChooserSide(null);
+        close();
+      } catch (error) {
+        console.log("PVC upload submit error:", error);
+      } finally {
+        setLocalSubmitting(false);
+      }
     };
 
     return (
       <BottomSheetModal
         ref={ref}
-        snapPoints={snaps}
-        enablePanDownToClose
+        snapPoints={snapPoints}
+        enablePanDownToClose={!isSubmitting}
         topInset={insets.top + 12}
-        backdropComponent={(p) => (
+        backdropComponent={(props) => (
           <BottomSheetBackdrop
-            {...p}
+            {...props}
             appearsOnIndex={0}
             disappearsOnIndex={-1}
             opacity={0.32}
-            pressBehavior="close"
+            pressBehavior={isSubmitting ? "none" : "close"}
           />
         )}
         handleIndicatorStyle={styles.handle}
@@ -224,17 +242,21 @@ const PVCVerificationBottomSheet = forwardRef<BottomSheetModal, Props>(
             { paddingBottom: insets.bottom + 22 },
           ]}
         >
-          {/* Header */}
           <View style={styles.header}>
             <AppText style={styles.headerTitle}>Update Your PVC</AppText>
-            <Pressable onPress={close} hitSlop={8} style={styles.closeBtn}>
+
+            <Pressable
+              onPress={close}
+              hitSlop={8}
+              disabled={isSubmitting}
+              style={[styles.closeBtn, isSubmitting && styles.disabledControl]}
+            >
               <Ionicons name="close" size={22} color={Theme.colors.textMuted} />
             </Pressable>
           </View>
 
           <View style={styles.divider} />
 
-          {/* Verified banner */}
           {isVerified ? (
             <View style={styles.verifiedBanner}>
               <View style={styles.verifiedIconWrap}>
@@ -244,6 +266,7 @@ const PVCVerificationBottomSheet = forwardRef<BottomSheetModal, Props>(
                   color={Theme.colors.primary}
                 />
               </View>
+
               <View style={styles.verifiedTextWrap}>
                 <AppText style={styles.verifiedTitle}>
                   Identity Verified
@@ -255,12 +278,11 @@ const PVCVerificationBottomSheet = forwardRef<BottomSheetModal, Props>(
             </View>
           ) : null}
 
-          {/* Re-upload info */}
           <View style={styles.infoBlock}>
             <AppText style={styles.infoTitle}>Re-upload PVC</AppText>
             <AppText style={styles.infoSub}>
-              Upload a new PVC if your card was replaced or verification was
-              rejected. Your data is encrypted under NDPR 2019.
+              Upload both sides of your PVC. Your submission will be reviewed by
+              an admin.
             </AppText>
           </View>
 
@@ -273,7 +295,12 @@ const PVCVerificationBottomSheet = forwardRef<BottomSheetModal, Props>(
                     : "Upload back of PVC"}
                 </AppText>
 
-                <Pressable onPress={closeChooser} style={styles.inlineChooserClose}>
+                <Pressable
+                  onPress={closeChooser}
+                  hitSlop={8}
+                  disabled={isSubmitting}
+                  style={styles.inlineChooserClose}
+                >
                   <Ionicons name="close" size={18} color="#4B5563" />
                 </Pressable>
               </View>
@@ -283,19 +310,29 @@ const PVCVerificationBottomSheet = forwardRef<BottomSheetModal, Props>(
                   onPress={() => {
                     void takePhoto(activeChooserSide);
                   }}
-                  style={styles.inlineChooserBtn}
+                  disabled={isSubmitting}
+                  style={[
+                    styles.inlineChooserBtn,
+                    isSubmitting && styles.disabledControl,
+                  ]}
                 >
                   <View style={styles.inlineChooserBtnIcon}>
                     <Ionicons name="camera-outline" size={18} color="#0F172A" />
                   </View>
-                  <AppText style={styles.inlineChooserBtnText}>Take Photo</AppText>
+                  <AppText style={styles.inlineChooserBtnText}>
+                    Take Photo
+                  </AppText>
                 </Pressable>
 
                 <Pressable
                   onPress={() => {
                     void pickFromGallery(activeChooserSide);
                   }}
-                  style={styles.inlineChooserBtn}
+                  disabled={isSubmitting}
+                  style={[
+                    styles.inlineChooserBtn,
+                    isSubmitting && styles.disabledControl,
+                  ]}
                 >
                   <View style={styles.inlineChooserBtnIcon}>
                     <Ionicons name="images-outline" size={18} color="#0F172A" />
@@ -308,27 +345,29 @@ const PVCVerificationBottomSheet = forwardRef<BottomSheetModal, Props>(
             </View>
           ) : null}
 
-          {/* Front */}
           <UploadBox
             label="Front of PVC"
             uri={frontUri}
+            disabled={isSubmitting}
             onUpload={() => showUploadOptions("front")}
             onRemove={() => removeImage("front")}
           />
 
-          {/* Back */}
           <UploadBox
             label="Back of PVC"
             uri={backUri}
+            disabled={isSubmitting}
             onUpload={() => showUploadOptions("back")}
             onRemove={() => removeImage("back")}
           />
 
           <AppButton
-            title={busy ? "Submitting..." : "Submit"}
-            onPress={handleSubmit}
-            loading={busy}
-            disabled={!frontUri || !backUri}
+            title="Submit"
+            onPress={() => {
+              void handleSubmit();
+            }}
+            loading={isSubmitting}
+            disabled={!frontUri || !backUri || isSubmitting}
             style={styles.submitBtn}
           />
         </BottomSheetScrollView>
@@ -339,16 +378,16 @@ const PVCVerificationBottomSheet = forwardRef<BottomSheetModal, Props>(
 
 export default PVCVerificationBottomSheet;
 
-/* ───── Upload box — empty state + full preview state ───── */
-
 function UploadBox({
   label,
   uri,
+  disabled,
   onUpload,
   onRemove,
 }: {
   label: string;
   uri: string | null;
+  disabled?: boolean;
   onUpload: () => void;
   onRemove: () => void;
 }) {
@@ -356,26 +395,38 @@ function UploadBox({
     return (
       <View style={styles.uploadBlock}>
         <AppText style={styles.uploadLabel}>{label}</AppText>
-        <Pressable onPress={onUpload} style={styles.previewCard}>
+
+        <Pressable
+          onPress={onUpload}
+          disabled={disabled}
+          style={[styles.previewCard, disabled && styles.disabledControl]}
+        >
           <Image source={{ uri }} style={styles.previewImg} />
           <View style={styles.previewOverlay} />
 
-          {/* Selected badge */}
           <View style={styles.previewTopBar}>
             <View style={styles.selectedBadge}>
-              <Ionicons name="checkmark" size={14} color="#FFF" />
+              <Ionicons name="checkmark" size={14} color="#FFFFFF" />
               <AppText style={styles.selectedBadgeText}>Selected</AppText>
             </View>
           </View>
 
-          {/* Replace / Remove */}
           <View style={styles.previewActions}>
-            <Pressable onPress={onUpload} style={styles.actionBtn}>
-              <Ionicons name="refresh-outline" size={16} color="#FFF" />
+            <Pressable
+              onPress={onUpload}
+              disabled={disabled}
+              style={styles.actionBtn}
+            >
+              <Ionicons name="refresh-outline" size={16} color="#FFFFFF" />
               <AppText style={styles.actionBtnText}>Replace</AppText>
             </Pressable>
-            <Pressable onPress={onRemove} style={styles.actionBtnDanger}>
-              <Ionicons name="trash-outline" size={16} color="#FFF" />
+
+            <Pressable
+              onPress={onRemove}
+              disabled={disabled}
+              style={styles.actionBtnDanger}
+            >
+              <Ionicons name="trash-outline" size={16} color="#FFFFFF" />
               <AppText style={styles.actionBtnText}>Remove</AppText>
             </Pressable>
           </View>
@@ -387,7 +438,12 @@ function UploadBox({
   return (
     <View style={styles.uploadBlock}>
       <AppText style={styles.uploadLabel}>{label}</AppText>
-      <Pressable onPress={onUpload} style={styles.emptyCard}>
+
+      <Pressable
+        onPress={onUpload}
+        disabled={disabled}
+        style={[styles.emptyCard, disabled && styles.disabledControl]}
+      >
         <View style={styles.emptyIconWrap}>
           <Ionicons
             name="cloud-upload-outline"
@@ -395,6 +451,7 @@ function UploadBox({
             color={Theme.colors.textMuted}
           />
         </View>
+
         <AppText style={styles.emptyCardText}>Upload Image</AppText>
       </Pressable>
     </View>
@@ -441,8 +498,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#DFE4EB",
     marginHorizontal: -16,
   },
-
-  /* Verified banner */
   verifiedBanner: {
     borderRadius: 16,
     backgroundColor: "#EAFBF9",
@@ -467,184 +522,169 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   verifiedTitle: {
-    fontSize: 15,
+    fontSize: 14,
     lineHeight: 20,
-    color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
+    color: Theme.colors.text,
   },
   verifiedSub: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 17,
     color: Theme.colors.textMuted,
   },
-
-  /* Info block */
   infoBlock: {
-    gap: 6,
+    gap: 5,
   },
   infoTitle: {
     fontSize: 16,
     lineHeight: 22,
-    color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
+    color: Theme.colors.text,
   },
   infoSub: {
     fontSize: 13,
     lineHeight: 19,
     color: Theme.colors.textMuted,
   },
-
-  /* Inline chooser */
   inlineChooser: {
-    borderRadius: 20,
-    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    padding: 14,
-    gap: 14,
+    borderColor: "#D9DEE8",
+    backgroundColor: "#FFFFFF",
+    padding: 12,
+    gap: 12,
   },
   inlineChooserHeader: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
+    alignItems: "center",
   },
   inlineChooserTitle: {
-    flex: 1,
-    color: "#111827",
     fontSize: 14,
     lineHeight: 20,
     fontFamily: Theme.fonts.body.semibold,
+    color: Theme.colors.text,
   },
   inlineChooserClose: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#F3F4F6",
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#F3F4F6",
   },
   inlineChooserActions: {
-    flexDirection: "row",
     gap: 10,
   },
   inlineChooserBtn: {
-    flex: 1,
-    minHeight: 54,
-    borderRadius: 16,
-    backgroundColor: "#F9FAFB",
+    minHeight: 46,
+    borderRadius: 13,
     borderWidth: 1,
     borderColor: "#E5E7EB",
+    backgroundColor: "#FAFAFA",
+    paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingHorizontal: 10,
+    gap: 10,
   },
   inlineChooserBtnIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#E8F5EF",
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#EEF2F6",
   },
   inlineChooserBtnText: {
-    color: "#111827",
     fontSize: 13,
     lineHeight: 18,
-    fontFamily: Theme.fonts.body.semibold,
-    textAlign: "center",
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.medium,
   },
-
-  /* Upload shared */
   uploadBlock: {
-    gap: 8,
+    gap: 10,
   },
   uploadLabel: {
     fontSize: 14,
     lineHeight: 20,
+    fontFamily: Theme.fonts.body.semibold,
     color: Theme.colors.text,
-    fontFamily: Theme.fonts.body.medium,
   },
-
-  /* Empty card */
   emptyCard: {
-    height: 164,
+    minHeight: 128,
+    borderRadius: 18,
     borderWidth: 1.5,
     borderStyle: "dashed",
-    borderColor: "#C7D2DA",
-    borderRadius: 22,
-    backgroundColor: "#FCFCF9",
+    borderColor: "#D9DEE8",
+    backgroundColor: "rgba(255,255,255,0.58)",
     alignItems: "center",
     justifyContent: "center",
+    gap: 10,
   },
   emptyIconWrap: {
-    width: 58,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: "#DBEFE3",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 18,
+    backgroundColor: "rgba(5,163,156,0.08)",
   },
   emptyCardText: {
-    color: "#5B6468",
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: 13,
+    lineHeight: 18,
+    color: Theme.colors.textMuted,
     fontFamily: Theme.fonts.body.medium,
   },
-
-  /* Preview card (image selected) */
   previewCard: {
-    height: 176,
-    borderRadius: 22,
+    height: 190,
+    borderRadius: 18,
     overflow: "hidden",
-    backgroundColor: "#E5E7EB",
-    justifyContent: "space-between",
+    backgroundColor: "#111827",
   },
   previewImg: {
-    ...StyleSheet.absoluteFillObject,
     width: "100%",
     height: "100%",
+    resizeMode: "cover",
   },
   previewOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(12, 17, 29, 0.24)",
+    backgroundColor: "rgba(0,0,0,0.18)",
   },
   previewTopBar: {
-    paddingHorizontal: 12,
-    paddingTop: 12,
+    position: "absolute",
+    top: 10,
+    left: 10,
+    right: 10,
     flexDirection: "row",
-    justifyContent: "flex-start",
   },
   selectedBadge: {
+    minHeight: 28,
+    borderRadius: 999,
+    backgroundColor: "rgba(5,163,156,0.95)",
+    paddingHorizontal: 10,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    borderRadius: 999,
-    backgroundColor: "rgba(17, 24, 39, 0.72)",
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    gap: 5,
   },
   selectedBadgeText: {
-    color: "#FFF",
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 11,
+    lineHeight: 15,
+    color: "#FFFFFF",
     fontFamily: Theme.fonts.body.semibold,
   },
   previewActions: {
+    position: "absolute",
+    left: 10,
+    right: 10,
+    bottom: 10,
     flexDirection: "row",
-    justifyContent: "space-between",
     gap: 10,
-    paddingHorizontal: 12,
-    paddingBottom: 12,
   },
   actionBtn: {
     flex: 1,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: "rgba(17, 24, 39, 0.64)",
+    minHeight: 38,
+    borderRadius: 12,
+    backgroundColor: "rgba(17,24,39,0.72)",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -652,22 +692,24 @@ const styles = StyleSheet.create({
   },
   actionBtnDanger: {
     flex: 1,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: "rgba(220, 38, 38, 0.86)",
+    minHeight: 38,
+    borderRadius: 12,
+    backgroundColor: "rgba(239,68,68,0.86)",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
   },
   actionBtnText: {
-    color: "#FFF",
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 16,
+    color: "#FFFFFF",
     fontFamily: Theme.fonts.body.semibold,
   },
-
   submitBtn: {
     marginVertical: 0,
+  },
+  disabledControl: {
+    opacity: 0.58,
   },
 });

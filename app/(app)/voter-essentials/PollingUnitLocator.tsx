@@ -1,7 +1,12 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
-import { useMemo, useRef, useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
+import { router } from "expo-router";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
+  FlatList,
+  Linking,
+  ListRenderItemInfo,
   Modal,
   Platform,
   Pressable,
@@ -13,200 +18,136 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AppGradientScreen from "@/components/app/AppGradientScreen";
 import AppScreenLoader from "@/components/feedback/AppScreenLoader";
+import { useToastContext } from "@/components/feedback/ToastProvider";
 import TutorialBanner from "@/components/onboarding/TutorialBanner";
-import BackButton from "@/components/ui/BackButton";
 import AppButton from "@/components/ui/AppButton";
+import AppInput from "@/components/ui/AppInput";
 import AppSelectField from "@/components/ui/AppSelectField";
 import AppText from "@/components/ui/AppText";
+import BackButton from "@/components/ui/BackButton";
 import SelectPickerSheet from "@/components/ui/sheets/SelectPickerSheet";
-import { useToastContext } from "@/components/feedback/ToastProvider";
-import { Theme } from "@/theme";
-import { router } from "expo-router";
 import { Paths } from "@/constants/paths";
+import {
+  useLocalGovernmentsQuery,
+  useStatesQuery,
+  useWardsQuery,
+} from "@/hooks/api/useLocationQueries";
+import { usePollingUnitLookupMutation } from "@/hooks/api/usePollingUnitLookupMutation";
+import { PollingUnitLookupItem } from "@/lib/api/pollingUnitLocator.api";
+import { Theme } from "@/theme";
 
-type PollingUnitLocationForm = {
-  pollingState: string;
-  localGovernmentArea: string;
-  ward: string;
-};
-
-type PollingUnitResultItem = {
-  id: string;
-  name: string;
-  code: string;
-  ward: string;
-  lga: string;
+type PollingUnitLocatorForm = {
   state: string;
+  lga: string;
+  ward: string;
 };
 
-type PollingDirectory = {
-  [state: string]: {
-    [lga: string]: {
-      [ward: string]: PollingUnitResultItem[];
-    };
-  };
-};
-
-const POLLING_DIRECTORY: PollingDirectory = {
-  Lagos: {
-    Alimosho: {
-      "Ward 01": [
-        {
-          id: "lag-alim-ward01-1",
-          name: "Ikotun Community Primary School",
-          code: "LA/01/08/004",
-          ward: "Ward 01",
-          lga: "Alimosho LGA",
-          state: "Lagos State",
-        },
-        {
-          id: "lag-alim-ward01-2",
-          name: "Mushin Senior Grammar School",
-          code: "LA/01/08/017",
-          ward: "Ward 01",
-          lga: "Alimosho LGA",
-          state: "Lagos State",
-        },
-        {
-          id: "lag-alim-ward01-3",
-          name: "Ikotun Community Primary School",
-          code: "LA/01/08/021",
-          ward: "Ward 01",
-          lga: "Alimosho LGA",
-          state: "Lagos State",
-        },
-        {
-          id: "lag-alim-ward01-4",
-          name: "Unity Primary School",
-          code: "LA/01/08/032",
-          ward: "Ward 01",
-          lga: "Alimosho LGA",
-          state: "Lagos State",
-        },
-        {
-          id: "lag-alim-ward01-5",
-          name: "Community High School Hall",
-          code: "LA/01/08/045",
-          ward: "Ward 01",
-          lga: "Alimosho LGA",
-          state: "Lagos State",
-        },
-        {
-          id: "lag-alim-ward01-6",
-          name: "St. Peter Civic Centre",
-          code: "LA/01/08/051",
-          ward: "Ward 01",
-          lga: "Alimosho LGA",
-          state: "Lagos State",
-        },
-      ],
-      "Ward 02": [
-        {
-          id: "lag-alim-ward02-1",
-          name: "Egbeda Modern School",
-          code: "LA/01/09/003",
-          ward: "Ward 02",
-          lga: "Alimosho LGA",
-          state: "Lagos State",
-        },
-        {
-          id: "lag-alim-ward02-2",
-          name: "Town Hall Annex",
-          code: "LA/01/09/010",
-          ward: "Ward 02",
-          lga: "Alimosho LGA",
-          state: "Lagos State",
-        },
-      ],
-    },
-    Ikeja: {
-      "Ward A": [
-        {
-          id: "lag-ikeja-warda-1",
-          name: "Alausa Primary School",
-          code: "LA/03/01/001",
-          ward: "Ward A",
-          lga: "Ikeja LGA",
-          state: "Lagos State",
-        },
-        {
-          id: "lag-ikeja-warda-2",
-          name: "Secretariat Open Ground",
-          code: "LA/03/01/004",
-          ward: "Ward A",
-          lga: "Ikeja LGA",
-          state: "Lagos State",
-        },
-      ],
-      "Ward B": [
-        {
-          id: "lag-ikeja-wardb-1",
-          name: "Computer Village Civic Hall",
-          code: "LA/03/02/007",
-          ward: "Ward B",
-          lga: "Ikeja LGA",
-          state: "Lagos State",
-        },
-      ],
-    },
-  },
-
-  Abuja: {
-    Gwagwalada: {
-      "Ward Central": [
-        {
-          id: "abu-gwag-central-1",
-          name: "Central Primary School",
-          code: "FC/02/01/009",
-          ward: "Ward Central",
-          lga: "Gwagwalada",
-          state: "FCT Abuja",
-        },
-        {
-          id: "abu-gwag-central-2",
-          name: "Market Square Hall",
-          code: "FC/02/01/011",
-          ward: "Ward Central",
-          lga: "Gwagwalada",
-          state: "FCT Abuja",
-        },
-      ],
-    },
-    Bwari: {
-      "Ward North": [
-        {
-          id: "abu-bwari-north-1",
-          name: "Bwari Community Secondary School",
-          code: "FC/04/03/014",
-          ward: "Ward North",
-          lga: "Bwari",
-          state: "FCT Abuja",
-        },
-      ],
-    },
-  },
-
-  Rivers: {
-    PortHarcourt: {
-      "Ward East": [
-        {
-          id: "riv-ph-east-1",
-          name: "Township Primary School",
-          code: "RV/01/02/005",
-          ward: "Ward East",
-          lga: "Port Harcourt",
-          state: "Rivers State",
-        },
-      ],
-    },
-  },
-};
-
-const INITIAL_FORM: PollingUnitLocationForm = {
-  pollingState: "",
-  localGovernmentArea: "",
+const INITIAL_FORM: PollingUnitLocatorForm = {
+  state: "",
+  lga: "",
   ward: "",
 };
+
+function filterOptions(options: string[], query: string): string[] {
+  const cleanQuery = query.trim().toLowerCase();
+
+  if (!cleanQuery) return options;
+
+  return options.filter((item) => item.toLowerCase().includes(cleanQuery));
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function getPollingUnitKey(item: PollingUnitLookupItem, index: number): string {
+  return String(
+    item.id ??
+      item._id ??
+      `${item.name ?? "polling-unit"}-${item.delimitation ?? index}-${index}`
+  );
+}
+
+function getPollingUnitName(item: PollingUnitLookupItem): string {
+  return item.name?.trim() || "Unnamed Polling Unit";
+}
+
+function getPollingUnitCode(item: PollingUnitLookupItem): string {
+  return (
+    item.delimitation?.trim() ||
+    item.units?.trim() ||
+    item.abbreviation?.trim() ||
+    "N/A"
+  );
+}
+
+function getPollingUnitWard(item: PollingUnitLookupItem): string {
+  return item.ward_name?.trim() || "Unknown ward";
+}
+
+function getPollingUnitLga(item: PollingUnitLookupItem): string {
+  return item.local_government_name?.trim() || "Unknown LGA";
+}
+
+function getPollingUnitState(item: PollingUnitLookupItem): string {
+  return item.state_name?.trim() || "Unknown state";
+}
+
+function getPollingUnitArea(item: PollingUnitLookupItem): string {
+  return `${getPollingUnitWard(item)}, ${getPollingUnitLga(
+    item
+  )} · ${getPollingUnitState(item)}`;
+}
+
+function getPollingUnitAddress(item: PollingUnitLookupItem): string {
+  return (
+    item.location?.formatted_address?.trim() ||
+    item.precise_location?.trim() ||
+    `${getPollingUnitName(item)}, ${getPollingUnitWard(
+      item
+    )}, ${getPollingUnitLga(item)}, ${getPollingUnitState(item)}`
+  );
+}
+
+function getPollingUnitMapUrl(item: PollingUnitLookupItem): string {
+  const directUrl = item.location?.google_map_url?.trim();
+
+  if (directUrl) return directUrl;
+
+  const latitude = item.location?.latitude;
+  const longitude = item.location?.longitude;
+
+  if (typeof latitude === "number" && typeof longitude === "number") {
+    return `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+  }
+
+  const query = encodeURIComponent(getPollingUnitAddress(item));
+
+  return `https://www.google.com/maps/search/?api=1&query=${query}`;
+}
+
+function pollingUnitMatchesSearch(
+  item: PollingUnitLookupItem,
+  query: string
+): boolean {
+  const cleanQuery = query.trim().toLowerCase();
+
+  if (!cleanQuery) return true;
+
+  const searchable = [
+    getPollingUnitName(item),
+    getPollingUnitCode(item),
+    getPollingUnitWard(item),
+    getPollingUnitLga(item),
+    getPollingUnitState(item),
+    getPollingUnitAddress(item),
+    item.remark ?? "",
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  return searchable.includes(cleanQuery);
+}
 
 export default function PollingUnitLocatorScreen() {
   const insets = useSafeAreaInsets();
@@ -216,58 +157,97 @@ export default function PollingUnitLocatorScreen() {
   const lgaSheetRef = useRef<BottomSheetModal>(null);
   const wardSheetRef = useRef<BottomSheetModal>(null);
 
-  const [form, setForm] = useState<PollingUnitLocationForm>(INITIAL_FORM);
+  const [form, setForm] = useState<PollingUnitLocatorForm>(INITIAL_FORM);
 
   const [stateQuery, setStateQuery] = useState("");
   const [lgaQuery, setLgaQuery] = useState("");
   const [wardQuery, setWardQuery] = useState("");
 
-  const [loading, setLoading] = useState(false);
   const [resultsVisible, setResultsVisible] = useState(false);
-  const [results, setResults] = useState<PollingUnitResultItem[]>([]);
+  const [results, setResults] = useState<PollingUnitLookupItem[]>([]);
+  const [resultCount, setResultCount] = useState(0);
 
-  const states = useMemo(() => Object.keys(POLLING_DIRECTORY), []);
+  const statesQuery = useStatesQuery();
+  const lgasQuery = useLocalGovernmentsQuery(form.state);
+  const wardsQuery = useWardsQuery(form.state, form.lga);
+  const lookupMutation = usePollingUnitLookupMutation();
 
-  const lgas = useMemo(() => {
-    if (!form.pollingState) return [];
-    return Object.keys(POLLING_DIRECTORY[form.pollingState] ?? {});
-  }, [form.pollingState]);
+  const stateOptions = useMemo(
+    () => statesQuery.data ?? [],
+    [statesQuery.data]
+  );
 
-  const wards = useMemo(() => {
-    if (!form.pollingState || !form.localGovernmentArea) return [];
-    return Object.keys(
-      POLLING_DIRECTORY[form.pollingState]?.[form.localGovernmentArea] ?? {}
-    );
-  }, [form.pollingState, form.localGovernmentArea]);
+  const lgaOptions = useMemo(() => lgasQuery.data ?? [], [lgasQuery.data]);
 
-  const filteredStates = useMemo(() => {
-    const q = stateQuery.trim().toLowerCase();
-    if (!q) return states;
-    return states.filter((item) => item.toLowerCase().includes(q));
-  }, [states, stateQuery]);
+  const wardOptions = useMemo(() => wardsQuery.data ?? [], [wardsQuery.data]);
 
-  const filteredLgas = useMemo(() => {
-    const q = lgaQuery.trim().toLowerCase();
-    if (!q) return lgas;
-    return lgas.filter((item) => item.toLowerCase().includes(q));
-  }, [lgas, lgaQuery]);
+  const filteredStates = useMemo(
+    () => filterOptions(stateOptions, stateQuery),
+    [stateOptions, stateQuery]
+  );
 
-  const filteredWards = useMemo(() => {
-    const q = wardQuery.trim().toLowerCase();
-    if (!q) return wards;
-    return wards.filter((item) => item.toLowerCase().includes(q));
-  }, [wards, wardQuery]);
+  const filteredLgas = useMemo(
+    () => filterOptions(lgaOptions, lgaQuery),
+    [lgaOptions, lgaQuery]
+  );
+
+  const filteredWards = useMemo(
+    () => filterOptions(wardOptions, wardQuery),
+    [wardOptions, wardQuery]
+  );
+
+  const isFormComplete = Boolean(form.state && form.lga && form.ward);
+
+  const isLoading =
+    lookupMutation.isPending ||
+    statesQuery.isLoading ||
+    lgasQuery.isFetching ||
+    wardsQuery.isFetching;
 
   const modalSubtitle = useMemo(() => {
-    if (!form.pollingState || !form.localGovernmentArea || !form.ward) {
-      return "Locate your polling unit below.";
+    if (!form.state || !form.lga || !form.ward) {
+      return "Polling units matching your selection will appear here.";
     }
 
-    return `Locate your polling unit in ${form.pollingState.toLowerCase()} state in ${form.localGovernmentArea.toLowerCase()} local government area, ${form.ward.toLowerCase()} below.`;
-  }, [form]);
+    return `Polling units in ${form.ward}, ${form.lga}, ${form.state}.`;
+  }, [form.lga, form.state, form.ward]);
 
-  const handleLocatePollingUnit = async () => {
-    if (!form.pollingState) {
+  useEffect(() => {
+    setResults([]);
+    setResultCount(0);
+    setResultsVisible(false);
+  }, [form.state, form.lga, form.ward]);
+
+  const handleSelectState = (state: string): void => {
+    setForm({
+      state,
+      lga: "",
+      ward: "",
+    });
+
+    setLgaQuery("");
+    setWardQuery("");
+  };
+
+  const handleSelectLga = (lga: string): void => {
+    setForm((previous) => ({
+      ...previous,
+      lga,
+      ward: "",
+    }));
+
+    setWardQuery("");
+  };
+
+  const handleSelectWard = (ward: string): void => {
+    setForm((previous) => ({
+      ...previous,
+      ward,
+    }));
+  };
+
+  const handleLocatePollingUnit = async (): Promise<void> => {
+    if (!form.state) {
       showToast({
         type: "error",
         message: "Please select your polling unit state.",
@@ -275,7 +255,7 @@ export default function PollingUnitLocatorScreen() {
       return;
     }
 
-    if (!form.localGovernmentArea) {
+    if (!form.lga) {
       showToast({
         type: "error",
         message: "Please select your local government area.",
@@ -291,27 +271,33 @@ export default function PollingUnitLocatorScreen() {
       return;
     }
 
-    setLoading(true);
+    try {
+      const response = await lookupMutation.mutateAsync({
+        state: form.state,
+        lga: form.lga,
+        ward: form.ward,
+      });
 
-    await new Promise((resolve) => setTimeout(resolve, 1100));
+      if (!response.pollingUnits.length) {
+        showToast({
+          type: "error",
+          message: "No polling units found for this selection.",
+        });
+        return;
+      }
 
-    const located =
-      POLLING_DIRECTORY[form.pollingState]?.[form.localGovernmentArea]?.[
-        form.ward
-      ] ?? [];
-
-    setLoading(false);
-
-    if (!located.length) {
+      setResults(response.pollingUnits);
+      setResultCount(response.count);
+      setResultsVisible(true);
+    } catch (error) {
       showToast({
         type: "error",
-        message: "No polling units found for this selection.",
+        message: getErrorMessage(
+          error,
+          "Unable to locate polling units. Please try again."
+        ),
       });
-      return;
     }
-
-    setResults(located);
-    setResultsVisible(true);
   };
 
   return (
@@ -327,9 +313,10 @@ export default function PollingUnitLocatorScreen() {
         >
           <View style={styles.topRow}>
             <BackButton />
+
             <Pressable
               style={styles.helpBtn}
-            onPress={() => router.push(Paths.appHelpSupport)}
+              onPress={() => router.push(Paths.appHelpSupport)}
               hitSlop={10}
             >
               <AppText style={styles.helpText}>Get help</AppText>
@@ -344,8 +331,8 @@ export default function PollingUnitLocatorScreen() {
           <View style={styles.headerBlock}>
             <AppText style={styles.title}>Polling Unit Locator</AppText>
             <AppText style={styles.subtitle}>
-              Locate your polling unit in your state and local government area
-              below.
+              Select your state, local government area, and ward to find polling
+              units available in that ward.
             </AppText>
           </View>
 
@@ -354,8 +341,10 @@ export default function PollingUnitLocatorScreen() {
           <View style={styles.form}>
             <AppSelectField
               label="Polling Unit State"
-              value={form.pollingState}
-              placeholder="Select state"
+              value={form.state}
+              placeholder={
+                statesQuery.isLoading ? "Loading states..." : "Select state"
+              }
               onPress={() => {
                 setStateQuery("");
                 stateSheetRef.current?.present();
@@ -371,10 +360,23 @@ export default function PollingUnitLocatorScreen() {
 
             <AppSelectField
               label="Local Government Area"
-              value={form.localGovernmentArea}
-              placeholder="Select state first"
+              value={form.lga}
+              placeholder={
+                !form.state
+                  ? "Select state first"
+                  : lgasQuery.isFetching
+                    ? "Loading LGAs..."
+                    : "Select LGA"
+              }
               onPress={() => {
-                if (!form.pollingState) return;
+                if (!form.state) {
+                  showToast({
+                    type: "error",
+                    message: "Please select a state first.",
+                  });
+                  return;
+                }
+
                 setLgaQuery("");
                 lgaSheetRef.current?.present();
               }}
@@ -390,9 +392,22 @@ export default function PollingUnitLocatorScreen() {
             <AppSelectField
               label="Ward"
               value={form.ward}
-              placeholder="Select LGA first"
+              placeholder={
+                !form.lga
+                  ? "Select LGA first"
+                  : wardsQuery.isFetching
+                    ? "Loading wards..."
+                    : "Select ward"
+              }
               onPress={() => {
-                if (!form.localGovernmentArea) return;
+                if (!form.lga) {
+                  showToast({
+                    type: "error",
+                    message: "Please select an LGA first.",
+                  });
+                  return;
+                }
+
                 setWardQuery("");
                 wardSheetRef.current?.present();
               }}
@@ -409,6 +424,8 @@ export default function PollingUnitLocatorScreen() {
           <AppButton
             title="Locate Polling Unit"
             onPress={handleLocatePollingUnit}
+            loading={lookupMutation.isPending}
+            disabled={!isFormComplete || lookupMutation.isPending}
             style={styles.locateButton}
           />
         </ScrollView>
@@ -419,14 +436,8 @@ export default function PollingUnitLocatorScreen() {
         title="Select State"
         query={stateQuery}
         onChangeQuery={setStateQuery}
-        selectedValue={form.pollingState}
-        onSelectValue={(pollingState) =>
-          setForm({
-            pollingState,
-            localGovernmentArea: "",
-            ward: "",
-          })
-        }
+        selectedValue={form.state}
+        onSelectValue={handleSelectState}
         options={filteredStates}
       />
 
@@ -435,14 +446,8 @@ export default function PollingUnitLocatorScreen() {
         title="Select LGA"
         query={lgaQuery}
         onChangeQuery={setLgaQuery}
-        selectedValue={form.localGovernmentArea}
-        onSelectValue={(localGovernmentArea) =>
-          setForm({
-            ...form,
-            localGovernmentArea,
-            ward: "",
-          })
-        }
+        selectedValue={form.lga}
+        onSelectValue={handleSelectLga}
         options={filteredLgas}
       />
 
@@ -452,24 +457,19 @@ export default function PollingUnitLocatorScreen() {
         query={wardQuery}
         onChangeQuery={setWardQuery}
         selectedValue={form.ward}
-        onSelectValue={(ward) =>
-          setForm({
-            ...form,
-            ward,
-          })
-        }
+        onSelectValue={handleSelectWard}
         options={filteredWards}
       />
 
       <PollingUnitResultsModal
         visible={resultsVisible}
         onClose={() => setResultsVisible(false)}
-        title="Nearby Polling Units"
+        title={`${resultCount || results.length} Polling Units Found`}
         subtitle={modalSubtitle}
         results={results}
       />
 
-      <AppScreenLoader visible={loading} />
+      <AppScreenLoader visible={isLoading && !resultsVisible} />
     </>
   );
 }
@@ -485,9 +485,120 @@ function PollingUnitResultsModal({
   onClose: () => void;
   title: string;
   subtitle: string;
-  results: PollingUnitResultItem[];
+  results: PollingUnitLookupItem[];
 }) {
   const insets = useSafeAreaInsets();
+  const { showToast } = useToastContext();
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredResults = useMemo(
+    () => results.filter((item) => pollingUnitMatchesSearch(item, searchQuery)),
+    [results, searchQuery]
+  );
+
+  useEffect(() => {
+    if (visible) {
+      setSearchQuery("");
+    }
+  }, [visible]);
+
+  const handleOpenMap = async (item: PollingUnitLookupItem): Promise<void> => {
+    const url = getPollingUnitMapUrl(item);
+
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+
+      if (!canOpen) {
+        showToast({
+          type: "error",
+          message: "Unable to open maps on this device.",
+        });
+        return;
+      }
+
+      await Linking.openURL(url);
+    } catch {
+      showToast({
+        type: "error",
+        message: "Unable to open map location.",
+      });
+    }
+  };
+
+  const renderItem = ({
+    item,
+    index,
+  }: ListRenderItemInfo<PollingUnitLookupItem>) => (
+    <PollingUnitResultCard
+      item={item}
+      index={index}
+      onOpenMap={() => {
+        void handleOpenMap(item);
+      }}
+    />
+  );
+
+  const renderHeader = () => (
+    <View style={styles.resultsHeader}>
+      <View style={styles.modalHeaderRow}>
+        <View style={styles.modalHeaderSpacer} />
+
+        <Pressable onPress={onClose} style={styles.modalCloseBtn}>
+          <Ionicons name="close" size={28} color={Theme.colors.textMuted} />
+        </Pressable>
+      </View>
+
+      <View style={styles.modalHeaderBlock}>
+        <View style={styles.modalTitleRow}>
+          <View style={styles.modalBadge}>
+            <Ionicons
+              name="location"
+              size={16}
+              color={Theme.colors.primary}
+            />
+            <AppText style={styles.modalBadgeText}>
+              Live INEC Directory
+            </AppText>
+          </View>
+
+          <AppText style={styles.modalTitle}>{title}</AppText>
+        </View>
+
+        <AppText style={styles.modalSubtitle}>{subtitle}</AppText>
+      </View>
+
+      <View style={styles.searchWrap}>
+        <AppInput
+          placeholder="Search polling unit name, code, or area"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          startIcon={
+            <Ionicons
+              name="search-outline"
+              size={20}
+              color={Theme.colors.textSoft}
+            />
+          }
+        />
+      </View>
+
+      <View style={styles.resultsMetaRow}>
+        <AppText style={styles.resultsMetaText}>
+          Showing {filteredResults.length} of {results.length}
+        </AppText>
+
+        {searchQuery ? (
+          <Pressable
+            onPress={() => setSearchQuery("")}
+            hitSlop={8}
+            style={styles.clearSearchButton}
+          >
+            <AppText style={styles.clearSearchText}>Clear</AppText>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
 
   return (
     <Modal
@@ -497,62 +608,138 @@ function PollingUnitResultsModal({
       onRequestClose={onClose}
       statusBarTranslucent={Platform.OS === "android"}
     >
-      <AppGradientScreen>
-        <View
-          style={[
-            styles.modalContainer,
+      <View style={styles.modalRoot}>
+        <LinearGradient
+          colors={["#EEF5DB", "#F5F2DE", "#FAF8EE", "#F7F7F2"]}
+          locations={[0, 0.24, 0.6, 1]}
+          style={styles.modalGradient}
+        />
+
+        <FlatList
+          data={filteredResults}
+          keyExtractor={getPollingUnitKey}
+          renderItem={renderItem}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          updateCellsBatchingPeriod={50}
+          windowSize={9}
+          removeClippedSubviews={Platform.OS === "android"}
+          ListHeaderComponent={renderHeader}
+          contentContainerStyle={[
+            styles.resultsContent,
             {
               paddingTop: insets.top + 12,
-              paddingBottom: Math.max(insets.bottom + 18, 24),
+              paddingBottom: Math.max(insets.bottom + 22, 28),
             },
           ]}
-        >
-          <View style={styles.modalHeaderRow}>
-            <View style={styles.modalHeaderSpacer} />
-            <Pressable onPress={onClose} style={styles.modalCloseBtn}>
-              <Ionicons name="close" size={28} color={Theme.colors.textMuted} />
-            </Pressable>
-          </View>
-
-          <View style={styles.modalHeaderBlock}>
-            <AppText style={styles.modalTitle}>{title}</AppText>
-            <AppText style={styles.modalSubtitle}>{subtitle}</AppText>
-          </View>
-
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.resultsContent}
-          >
-            {results.map((item) => (
-              <View key={item.id} style={styles.resultRow}>
-                <View style={styles.resultAccent} />
-
-                <View style={styles.resultBody}>
-                  <AppText style={styles.resultName}>
-                    {item.name}
-                    {"\n"}
-                    {item.code}
-                  </AppText>
-
-                  <View style={styles.resultMetaRow}>
-                    <Ionicons
-                      name="location-outline"
-                      size={18}
-                      color="#9AA3B2"
-                    />
-                    <AppText style={styles.resultMetaText}>
-                      {item.ward}, {item.lga} · {item.state}
-                    </AppText>
-                  </View>
-                </View>
+          ListEmptyComponent={
+            <View style={styles.emptyResultsCard}>
+              <View style={styles.emptyResultsIcon}>
+                <Ionicons
+                  name="search-outline"
+                  size={24}
+                  color={Theme.colors.textMuted}
+                />
               </View>
-            ))}
-          </ScrollView>
-        </View>
-      </AppGradientScreen>
+              <AppText style={styles.emptyResultsTitle}>
+                No matching polling units
+              </AppText>
+              <AppText style={styles.emptyResultsText}>
+                Try searching by another part of the name, code, ward, LGA, or
+                state.
+              </AppText>
+            </View>
+          }
+        />
+      </View>
     </Modal>
   );
 }
+
+const PollingUnitResultCard = memo(function PollingUnitResultCard({
+  item,
+  index,
+  onOpenMap,
+}: {
+  item: PollingUnitLookupItem;
+  index: number;
+  onOpenMap: () => void;
+}) {
+  const name = getPollingUnitName(item);
+  const code = getPollingUnitCode(item);
+  const area = getPollingUnitArea(item);
+  const address = getPollingUnitAddress(item);
+  const status = item.remark?.trim() || "Existing PU";
+
+  return (
+    <View style={styles.resultCard}>
+      <View style={styles.resultCardGlow} />
+
+      <View style={styles.resultTopRow}>
+        <View style={styles.resultIndexPill}>
+          <AppText style={styles.resultIndexText}>
+            {String(index + 1).padStart(2, "0")}
+          </AppText>
+        </View>
+
+        <View style={styles.resultTitleWrap}>
+          <AppText style={styles.resultName}>{name}</AppText>
+          <View style={styles.codeRow}>
+            <AppText style={styles.codeLabel}>Code</AppText>
+            <AppText style={styles.codeValue}>{code}</AppText>
+          </View>
+        </View>
+
+        <View style={styles.statusPill}>
+          <View style={styles.statusDot} />
+          <AppText style={styles.statusPillText}>{status}</AppText>
+        </View>
+      </View>
+
+      <View style={styles.resultDetailBlock}>
+        <View style={styles.resultMetaRow}>
+          <View style={styles.resultIconWrap}>
+            <Ionicons
+              name="location-outline"
+              size={17}
+              color={Theme.colors.primary}
+            />
+          </View>
+          <AppText style={styles.resultMetaText}>{area}</AppText>
+        </View>
+
+        <View style={styles.resultMetaRow}>
+          <View style={styles.resultIconWrap}>
+            <Ionicons
+              name="map-outline"
+              size={17}
+              color={Theme.colors.primary}
+            />
+          </View>
+          <AppText style={styles.resultMetaText}>{address}</AppText>
+        </View>
+      </View>
+
+      <Pressable onPress={onOpenMap} style={styles.mapButton}>
+        <View style={styles.mapButtonIcon}>
+          <Ionicons
+            name="navigate-outline"
+            size={16}
+            color={Theme.colors.primary}
+          />
+        </View>
+        <AppText style={styles.mapButtonText}>Open Google Maps</AppText>
+        <Ionicons
+          name="chevron-forward"
+          size={15}
+          color={Theme.colors.primary}
+        />
+      </Pressable>
+    </View>
+  );
+});
 
 const styles = StyleSheet.create({
   content: {
@@ -560,141 +747,331 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     gap: 18,
   },
-
   topRow: {
     minHeight: 34,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-
   helpBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-
   helpText: {
     fontSize: 16,
     lineHeight: 22,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.medium,
   },
-
   headerBlock: {
     gap: 10,
     marginTop: 2,
   },
-
   title: {
     fontSize: 22,
     lineHeight: 28,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.heading.bold,
   },
-
   subtitle: {
     maxWidth: 360,
     color: Theme.colors.textMuted,
     fontSize: 15,
     lineHeight: 22,
   },
-
   form: {
     gap: 16,
   },
-
   locateButton: {
     marginTop: 50,
     marginVertical: 0,
   },
 
-  modalContainer: {
+  modalRoot: {
     flex: 1,
+    backgroundColor: "#F7F7F2",
+  },
+  modalGradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  resultsContent: {
+    gap: 14,
     paddingHorizontal: 16,
   },
-
+  resultsHeader: {
+    gap: 0,
+  },
   modalHeaderRow: {
     minHeight: 44,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-
   modalHeaderSpacer: {
     width: 44,
     height: 44,
   },
-
   modalCloseBtn: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "rgba(255,255,255,0.72)",
+    backgroundColor: "rgba(255,255,255,0.76)",
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    elevation: 3,
   },
-
   modalHeaderBlock: {
     gap: 10,
-    paddingTop: 18,
-    paddingBottom: 20,
+    paddingTop: 16,
+    paddingBottom: 16,
   },
-
+  modalTitleRow: {
+    gap: 10,
+  },
+  modalBadge: {
+    alignSelf: "flex-start",
+    minHeight: 30,
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    backgroundColor: "rgba(25,183,176,0.09)",
+    borderWidth: 1,
+    borderColor: "rgba(25,183,176,0.16)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  modalBadgeText: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.body.semibold,
+  },
   modalTitle: {
-    fontSize: 22,
-    lineHeight: 28,
+    fontSize: 24,
+    lineHeight: 30,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.heading.bold,
+    letterSpacing: -0.2,
   },
-
   modalSubtitle: {
-    maxWidth: 360,
+    maxWidth: 370,
     fontSize: 15,
     lineHeight: 22,
     color: Theme.colors.textMuted,
   },
-
-  resultsContent: {
-    gap: 18,
-    paddingBottom: 18,
+  searchWrap: {
+    paddingBottom: 10,
   },
-
-  resultRow: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    gap: 10,
-  },
-
-  resultAccent: {
-    width: 4,
-    borderRadius: 999,
-    backgroundColor: Theme.colors.primary,
-  },
-
-  resultBody: {
-    flex: 1,
-    gap: 10,
-    paddingVertical: 6,
-  },
-
-  resultName: {
-    fontSize: 15,
-    lineHeight: 19,
-    color: Theme.colors.text,
-    fontFamily: Theme.fonts.heading.semibold,
-  },
-
-  resultMetaRow: {
+  resultsMetaRow: {
+    minHeight: 28,
+    paddingBottom: 8,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    justifyContent: "space-between",
+  },
+  resultsMetaText: {
+    fontSize: 12.5,
+    lineHeight: 17,
+    color: Theme.colors.textMuted,
+    fontFamily: Theme.fonts.body.medium,
+  },
+  clearSearchButton: {
+    minHeight: 28,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    justifyContent: "center",
+    backgroundColor: "rgba(17,26,50,0.06)",
+  },
+  clearSearchText: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.semibold,
   },
 
+  resultCard: {
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.76)",
+    borderWidth: 1,
+    borderColor: "rgba(17,26,50,0.08)",
+    padding: 14,
+    overflow: "hidden",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 22,
+    elevation: 2,
+  },
+  resultCardGlow: {
+    position: "absolute",
+    left: -44,
+    top: -50,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: "rgba(25,183,176,0.09)",
+  },
+  resultTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  resultIndexPill: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: "rgba(25,183,176,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  resultIndexText: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+  resultTitleWrap: {
+    flex: 1,
+    gap: 7,
+  },
+  resultName: {
+    fontSize: 15.5,
+    lineHeight: 21,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.heading.semibold,
+    letterSpacing: -0.1,
+  },
+  codeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  codeLabel: {
+    fontSize: 11,
+    lineHeight: 15,
+    color: Theme.colors.textMuted,
+    fontFamily: Theme.fonts.body.medium,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  codeValue: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+  statusPill: {
+    minHeight: 28,
+    maxWidth: 104,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    backgroundColor: "rgba(25,183,176,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(25,183,176,0.2)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Theme.colors.primary,
+  },
+  statusPillText: {
+    flexShrink: 1,
+    fontSize: 10,
+    lineHeight: 13,
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.body.semibold,
+    textTransform: "uppercase",
+  },
+  resultDetailBlock: {
+    gap: 10,
+    paddingTop: 14,
+    paddingBottom: 14,
+  },
+  resultMetaRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 9,
+  },
+  resultIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "rgba(25,183,176,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   resultMetaText: {
     flex: 1,
     fontSize: 13.5,
     lineHeight: 20,
     color: Theme.colors.textMuted,
+  },
+  mapButton: {
+    minHeight: 44,
+    borderRadius: 15,
+    paddingHorizontal: 12,
+    backgroundColor: "rgba(25,183,176,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(25,183,176,0.18)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  mapButtonIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.8)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mapButtonText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+  emptyResultsCard: {
+    marginTop: 28,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(17,26,50,0.08)",
+    paddingHorizontal: 22,
+    paddingVertical: 30,
+    alignItems: "center",
+    gap: 10,
+  },
+  emptyResultsIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(17,26,50,0.06)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyResultsTitle: {
+    fontSize: 16,
+    lineHeight: 22,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.semibold,
+    textAlign: "center",
+  },
+  emptyResultsText: {
+    maxWidth: 280,
+    fontSize: 13.5,
+    lineHeight: 20,
+    color: Theme.colors.textMuted,
+    textAlign: "center",
   },
 });

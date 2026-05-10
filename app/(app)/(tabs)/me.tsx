@@ -1,13 +1,19 @@
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { useMemo, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppScreenLoader from "@/components/feedback/AppScreenLoader";
 import { useToastContext } from "@/components/feedback/ToastProvider";
 import TabBarSpacer from "@/components/layout/TabBarSpacer";
+import BankDetailsBottomSheet, {
+  BankFormState,
+} from "@/components/me/BankDetailsBottomSheet";
+import FeedbackBottomSheet, {
+  FeedbackFormState,
+} from "@/components/me/FeedbackBottomSheet";
 import MeHeader from "@/components/me/MeHeader";
 import MeProfileCard from "@/components/me/MeProfileCard";
 import MeSection from "@/components/me/MeSection";
@@ -21,106 +27,357 @@ import PollingUnitBottomSheet, {
 import ProfileBottomSheet, {
   ProfileFormState,
 } from "@/components/me/ProfileBottomSheet";
+import PVCVerificationBottomSheet from "@/components/me/PVCVerificationBottomSheet";
 import SecurityBottomSheet, {
   SecurityFormState,
 } from "@/components/me/SecurityBottomSheet";
-import PVCVerificationBottomSheet from "@/components/me/PVCVerificationBottomSheet";
-import BankDetailsBottomSheet, {
-  BankFormState,
-} from "@/components/me/BankDetailsBottomSheet";
-import TourTarget from "@/components/tour/TourTarget";
+import AppButton from "@/components/ui/AppButton";
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
 import { useAuth } from "@/context/AuthContext";
-import { useTour, useTourScrollReset } from "@/context/TourContext";
 import {
   getMeAccountItems,
   getMeBanner,
   getMeOtherItems,
   MeMenuItem,
-  mockMeUser,
-  defaultNotificationSettings,
-  NotificationSettingsState,
+  MeUser,
 } from "@/data/me";
+import { useMyProfileQuery } from "@/hooks/api/useMyProfileQuery";
+import { useSelectRoleMutation } from "@/hooks/api/useSelectRoleMutation";
+import { useSubmitObserverRoleMutation } from "@/hooks/api/useSubmitObserverRoleMutation";
+import {
+  useGenerateAnonymousUsernameMutation,
+  useSubmitFeedbackMutation,
+  useUpdateAnonymousIdentityMutation,
+  useUpdateNotificationSettingsMutation,
+  useUpdatePasswordMutation,
+} from "@/hooks/api/useProfileMutations";
+import {
+  useBanksQuery,
+  useMobileNotificationSettingsQuery,
+} from "@/hooks/api/useProfileSupportQueries";
+import {
+  MobileNotificationSettingsState,
+  MyProfileResponse,
+} from "@/lib/api/profile.api";
 import { Theme } from "@/theme";
 import { BirthdayValue, Gender } from "@/types/onboarding";
 
-const DEFAULT_BIRTHDAY: BirthdayValue = {
-  day: 4,
-  month: "January",
-  year: 2023,
-  formatted: "4 January, 2023",
+const EMPTY_BIRTHDAY: BirthdayValue = {
+  day: 0,
+  month: "",
+  year: 0,
+  formatted: "",
 };
 
-const pollingData = {
-  Lagos: {
-    Alimosho: {
-      "Egbeda Ward": ["PU 024, Alimosho", "PU 031, Alimosho"],
-      "Ipaja Ward": ["PU 011, Alimosho", "PU 018, Alimosho"],
-    },
-    Ikeja: { "Alausa Ward": ["PU 002, Ikeja", "PU 005, Ikeja"] },
-  },
-  Ogun: {
-    Abeokuta: { "Kuto Ward": ["PU 001, Abeokuta", "PU 006, Abeokuta"] },
-  },
-} as const;
+const DEFAULT_NOTIFICATION_SETTINGS: MobileNotificationSettingsState = {
+  pollingUnitActivity: true,
+  electionDayAlert: false,
+  discussionReplies: false,
+  resultAggregated: false,
+  reportConfirmed: false,
+  reportFlagged: false,
+  securityAlerts: false,
+  newsletter: true,
+};
 
-type PollingStateKey = keyof typeof pollingData;
+const DEFAULT_FEEDBACK_FORM: FeedbackFormState = {
+  title: "Feedback",
+  message: "",
+};
 
-const bankOptions = [
-  "Access Bank",
-  "First Bank",
-  "GTBank",
-  "Fidelity Bank",
-  "UBA",
-  "Zenith Bank",
-  "Opay",
-  "Moniepoint",
-  "Sterling Bank",
-  "Wema Bank",
-];
+function getFullName(profile: MyProfileResponse): string {
+  return [profile.firstName, profile.lastName].filter(Boolean).join(" ").trim();
+}
 
-// Step 7's target — when active we scroll the Me screen back to top.
-const ME_TOUR_TARGET_IDS = ["me.my-account"];
+function getDisplayName(profile: MyProfileResponse): string {
+  return getFullName(profile) || profile.email || "Citizen";
+}
+
+function getPollingUnitLabel(profile: MyProfileResponse): string {
+  return profile.pollingUnit?.trim() || "No polling unit assigned";
+}
+
+function getUserType(role?: string): MeUser["userType"] {
+  if (role === "observer") return "observer";
+  if (role === "volunteer") return "volunteer";
+
+  return "public-viewer";
+}
+
+function getVerificationStatus(
+  profile: MyProfileResponse
+): MeUser["verificationStatus"] {
+  if (profile.role !== "observer") return "none";
+
+  return profile.pendingObserverVerification ? "pending" : "verified";
+}
+
+function getRoleLabel(profile: MyProfileResponse): string {
+  const pollingUnit = profile.pollingUnit?.trim();
+
+  switch (profile.role) {
+    case "observer":
+      return pollingUnit ? `Observer at ${pollingUnit}` : "Citizen Observer";
+    case "volunteer":
+      return pollingUnit ? `Volunteer at ${pollingUnit}` : "Citizen Volunteer";
+    case "public-viewer":
+      return "Public Viewer";
+    default:
+      return "Citizen";
+  }
+}
+
+function getUsername(profile: MyProfileResponse): string {
+  if (profile.anonymousUsername?.trim()) {
+    return profile.anonymousUsername.trim();
+  }
+
+  const fallback =
+    profile.email?.split("@")[0] || profile.firstName || "citizen";
+
+  return fallback.replace(/[^a-zA-Z0-9_]/g, "").toLowerCase();
+}
+
+function buildMeUser(profile: MyProfileResponse): MeUser {
+  return {
+    fullName: getDisplayName(profile),
+    username: getUsername(profile),
+    roleLabel: getRoleLabel(profile),
+    userType: getUserType(profile.role),
+    verificationStatus: getVerificationStatus(profile),
+    pollingUnit: getPollingUnitLabel(profile),
+    avatarUri: profile.profileImage?.url,
+    pvcVerifiedDate:
+      profile.role === "observer" && !profile.pendingObserverVerification
+        ? profile.updatedAt ?? profile.createdAt
+        : undefined,
+    reportsCount: 0,
+    electionsCount: 0,
+    incidentsCount: 0,
+  };
+}
+
+function toBirthdayValue(dateOfBirth?: string): BirthdayValue {
+  if (!dateOfBirth) return EMPTY_BIRTHDAY;
+
+  const date = new Date(dateOfBirth);
+
+  if (Number.isNaN(date.getTime())) return EMPTY_BIRTHDAY;
+
+  const month = new Intl.DateTimeFormat("en", {
+    month: "long",
+    timeZone: "UTC",
+  }).format(date);
+
+  const formatted = new Intl.DateTimeFormat("en", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date);
+
+  return {
+    day: date.getUTCDate(),
+    month,
+    year: date.getUTCFullYear(),
+    formatted,
+  };
+}
+
+function toGender(value?: string): Gender {
+  if (value === "Male" || value === "Female") return value;
+
+  return "";
+}
+
+function buildProfileForm(profile: MyProfileResponse): ProfileFormState {
+  return {
+    firstName: profile.firstName ?? "",
+    lastName: profile.lastName ?? "",
+    birthday: toBirthdayValue(profile.dateOfBirth),
+    gender: toGender(profile.gender),
+    nationality: profile.nationality ?? "",
+    nationalityQuery: "",
+    residence: [profile.lga, profile.state].filter(Boolean).join(", "),
+  };
+}
+
+function buildPollingUnitForm(profile: MyProfileResponse): PollingUnitFormState {
+  return {
+    state: profile.state ?? "",
+    lga: profile.lga ?? "",
+    ward: profile.ward ?? "",
+    pollingUnit: profile.pollingUnit ?? "",
+  };
+}
+
+function buildNotificationSettings(
+  profile?: MyProfileResponse | null,
+  remote?: Partial<MobileNotificationSettingsState> | null
+): MobileNotificationSettingsState {
+  return {
+    ...DEFAULT_NOTIFICATION_SETTINGS,
+    ...(profile?.notifications?.mobile ?? {}),
+    ...(remote ?? {}),
+  };
+}
+
+function buildObserverForm(
+  profile: MyProfileResponse
+): ObserverRegistrationFormState {
+  return {
+    phoneNumber: profile.phoneNumber ?? "",
+    pvcFrontUri: profile.observerId?.[0]?.url ?? null,
+    pvcBackUri: profile.observerId?.[1]?.url ?? null,
+  };
+}
+
+function buildBankForm(profile: MyProfileResponse): BankFormState {
+  return {
+    bankName: profile.bankName ?? "",
+    accountNumber: profile.bankAccountNumber ?? "",
+    accountFullName: profile.bankAccountName ?? "",
+  };
+}
+
+function resolveUserEmail(
+  profileEmail?: string | null,
+  authEmail?: string | null
+): string {
+  return (profileEmail || authEmail || "").trim().toLowerCase();
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function MeScreenSkeleton() {
+  return (
+    <SafeAreaView edges={["top"]} style={styles.safe}>
+      <View style={styles.screen}>
+        <LinearGradient
+          colors={["#EEF5DB", "#F5F2DE", "#FAF8EE", "#F7F7F2"]}
+          locations={[0, 0.24, 0.6, 1]}
+          style={styles.gradientBg}
+        />
+
+        <View style={styles.content}>
+          <View style={styles.skeletonHeader}>
+            <View style={styles.skeletonAvatar} />
+            <View style={styles.skeletonHeaderText}>
+              <View style={styles.skeletonLineLarge} />
+              <View style={styles.skeletonLineMedium} />
+              <View style={styles.skeletonLineSmall} />
+              <View style={styles.skeletonLineTiny} />
+            </View>
+          </View>
+
+          <View style={styles.skeletonBanner} />
+
+          <View style={styles.skeletonSectionTitle} />
+          <View style={styles.skeletonCard}>
+            {[0, 1, 2, 3].map((item) => (
+              <View key={item} style={styles.skeletonRow}>
+                <View style={styles.skeletonRowIcon} />
+                <View style={styles.skeletonRowContent}>
+                  <View style={styles.skeletonRowLine} />
+                  <View style={styles.skeletonRowSubLine} />
+                </View>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.skeletonSectionTitle} />
+          <View style={styles.skeletonCard}>
+            {[0, 1, 2].map((item) => (
+              <View key={item} style={styles.skeletonRow}>
+                <View style={styles.skeletonRowIcon} />
+                <View style={styles.skeletonRowContent}>
+                  <View style={styles.skeletonRowLine} />
+                  <View style={styles.skeletonRowSubLine} />
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+}
 
 export default function MeScreen() {
-  const { signOut } = useAuth();
+  const { signOut, user: authUser } = useAuth();
   const { showToast } = useToastContext();
-  const { resetTour, startTour } = useTour();
 
-  const [loading, setLoading] = useState(false);
+  const {
+    profile,
+    isInitialProfileLoading,
+    isFetching,
+    refetch,
+    error,
+  } = useMyProfileQuery();
+
+  const banksQuery = useBanksQuery();
+  const notificationsQuery = useMobileNotificationSettingsQuery();
+
+  const selectRoleMutation = useSelectRoleMutation();
+  const updatePasswordMutation = useUpdatePasswordMutation();
+  const updateNotificationSettingsMutation =
+    useUpdateNotificationSettingsMutation();
+  const generateAnonymousUsernameMutation =
+    useGenerateAnonymousUsernameMutation();
+  const updateAnonymousIdentityMutation = useUpdateAnonymousIdentityMutation();
+  const submitObserverRoleMutation = useSubmitObserverRoleMutation();
+  const submitFeedbackMutation = useSubmitFeedbackMutation();
 
   const scrollViewRef = useRef<ScrollView>(null);
-  useTourScrollReset(scrollViewRef, ME_TOUR_TARGET_IDS);
 
-  const banner = useMemo(() => getMeBanner(mockMeUser), []);
-  const accountItems = useMemo(() => getMeAccountItems(mockMeUser), []);
+  const meUser = useMemo(() => {
+    if (!profile) return null;
+
+    return buildMeUser(profile);
+  }, [profile]);
+
+  const banner = useMemo(() => {
+    if (!meUser) return null;
+
+    return getMeBanner(meUser);
+  }, [meUser]);
+
+  const accountItems = useMemo(() => {
+    if (!meUser) return [];
+
+    return getMeAccountItems(meUser);
+  }, [meUser]);
+
   const otherItems = useMemo(() => getMeOtherItems(), []);
 
   const [profileForm, setProfileForm] = useState<ProfileFormState>({
-    firstName: "Ifeoluwa",
-    lastName: "Ajetomobi",
-    birthday: DEFAULT_BIRTHDAY,
-    gender: "Female" as Gender,
-    nationality: "Nigeria",
+    firstName: "",
+    lastName: "",
+    birthday: EMPTY_BIRTHDAY,
+    gender: "",
+    nationality: "",
     nationalityQuery: "",
-    residence: "Lagos, Nigeria",
+    residence: "",
   });
 
   const [securityForm, setSecurityForm] = useState<SecurityFormState>({
-    password: "",
+    currentPassword: "",
+    newPassword: "",
     confirmPassword: "",
   });
 
   const [pollingUnitForm, setPollingUnitForm] = useState<PollingUnitFormState>({
-    state: "Lagos",
-    lga: "Alimosho",
-    ward: "Egbeda Ward",
-    pollingUnit: "PU 024, Alimosho",
+    state: "",
+    lga: "",
+    ward: "",
+    pollingUnit: "",
   });
 
   const [notificationSettings, setNotificationSettings] =
-    useState<NotificationSettingsState>(defaultNotificationSettings);
+    useState<MobileNotificationSettingsState>(DEFAULT_NOTIFICATION_SETTINGS);
 
   const [observerForm, setObserverForm] =
     useState<ObserverRegistrationFormState>({
@@ -135,6 +392,11 @@ export default function MeScreen() {
     accountFullName: "",
   });
 
+  const [feedbackForm, setFeedbackForm] =
+    useState<FeedbackFormState>(DEFAULT_FEEDBACK_FORM);
+
+  const [pvcSubmitLocked, setPvcSubmitLocked] = useState(false);
+
   const profileSheetRef = useRef<BottomSheetModal>(null);
   const securitySheetRef = useRef<BottomSheetModal>(null);
   const pollingUnitSheetRef = useRef<BottomSheetModal>(null);
@@ -142,61 +404,260 @@ export default function MeScreen() {
   const observerSheetRef = useRef<BottomSheetModal>(null);
   const pvcSheetRef = useRef<BottomSheetModal>(null);
   const bankSheetRef = useRef<BottomSheetModal>(null);
+  const feedbackSheetRef = useRef<BottomSheetModal>(null);
 
   const birthdaySheetRef = useRef<BottomSheetModal>(null);
   const nationalitySheetRef = useRef<BottomSheetModal>(null);
   const genderSheetRef = useRef<BottomSheetModal>(null);
 
-  const stateOptions = useMemo(() => Object.keys(pollingData), []);
+  useEffect(() => {
+    if (!profile) return;
 
-  const lgaOptions = useMemo(() => {
-    if (!pollingUnitForm.state) return [];
-    return Object.keys(
-      pollingData[pollingUnitForm.state as PollingStateKey] ?? {}
+    setProfileForm(buildProfileForm(profile));
+    setPollingUnitForm(buildPollingUnitForm(profile));
+    setObserverForm(buildObserverForm(profile));
+    setBankForm(buildBankForm(profile));
+    setNotificationSettings((previous) =>
+      buildNotificationSettings(profile, notificationsQuery.data ?? previous)
     );
-  }, [pollingUnitForm.state]);
+  }, [notificationsQuery.data, profile]);
 
-  const wardOptions = useMemo(() => {
-    if (!pollingUnitForm.state || !pollingUnitForm.lga) return [];
-    const sk = pollingUnitForm.state as PollingStateKey;
-    return Object.keys(
-      pollingData[sk]?.[
-        pollingUnitForm.lga as keyof (typeof pollingData)[typeof sk]
-      ] ?? {}
-    );
-  }, [pollingUnitForm.state, pollingUnitForm.lga]);
+  const bankOptions = useMemo(() => {
+    const names = banksQuery.data?.map((bank) => bank.name) ?? [];
 
-  const pollingUnitOptions = useMemo(() => {
+    if (names.length > 0) return names;
+
+    return profile?.bankName ? [profile.bankName] : [];
+  }, [banksQuery.data, profile?.bankName]);
+
+  const isPvcSubmitting =
+    pvcSubmitLocked ||
+    selectRoleMutation.isPending ||
+    submitObserverRoleMutation.isPending;
+
+  const isMutating =
+    updatePasswordMutation.isPending ||
+    updateNotificationSettingsMutation.isPending ||
+    generateAnonymousUsernameMutation.isPending ||
+    updateAnonymousIdentityMutation.isPending ||
+    isPvcSubmitting;
+
+  const handleUpdatePassword = async () => {
     if (
-      !pollingUnitForm.state ||
-      !pollingUnitForm.lga ||
-      !pollingUnitForm.ward
+      !securityForm.currentPassword ||
+      !securityForm.newPassword ||
+      !securityForm.confirmPassword
     ) {
-      return [];
+      showToast({
+        message: "Please fill all password fields.",
+        type: "error",
+      });
+      return;
     }
-    const sk = pollingUnitForm.state as PollingStateKey;
-    const lk = pollingUnitForm.lga as keyof (typeof pollingData)[typeof sk];
-    const wk =
-      pollingUnitForm.ward as keyof (typeof pollingData)[typeof sk][typeof lk];
-    return pollingData[sk]?.[lk]?.[wk] ?? [];
-  }, [pollingUnitForm.state, pollingUnitForm.lga, pollingUnitForm.ward]);
 
-  const runSave = async (
-    message: string,
-    dismissRef?: React.RefObject<BottomSheetModal | null>
-  ) => {
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 900));
-    setLoading(false);
-    dismissRef?.current?.dismiss();
-    showToast({ message, type: "success" });
+    if (securityForm.newPassword !== securityForm.confirmPassword) {
+      showToast({
+        message: "Passwords do not match.",
+        type: "error",
+      });
+      return;
+    }
+
+    try {
+      await updatePasswordMutation.mutateAsync({
+        currentPassword: securityForm.currentPassword,
+        newPassword: securityForm.newPassword,
+        confirmPassword: securityForm.confirmPassword,
+      });
+
+      setSecurityForm({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      });
+
+      securitySheetRef.current?.dismiss();
+
+      showToast({
+        message: "Password updated successfully.",
+        type: "success",
+      });
+    } catch (mutationError) {
+      showToast({
+        message: getErrorMessage(mutationError, "Unable to update password."),
+        type: "error",
+      });
+    }
   };
 
-  const handleDevReplayTour = async () => {
-    if (!__DEV__) return;
-    await resetTour();
-    router.navigate(Paths.appHome);
-    setTimeout(() => startTour(), 350);
+  const handleUpdateNotifications = async () => {
+    try {
+      const response =
+        await updateNotificationSettingsMutation.mutateAsync(
+          notificationSettings
+        );
+
+      setNotificationSettings(response.settings);
+      notificationSheetRef.current?.dismiss();
+
+      showToast({
+        message: response.message ?? "Notification settings updated.",
+        type: "success",
+      });
+    } catch (mutationError) {
+      showToast({
+        message: getErrorMessage(
+          mutationError,
+          "Unable to update notification settings."
+        ),
+        type: "error",
+      });
+    }
+  };
+
+  const handleGenerateAnonymousUsername = async () => {
+    try {
+      const response = await generateAnonymousUsernameMutation.mutateAsync();
+
+      showToast({
+        message:
+          response.message ??
+          `Anonymous username generated: ${response.anonymousUsername}`,
+        type: "success",
+      });
+
+      await refetch();
+    } catch (mutationError) {
+      showToast({
+        message: getErrorMessage(
+          mutationError,
+          "Unable to generate anonymous username."
+        ),
+        type: "error",
+      });
+    }
+  };
+
+  const handleKeepPublicName = async () => {
+    if (!profile?.anonymousUsername) {
+      showToast({
+        message: "Generate an anonymous username first.",
+        type: "error",
+      });
+      return;
+    }
+
+    try {
+      const response = await updateAnonymousIdentityMutation.mutateAsync({
+        enabled: true,
+      });
+
+      showToast({
+        message:
+          response.message ?? "Anonymous identity setting updated successfully.",
+        type: "success",
+      });
+
+      await refetch();
+    } catch (mutationError) {
+      showToast({
+        message: getErrorMessage(
+          mutationError,
+          "Unable to keep this public name."
+        ),
+        type: "error",
+      });
+    }
+  };
+
+  const handleSubmitPvcUpdate = async (frontUri: string, backUri: string) => {
+    if (pvcSubmitLocked) return;
+
+    const email = resolveUserEmail(profile?.email, authUser?.email);
+
+    if (!email) {
+      showToast({
+        message: "Profile email is missing. Please sign in again.",
+        type: "error",
+      });
+      return;
+    }
+
+    try {
+      setPvcSubmitLocked(true);
+
+      if (profile?.role !== "observer") {
+        await selectRoleMutation.mutateAsync({
+          email,
+          role: "observer",
+        });
+      }
+
+      const response = await submitObserverRoleMutation.mutateAsync({
+        email,
+        frontPvcUri: frontUri,
+        backPvcUri: backUri,
+      });
+
+      showToast({
+        message:
+          response.message ??
+          "PVC submitted successfully, pending admin verification.",
+        type: "success",
+      });
+
+      await refetch();
+    } catch (mutationError) {
+      showToast({
+        message: getErrorMessage(mutationError, "Unable to submit PVC."),
+        type: "error",
+      });
+
+      throw mutationError;
+    } finally {
+      setPvcSubmitLocked(false);
+    }
+  };
+
+  const handleSubmitFeedback = async () => {
+    const title = feedbackForm.title.trim();
+    const message = feedbackForm.message.trim();
+
+    if (title.length < 2) {
+      showToast({
+        message: "Please enter a feedback title.",
+        type: "error",
+      });
+      return;
+    }
+
+    if (message.length < 5) {
+      showToast({
+        message: "Please enter a more detailed feedback message.",
+        type: "error",
+      });
+      return;
+    }
+
+    try {
+      const response = await submitFeedbackMutation.mutateAsync({
+        title,
+        message,
+      });
+
+      feedbackSheetRef.current?.dismiss();
+      setFeedbackForm(DEFAULT_FEEDBACK_FORM);
+
+      showToast({
+        message: response.message ?? "Feedback submitted successfully.",
+        type: "success",
+      });
+    } catch (mutationError) {
+      showToast({
+        message: getErrorMessage(mutationError, "Unable to submit feedback."),
+        type: "error",
+      });
+    }
   };
 
   const handleItemPress = (item: MeMenuItem) => {
@@ -238,7 +699,7 @@ export default function MeScreen() {
         router.push(Paths.appHelpSupport);
         return;
       case "feedback":
-        showToast({ message: "Feedback flow coming next.", type: "success" });
+        feedbackSheetRef.current?.present();
         return;
       case "sign-out":
         Alert.alert("Sign Out", "Are you sure you want to log out?", [
@@ -247,7 +708,7 @@ export default function MeScreen() {
             text: "Sign Out",
             style: "destructive",
             onPress: () => {
-              signOut();
+              void signOut();
               router.replace(Paths.welcome);
             },
           },
@@ -257,8 +718,43 @@ export default function MeScreen() {
   };
 
   const handleBannerPress = () => {
+    if (profile?.role === "observer") {
+      pvcSheetRef.current?.present();
+      return;
+    }
+
     observerSheetRef.current?.present();
   };
+
+  if (isInitialProfileLoading) {
+    return <MeScreenSkeleton />;
+  }
+
+  if (!profile || !meUser || !banner) {
+    return (
+      <SafeAreaView edges={["top"]} style={styles.safe}>
+        <View style={[styles.screen, styles.emptyState]}>
+          <AppText style={styles.emptyTitle}>Profile unavailable</AppText>
+          <AppText style={styles.emptyText}>
+            We could not load your profile. Check your connection and try again.
+          </AppText>
+
+          <AppButton
+            title="Retry"
+            onPress={() => {
+              void refetch();
+            }}
+          />
+
+          {error ? (
+            <AppText style={styles.errorText}>
+              {getErrorMessage(error, "Unknown error")}
+            </AppText>
+          ) : null}
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safe}>
@@ -276,42 +772,20 @@ export default function MeScreen() {
           bounces
         >
           <View style={styles.headerWrap}>
-            <Pressable
-              onLongPress={handleDevReplayTour}
-              delayLongPress={700}
-              disabled={!__DEV__}
-            >
-              <MeHeader user={mockMeUser} />
-            </Pressable>
+            <MeHeader user={meUser} />
           </View>
 
           <MeProfileCard banner={banner} onPress={handleBannerPress} />
 
-          <TourTarget id="me.my-account">
-            <View style={styles.sectionBlock}>
-              <AppText style={styles.sectionTitle}>MY ACCOUNT</AppText>
-              <MeSection items={accountItems} onItemPress={handleItemPress} />
-            </View>
-          </TourTarget>
+          <View style={styles.sectionBlock}>
+            <AppText style={styles.sectionTitle}>MY ACCOUNT</AppText>
+            <MeSection items={accountItems} onItemPress={handleItemPress} />
+          </View>
 
           <View style={styles.sectionBlock}>
             <AppText style={styles.sectionTitle}>OTHERS</AppText>
             <MeSection items={otherItems} onItemPress={handleItemPress} />
           </View>
-
-          {__DEV__ ? (
-            <Pressable
-              onPress={handleDevReplayTour}
-              style={({ pressed }) => [
-                styles.devButton,
-                pressed && styles.devButtonPressed,
-              ]}
-            >
-              <AppText style={styles.devButtonText}>
-                🔄 Replay App Tour (Dev)
-              </AppText>
-            </Pressable>
-          ) : null}
 
           <TabBarSpacer />
         </ScrollView>
@@ -320,93 +794,100 @@ export default function MeScreen() {
           ref={profileSheetRef}
           value={profileForm}
           onChange={setProfileForm}
-          onSave={() => runSave("Successfully!!", profileSheetRef)}
+          onSave={() => {
+            profileSheetRef.current?.dismiss();
+            showToast({
+              message: "Profile update is not available yet.",
+              type: "success",
+            });
+          }}
           birthdaySheetRef={birthdaySheetRef}
           nationalitySheetRef={nationalitySheetRef}
           genderSheetRef={genderSheetRef}
+          publicName={profile.anonymousUsername}
+          generatingPublicName={generateAnonymousUsernameMutation.isPending}
+          keepingPublicName={updateAnonymousIdentityMutation.isPending}
+          onGeneratePublicName={() => {
+            void handleGenerateAnonymousUsername();
+          }}
+          onKeepPublicName={() => {
+            void handleKeepPublicName();
+          }}
         />
 
         <SecurityBottomSheet
           ref={securitySheetRef}
           value={securityForm}
           onChange={setSecurityForm}
-          onSave={async () => {
-            if (!securityForm.password || !securityForm.confirmPassword) {
-              showToast({
-                message: "Please fill both password fields.",
-                type: "error",
-              });
-              return;
-            }
-
-            if (securityForm.password !== securityForm.confirmPassword) {
-              showToast({
-                message: "Passwords do not match.",
-                type: "error",
-              });
-              return;
-            }
-
-            await runSave("Security updated successfully.", securitySheetRef);
-            setSecurityForm({ password: "", confirmPassword: "" });
+          onSave={() => {
+            void handleUpdatePassword();
           }}
+          saving={updatePasswordMutation.isPending}
         />
 
         <PollingUnitBottomSheet
           ref={pollingUnitSheetRef}
           value={pollingUnitForm}
-          onChange={setPollingUnitForm}
-          onSave={() =>
-            runSave("Polling unit updated successfully.", pollingUnitSheetRef)
-          }
-          stateOptions={stateOptions}
-          lgaOptions={lgaOptions}
-          wardOptions={wardOptions}
-          pollingUnitOptions={pollingUnitOptions}
         />
 
         <NotificationAlertBottomSheet
           ref={notificationSheetRef}
           value={notificationSettings}
           onChange={setNotificationSettings}
-          onSave={() =>
-            runSave("Notification settings updated.", notificationSheetRef)
-          }
+          onSave={() => {
+            void handleUpdateNotifications();
+          }}
+          saving={updateNotificationSettingsMutation.isPending}
         />
 
         <ObserverRegistrationBottomSheet
           ref={observerSheetRef}
           value={observerForm}
           onChange={setObserverForm}
-          onSubmit={() =>
-            runSave("Observer registration submitted.", observerSheetRef)
-          }
+          onSubmit={() => {
+            observerSheetRef.current?.dismiss();
+            pvcSheetRef.current?.present();
+          }}
         />
 
         <PVCVerificationBottomSheet
           ref={pvcSheetRef}
-          pvcVerifiedDate={mockMeUser.pvcVerifiedDate}
-          onSubmit={() => {
-            showToast({
-              message: "PVC submitted for verification.",
-              type: "success",
-            });
-          }}
+          pvcVerifiedDate={meUser.pvcVerifiedDate}
+          saving={isPvcSubmitting}
+          onSubmit={handleSubmitPvcUpdate}
         />
 
         <BankDetailsBottomSheet
           ref={bankSheetRef}
           value={bankForm}
           onChange={setBankForm}
-          onSave={() => runSave("Bank details saved.", bankSheetRef)}
+          onSave={() => {
+            bankSheetRef.current?.dismiss();
+            showToast({
+              message: "Bank details update is not available yet.",
+              type: "success",
+            });
+          }}
           bankOptions={bankOptions}
         />
 
-        <AppScreenLoader visible={loading} />
+        <FeedbackBottomSheet
+          ref={feedbackSheetRef}
+          value={feedbackForm}
+          onChange={setFeedbackForm}
+          onSubmit={() => {
+            void handleSubmitFeedback();
+          }}
+          submitting={submitFeedbackMutation.isPending}
+        />
+
+        <AppScreenLoader visible={isMutating || (isFetching && !profile)} />
       </View>
     </SafeAreaView>
   );
 }
+
+const skeletonColor = "rgba(17,26,50,0.08)";
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#EEF5DB" },
@@ -426,24 +907,124 @@ const styles = StyleSheet.create({
     color: "rgba(17,26,50,0.68)",
     fontFamily: Theme.fonts.body.semibold,
   },
-  devButton: {
-    marginTop: 28,
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    borderRadius: 14,
-    backgroundColor: "#111A32",
-    alignItems: "center",
+  emptyState: {
+    paddingHorizontal: 24,
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    gap: 14,
   },
-  devButtonPressed: { opacity: 0.85 },
-  devButtonText: {
-    fontSize: 13,
-    color: "#FFFFFF",
+  emptyTitle: {
+    fontSize: 22,
+    lineHeight: 28,
     fontFamily: Theme.fonts.body.semibold,
+    color: Theme.colors.text,
+    textAlign: "center",
+  },
+  emptyText: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: Theme.colors.textMuted,
+    textAlign: "center",
+  },
+  errorText: {
+    marginTop: 8,
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#B42318",
+    textAlign: "center",
+  },
+  skeletonHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    marginBottom: 14,
+  },
+  skeletonAvatar: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: skeletonColor,
+  },
+  skeletonHeaderText: {
+    flex: 1,
+    gap: 7,
+  },
+  skeletonLineLarge: {
+    width: "72%",
+    height: 22,
+    borderRadius: 999,
+    backgroundColor: skeletonColor,
+  },
+  skeletonLineMedium: {
+    width: "54%",
+    height: 14,
+    borderRadius: 999,
+    backgroundColor: skeletonColor,
+  },
+  skeletonLineSmall: {
+    width: "62%",
+    height: 14,
+    borderRadius: 999,
+    backgroundColor: skeletonColor,
+  },
+  skeletonLineTiny: {
+    width: "42%",
+    height: 13,
+    borderRadius: 999,
+    backgroundColor: skeletonColor,
+  },
+  skeletonBanner: {
+    height: 78,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,0.20)",
+    backgroundColor: "rgba(255,255,255,0.46)",
+    marginBottom: 18,
+  },
+  skeletonSectionTitle: {
+    width: 112,
+    height: 14,
+    borderRadius: 999,
+    backgroundColor: skeletonColor,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  skeletonCard: {
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.58)",
+    borderWidth: 1,
+    borderColor: "rgba(17,26,50,0.07)",
+    overflow: "hidden",
+    marginBottom: 14,
+  },
+  skeletonRow: {
+    minHeight: 66,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(17,26,50,0.06)",
+  },
+  skeletonRowIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: skeletonColor,
+  },
+  skeletonRowContent: {
+    flex: 1,
+    gap: 7,
+  },
+  skeletonRowLine: {
+    width: "58%",
+    height: 15,
+    borderRadius: 999,
+    backgroundColor: skeletonColor,
+  },
+  skeletonRowSubLine: {
+    width: "74%",
+    height: 12,
+    borderRadius: 999,
+    backgroundColor: skeletonColor,
   },
 });

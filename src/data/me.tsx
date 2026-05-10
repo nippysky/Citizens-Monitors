@@ -125,10 +125,11 @@ export function getMeBanner(user: MeUser): MeBannerConfig {
     return {
       show: true,
       title: "Complete your profile",
-      subtitle: "Upload your PVC to unlock full access as a Volunteer.",
+      subtitle: "Upload your PVC to unlock full observer access.",
       type: "complete-profile",
     };
   }
+
   if (user.userType === "volunteer") {
     return {
       show: true,
@@ -137,9 +138,9 @@ export function getMeBanner(user: MeUser): MeBannerConfig {
       type: "observer-registration",
     };
   }
+
   return { show: false, title: "", subtitle: "", type: "none" };
 }
-
 /* ───── Dynamic menu items ───── */
 
 export function getMeAccountItems(user: MeUser): MeMenuItem[] {

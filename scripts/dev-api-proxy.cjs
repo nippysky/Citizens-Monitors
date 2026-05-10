@@ -1,13 +1,19 @@
+#!/usr/bin/env node
 /* eslint-env node */
 
-const http = require("node:http");
 const { Buffer } = require("node:buffer");
-const { spawn } = require("node:child_process");
+const fs = require("node:fs");
+const http = require("node:http");
+const https = require("node:https");
+const path = require("node:path");
+const { URL } = require("node:url");
 
+const PORT = Number(process.env.DEV_API_PROXY_PORT || 8787);
 const TARGET_ORIGIN =
   process.env.DEV_API_TARGET_ORIGIN || "https://citizen-monitors.onrender.com";
 
-const PORT = Number(process.env.DEV_API_PROXY_PORT || 8787);
+const REQUEST_TIMEOUT_MS = Number(process.env.DEV_API_TIMEOUT_MS || 180000);
+const MAX_BODY_BYTES = Number(process.env.DEV_API_MAX_BODY_BYTES || 60 * 1024 * 1024);
 
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
@@ -18,210 +24,250 @@ const HOP_BY_HOP_HEADERS = new Set([
   "trailer",
   "transfer-encoding",
   "upgrade",
-  "host",
-  "content-length",
-  "accept-encoding",
 ]);
+
+function loadEnvFile(fileName) {
+  const filePath = path.join(process.cwd(), fileName);
+
+  if (!fs.existsSync(filePath)) return;
+
+  const raw = fs.readFileSync(filePath, "utf8");
+
+  raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"))
+    .forEach((line) => {
+      const separatorIndex = line.indexOf("=");
+
+      if (separatorIndex === -1) return;
+
+      const key = line.slice(0, separatorIndex).trim();
+      const value = line.slice(separatorIndex + 1).trim();
+
+      if (!key || process.env[key]) return;
+
+      process.env[key] = value.replace(/^["']|["']$/g, "");
+    });
+}
+
+loadEnvFile(".env.local");
+loadEnvFile(".env");
+
+const INHOUSE_ACCESS_TOKEN =
+  process.env.EXPO_PUBLIC_INHOUSE_ACCESS_TOKEN ||
+  process.env.INHOUSE_ACCESS_TOKEN ||
+  "";
+
+function getCorsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+    "Access-Control-Allow-Headers":
+      "Accept,Content-Type,Authorization,X-Inhouse-Access-Token",
+  };
+}
+
+function writeJson(res, statusCode, payload) {
+  res.writeHead(statusCode, {
+    "Content-Type": "application/json; charset=utf-8",
+    ...getCorsHeaders(),
+  });
+
+  res.end(JSON.stringify(payload));
+}
+
+function buildUpstreamUrl(req) {
+  const localUrl = new URL(req.url || "/", `http://localhost:${PORT}`);
+  return new URL(`${localUrl.pathname}${localUrl.search}`, TARGET_ORIGIN);
+}
 
 function readRequestBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
+    let totalBytes = 0;
 
     req.on("data", (chunk) => {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      totalBytes += chunk.length;
+
+      if (totalBytes > MAX_BODY_BYTES) {
+        reject(
+          new Error(
+            `Request body too large. Max ${Math.round(
+              MAX_BODY_BYTES / 1024 / 1024
+            )}MB allowed by local proxy.`
+          )
+        );
+
+        req.destroy();
+        return;
+      }
+
+      chunks.push(chunk);
     });
 
     req.on("end", () => {
-      resolve(chunks.length > 0 ? Buffer.concat(chunks) : undefined);
+      resolve(Buffer.concat(chunks));
     });
 
     req.on("error", reject);
+
+    req.on("aborted", () => {
+      reject(new Error("Client aborted the request."));
+    });
   });
 }
 
-function buildCurlHeaders(headers) {
-  const args = [];
+function buildProxyHeaders(req, upstreamUrl, bodyBuffer) {
+  const headers = { ...req.headers };
 
-  for (const [key, value] of Object.entries(headers)) {
-    const normalizedKey = key.toLowerCase();
+  Object.keys(headers).forEach((headerName) => {
+    const lowerHeaderName = headerName.toLowerCase();
 
-    if (HOP_BY_HOP_HEADERS.has(normalizedKey)) {
-      continue;
+    if (HOP_BY_HOP_HEADERS.has(lowerHeaderName)) {
+      delete headers[headerName];
     }
+  });
 
-    if (value === undefined) {
-      continue;
-    }
+  headers.host = upstreamUrl.host;
+  headers.accept = headers.accept || "application/json";
+  headers["accept-encoding"] = "identity";
+  headers["content-length"] = String(bodyBuffer.length);
+  headers["x-forwarded-host"] = req.headers.host || `localhost:${PORT}`;
+  headers["x-forwarded-proto"] = "http";
 
-    const headerValue = Array.isArray(value) ? value.join(", ") : String(value);
-
-    args.push("-H", `${key}: ${headerValue}`);
+  if (INHOUSE_ACCESS_TOKEN && !headers["x-inhouse-access-token"]) {
+    headers["x-inhouse-access-token"] = INHOUSE_ACCESS_TOKEN;
   }
 
-  return args;
+  return headers;
 }
 
-function proxyWithCurl({ method, url, headers, body }) {
-  return new Promise((resolve, reject) => {
-    const marker = "__DEV_PROXY_STATUS__:";
+async function proxyRequest(req, res) {
+  const upstreamUrl = buildUpstreamUrl(req);
+  const isHttps = upstreamUrl.protocol === "https:";
 
-    const args = [
-      "-sS",
-      "--location",
-      "--connect-timeout",
-      "20",
-      "--max-time",
-      "90",
-      "-X",
-      method,
-      ...buildCurlHeaders(headers),
-      "-H",
-      "Accept: application/json",
-      "-w",
-      `\n${marker}%{http_code}`,
-      url,
-    ];
+  let bodyBuffer;
 
-    if (body && method !== "GET" && method !== "HEAD") {
-      args.splice(args.length - 1, 0, "--data-binary", "@-");
-    }
+  try {
+    bodyBuffer = await readRequestBody(req);
+  } catch (error) {
+    console.error("[dev-api-proxy] body read error:", error);
 
-    const child = spawn("curl", args, {
-      stdio: ["pipe", "pipe", "pipe"],
+    writeJson(res, 413, {
+      message:
+        error instanceof Error
+          ? error.message
+          : "Unable to read request body.",
     });
+    return;
+  }
 
-    const stdoutChunks = [];
-    const stderrChunks = [];
+  const options = {
+    protocol: upstreamUrl.protocol,
+    hostname: upstreamUrl.hostname,
+    port: upstreamUrl.port || (isHttps ? 443 : 80),
+    method: req.method,
+    path: `${upstreamUrl.pathname}${upstreamUrl.search}`,
+    headers: buildProxyHeaders(req, upstreamUrl, bodyBuffer),
+    timeout: REQUEST_TIMEOUT_MS,
+  };
 
-    child.stdout.on("data", (chunk) => {
-      stdoutChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    });
+  console.log(`[dev-api-proxy] → ${req.method} ${upstreamUrl.href}`);
 
-    child.stderr.on("data", (chunk) => {
-      stderrChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    });
+  const client = isHttps ? https : http;
 
-    child.on("error", reject);
+  const upstreamReq = client.request(options, (upstreamRes) => {
+    const statusCode = upstreamRes.statusCode || 502;
 
-    child.on("close", (code) => {
-      const stdout = Buffer.concat(stdoutChunks).toString("utf8");
-      const stderr = Buffer.concat(stderrChunks).toString("utf8");
-
-      if (code !== 0) {
-        reject(
-          new Error(
-            stderr ||
-              `curl exited with code ${code}. Upstream request did not complete.`
-          )
-        );
-        return;
-      }
-
-      const markerIndex = stdout.lastIndexOf(marker);
-
-      if (markerIndex === -1) {
-        reject(new Error("Could not read upstream HTTP status from curl."));
-        return;
-      }
-
-      const responseBody = stdout.slice(0, markerIndex).trimStart();
-      const statusText = stdout.slice(markerIndex + marker.length).trim();
-      const status = Number(statusText);
-
-      if (!Number.isFinite(status)) {
-        reject(new Error(`Invalid upstream status from curl: ${statusText}`));
-        return;
-      }
-
-      resolve({
-        status,
-        body: responseBody,
-      });
-    });
-
-    if (body && method !== "GET" && method !== "HEAD") {
-      child.stdin.write(body);
-    }
-
-    child.stdin.end();
-  });
-}
-
-const server = http.createServer(async (req, res) => {
-  if (!req.url) {
-    res.writeHead(400, {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-    });
-
-    res.end(
-      JSON.stringify({
-        message: "Missing request URL.",
-      })
+    console.log(
+      `[dev-api-proxy] ← ${statusCode} ${req.method} ${upstreamUrl.pathname}`
     );
 
+    const responseHeaders = {
+      ...upstreamRes.headers,
+      ...getCorsHeaders(),
+    };
+
+    Object.keys(responseHeaders).forEach((headerName) => {
+      if (HOP_BY_HOP_HEADERS.has(headerName.toLowerCase())) {
+        delete responseHeaders[headerName];
+      }
+    });
+
+    res.writeHead(statusCode, responseHeaders);
+    upstreamRes.pipe(res);
+  });
+
+  upstreamReq.setTimeout(REQUEST_TIMEOUT_MS, () => {
+    upstreamReq.destroy(
+      new Error(`Upstream timeout after ${REQUEST_TIMEOUT_MS}ms`)
+    );
+  });
+
+  upstreamReq.on("error", (error) => {
+    console.error("[dev-api-proxy] upstream error:", error);
+
+    if (res.headersSent) {
+      res.destroy(error);
+      return;
+    }
+
+    writeJson(res, 502, {
+      message:
+        error instanceof Error ? error.message : "Local API proxy failed.",
+    });
+  });
+
+  upstreamReq.end(bodyBuffer);
+}
+
+const server = http.createServer((req, res) => {
+  if (!req.url) {
+    writeJson(res, 400, {
+      message: "Missing request URL.",
+    });
     return;
   }
 
   if (req.method === "OPTIONS") {
-    res.writeHead(204, {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-      "Access-Control-Allow-Headers":
-        "Accept,Content-Type,Authorization,X-Inhouse-Access-Token",
-    });
-
+    res.writeHead(204, getCorsHeaders());
     res.end();
     return;
   }
 
-  const method = req.method || "GET";
-  const upstreamUrl = `${TARGET_ORIGIN}${req.url}`;
+  proxyRequest(req, res).catch((error) => {
+    console.error("[dev-api-proxy] fatal error:", error);
 
-  try {
-    const body = await readRequestBody(req);
-
-    console.log("[dev-api-proxy] →", method, upstreamUrl);
-
-    const upstream = await proxyWithCurl({
-      method,
-      url: upstreamUrl,
-      headers: req.headers,
-      body,
-    });
-
-    console.log("[dev-api-proxy] ←", upstream.status, req.url);
-
-    res.writeHead(upstream.status, {
-      "Content-Type": "application/json; charset=utf-8",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-      "Access-Control-Allow-Headers":
-        "Accept,Content-Type,Authorization,X-Inhouse-Access-Token",
-    });
-
-    res.end(upstream.body);
-  } catch (error) {
-    console.error("[dev-api-proxy] error:", error);
-
-    res.writeHead(502, {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-    });
-
-    res.end(
-      JSON.stringify({
+    if (!res.headersSent) {
+      writeJson(res, 502, {
         message:
           error instanceof Error
             ? error.message
             : "Local API proxy failed.",
-      })
-    );
+      });
+    }
+  });
+});
+
+server.timeout = REQUEST_TIMEOUT_MS;
+
+server.on("clientError", (error, socket) => {
+  console.error("[dev-api-proxy] client error:", error.message);
+
+  if (!socket.destroyed) {
+    socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
   }
 });
 
 server.listen(PORT, "0.0.0.0", () => {
+  console.log(`[dev-api-proxy] http://localhost:${PORT} → ${TARGET_ORIGIN}`);
   console.log(
-    `[dev-api-proxy] http://localhost:${PORT} → ${TARGET_ORIGIN}`
+    `[dev-api-proxy] inhouse token ${
+      INHOUSE_ACCESS_TOKEN ? "loaded" : "missing"
+    }`
+  );
+  console.log(
+    `[dev-api-proxy] max body ${Math.round(MAX_BODY_BYTES / 1024 / 1024)}MB`
   );
 });

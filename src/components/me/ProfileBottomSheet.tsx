@@ -1,8 +1,3 @@
-// ─── src/components/me/ProfileBottomSheet.tsx ────────────────────────────────
-// Revamped: avatar change via gallery+crop, regenerate public name with 5 trials.
-// Updated: avatar picker now uses centralized media-library permission helper.
-// ─────────────────────────────────────────────────────────────────────────────
-
 import { Ionicons } from "@expo/vector-icons";
 import {
   BottomSheetBackdrop,
@@ -44,46 +39,13 @@ type Props = {
   birthdaySheetRef: RefObject<BottomSheetModal | null>;
   nationalitySheetRef: RefObject<BottomSheetModal | null>;
   genderSheetRef: RefObject<BottomSheetModal | null>;
+  publicName?: string;
+  generatingPublicName?: boolean;
+  keepingPublicName?: boolean;
+  saving?: boolean;
+  onGeneratePublicName: () => void;
+  onKeepPublicName: () => void;
 };
-
-const PUBLIC_NAME_PREFIXES = [
-  "Iron",
-  "Silver",
-  "Golden",
-  "Shadow",
-  "Storm",
-  "Brave",
-  "Swift",
-  "Noble",
-  "Crystal",
-  "Thunder",
-];
-
-const PUBLIC_NAME_SUFFIXES = [
-  "Eagle",
-  "Wolf",
-  "Lion",
-  "Hawk",
-  "Bear",
-  "Fox",
-  "Panther",
-  "Falcon",
-  "Titan",
-  "Phoenix",
-];
-
-function generatePublicName(): string {
-  const prefix =
-    PUBLIC_NAME_PREFIXES[
-      Math.floor(Math.random() * PUBLIC_NAME_PREFIXES.length)
-    ];
-  const suffix =
-    PUBLIC_NAME_SUFFIXES[
-      Math.floor(Math.random() * PUBLIC_NAME_SUFFIXES.length)
-    ];
-  const num = Math.floor(Math.random() * 99) + 1;
-  return `${prefix}${suffix}${num}`;
-}
 
 const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
   function ProfileBottomSheet(
@@ -94,6 +56,12 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
       birthdaySheetRef,
       nationalitySheetRef,
       genderSheetRef,
+      publicName,
+      generatingPublicName = false,
+      keepingPublicName = false,
+      saving = false,
+      onGeneratePublicName,
+      onKeepPublicName,
     },
     ref
   ) {
@@ -102,8 +70,6 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
     const snapPoints = useMemo(() => ["92%"], []);
 
     const [avatarUri, setAvatarUri] = useState<string | null>(null);
-    const [publicName, setPublicName] = useState("IronEagle42");
-    const [trialsLeft, setTrialsLeft] = useState(5);
 
     const close = () => {
       if (ref && typeof ref !== "function" && ref.current) {
@@ -128,7 +94,8 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
 
           showToast({
             type: "success",
-            message: "Profile photo updated.",
+            message:
+              "Profile photo selected. Upload will be connected with the profile update endpoint.",
           });
         }
       } catch {
@@ -139,11 +106,7 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
       }
     }, [showToast]);
 
-    const handleRegenerateName = useCallback(() => {
-      if (trialsLeft <= 0) return;
-      setPublicName(generatePublicName());
-      setTrialsLeft((prev) => prev - 1);
-    }, [trialsLeft]);
+    const hasPublicName = Boolean(publicName?.trim());
 
     return (
       <>
@@ -155,9 +118,9 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
           keyboardBehavior="interactive"
           keyboardBlurBehavior="restore"
           android_keyboardInputMode="adjustResize"
-          backdropComponent={(p) => (
+          backdropComponent={(props) => (
             <BottomSheetBackdrop
-              {...p}
+              {...props}
               appearsOnIndex={0}
               disappearsOnIndex={-1}
               opacity={0.32}
@@ -175,11 +138,11 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
               { paddingBottom: insets.bottom + 22 },
             ]}
           >
-            {/* Header */}
             <View style={styles.header}>
               <AppText style={styles.headerTitle}>
                 Update Personal Profile
               </AppText>
+
               <Pressable onPress={close} hitSlop={8} style={styles.closeBtn}>
                 <Ionicons
                   name="close"
@@ -191,7 +154,6 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
 
             <View style={styles.divider} />
 
-            {/* Avatar section */}
             <View style={styles.avatarSection}>
               <View style={styles.avatarWrap}>
                 {avatarUri ? (
@@ -200,6 +162,7 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
                   <ProfilePhoto width={72} height={72} />
                 )}
               </View>
+
               <Pressable
                 onPress={handleChangeAvatar}
                 style={styles.changeAvatarBtn}
@@ -208,27 +171,28 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
               </Pressable>
             </View>
 
-            {/* Name row */}
             <View style={styles.nameRow}>
               <View style={styles.nameCol}>
                 <AppInput
                   label="Your First Name"
                   value={value.firstName}
-                  onChangeText={(t) => onChange({ ...value, firstName: t })}
+                  onChangeText={(firstName) =>
+                    onChange({ ...value, firstName })
+                  }
                   placeholder="First name"
                 />
               </View>
+
               <View style={styles.nameCol}>
                 <AppInput
                   label="Your Last Name"
                   value={value.lastName}
-                  onChangeText={(t) => onChange({ ...value, lastName: t })}
+                  onChangeText={(lastName) => onChange({ ...value, lastName })}
                   placeholder="Last name"
                 />
               </View>
             </View>
 
-            {/* Birthday */}
             <AppSelectField
               label="Your Birthday"
               value={value.birthday.formatted}
@@ -243,7 +207,6 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
               }
             />
 
-            {/* Gender */}
             <AppSelectField
               label="Gender"
               value={value.gender}
@@ -251,7 +214,6 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
               onPress={() => genderSheetRef.current?.present()}
             />
 
-            {/* Nationality */}
             <AppSelectField
               label="Nationality"
               value={value.nationality}
@@ -259,102 +221,108 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
               onPress={() => nationalitySheetRef.current?.present()}
             />
 
-            {/* Residence */}
             <AppInput
               label="Current Residence City / Country"
               value={value.residence}
-              onChangeText={(t) => onChange({ ...value, residence: t })}
-              placeholder="Lagos, Nigeria"
+              onChangeText={(residence) => onChange({ ...value, residence })}
+              placeholder="City, Country"
             />
 
-            {/* Phone */}
-            <AppInput
-              label="Phone Number"
-              value=""
-              onChangeText={() => {}}
-              placeholder="Your contact number"
-              keyboardType="phone-pad"
-            />
-
-            {/* ── Regenerate Public Name ── */}
             <View style={styles.publicNameSection}>
               <View style={styles.publicNameHeader}>
                 <AppText style={styles.publicNameTitle}>
-                  Regenerate Your Public Name
+                  Public Anonymous Name
                 </AppText>
               </View>
+
               <AppText style={styles.publicNameDesc}>
-                To protect you on this app, your real name is never shown
-                publicly. All reports and discussions are tied to this identity.
+                Your anonymous name is used for sensitive public participation
+                inside Citizen Monitor.
               </AppText>
 
               <View style={styles.publicNameCard}>
                 <AppText style={styles.publicNameLabel}>
                   Your anonymous identity
                 </AppText>
-                <AppText style={styles.publicNameValue}>{publicName}</AppText>
+
+                <AppText
+                  style={[
+                    styles.publicNameValue,
+                    !hasPublicName && styles.publicNamePlaceholder,
+                  ]}
+                >
+                  {hasPublicName ? publicName : "No anonymous name generated"}
+                </AppText>
               </View>
 
               <View style={styles.publicNameActions}>
                 <Pressable
-                  onPress={handleRegenerateName}
-                  disabled={trialsLeft <= 0}
+                  onPress={onGeneratePublicName}
+                  disabled={generatingPublicName || keepingPublicName}
                   style={[
                     styles.tryAnotherBtn,
-                    trialsLeft <= 0 && styles.tryAnotherBtnDisabled,
+                    (generatingPublicName || keepingPublicName) &&
+                      styles.actionDisabled,
                   ]}
                 >
                   <Ionicons
                     name="refresh-outline"
                     size={14}
-                    color={
-                      trialsLeft > 0
-                        ? Theme.colors.primary
-                        : Theme.colors.textMuted
-                    }
+                    color={Theme.colors.primary}
                   />
-                  <AppText
-                    style={[
-                      styles.tryAnotherText,
-                      trialsLeft <= 0 && { color: Theme.colors.textMuted },
-                    ]}
-                  >
-                    Try another ({trialsLeft} Left)
+                  <AppText style={styles.tryAnotherText}>
+                    {hasPublicName ? "Regenerate" : "Generate"}
                   </AppText>
                 </Pressable>
 
-                <Pressable style={styles.keepNameBtn}>
-                  <AppText style={styles.keepNameText}>Keep This Name</AppText>
+                <Pressable
+                  onPress={onKeepPublicName}
+                  disabled={!hasPublicName || generatingPublicName || keepingPublicName}
+                  style={[
+                    styles.keepNameBtn,
+                    (!hasPublicName ||
+                      generatingPublicName ||
+                      keepingPublicName) &&
+                      styles.keepNameBtnDisabled,
+                  ]}
+                >
+                  <AppText style={styles.keepNameText}>
+                    {keepingPublicName ? "Saving..." : "Keep This Name"}
+                  </AppText>
                 </Pressable>
               </View>
             </View>
 
-            {/* Save */}
             <AppButton
               title="Save Changes"
               onPress={onSave}
+              loading={saving}
+              disabled={saving}
               style={styles.saveButton}
             />
           </BottomSheetScrollView>
         </BottomSheetModal>
 
-        {/* Sub-sheets */}
         <BirthdaySheet
           ref={birthdaySheetRef}
           value={value.birthday}
           onChange={(birthday) => onChange({ ...value, birthday })}
           onConfirm={() => birthdaySheetRef.current?.dismiss()}
         />
+
         <GenderSheet
           ref={genderSheetRef}
           selected={value.gender}
           onSelect={(gender) => onChange({ ...value, gender })}
           onConfirm={() => genderSheetRef.current?.dismiss()}
         />
+
         <SelectPickerSheet
           ref={nationalitySheetRef}
           query={value.nationalityQuery}
-          onChangeQuery={(q) => onChange({ ...value, nationalityQuery: q })}
+          onChangeQuery={(nationalityQuery) =>
+            onChange({ ...value, nationalityQuery })
+          }
           selectedValue={value.nationality}
           onSelectValue={(nationality) =>
             onChange({ ...value, nationality, nationalityQuery: "" })
@@ -382,7 +350,6 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     gap: 16,
   },
-
   header: {
     minHeight: 58,
     flexDirection: "row",
@@ -408,8 +375,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#DFE4EB",
     marginHorizontal: -16,
   },
-
-  /* Avatar */
   avatarSection: {
     alignItems: "center",
     gap: 10,
@@ -445,8 +410,6 @@ const styles = StyleSheet.create({
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.semibold,
   },
-
-  /* Name row */
   nameRow: {
     flexDirection: "row",
     gap: 12,
@@ -454,24 +417,21 @@ const styles = StyleSheet.create({
   nameCol: {
     flex: 1,
   },
-
-  /* Public name */
   publicNameSection: {
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: Theme.colors.border,
-    backgroundColor: Theme.colors.surface,
-    padding: 14,
+    borderColor: "#D9DEE8",
+    backgroundColor: "rgba(255,255,255,0.62)",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
     gap: 12,
   },
   publicNameHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+    gap: 3,
   },
   publicNameTitle: {
     fontSize: 15,
-    lineHeight: 20,
+    lineHeight: 21,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
   },
@@ -482,13 +442,13 @@ const styles = StyleSheet.create({
   },
   publicNameCard: {
     borderRadius: 14,
-    backgroundColor: "#F4FFFE",
     borderWidth: 1,
-    borderColor: "rgba(5,163,156,0.15)",
+    borderColor: "rgba(5,163,156,0.18)",
+    backgroundColor: "rgba(5,163,156,0.07)",
     paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingVertical: 13,
     alignItems: "center",
-    gap: 6,
+    gap: 4,
   },
   publicNameLabel: {
     fontSize: 12,
@@ -497,32 +457,33 @@ const styles = StyleSheet.create({
     fontFamily: Theme.fonts.body.medium,
   },
   publicNameValue: {
-    fontSize: 22,
+    fontSize: 20,
     lineHeight: 26,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.heading.bold,
+    textAlign: "center",
   },
-
+  publicNamePlaceholder: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: Theme.colors.textMuted,
+    fontFamily: Theme.fonts.body.medium,
+  },
   publicNameActions: {
     flexDirection: "row",
-    alignItems: "center",
     gap: 10,
   },
   tryAnotherBtn: {
     flex: 1,
-    minHeight: 40,
+    minHeight: 46,
     borderRadius: 12,
-    flexDirection: "row",
+    borderWidth: 1,
+    borderColor: "#D9DEE8",
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
+    flexDirection: "row",
     gap: 6,
-    backgroundColor: "transparent",
-    borderWidth: 1.2,
-    borderColor: Theme.colors.primary,
-  },
-  tryAnotherBtnDisabled: {
-    borderColor: Theme.colors.border,
-    opacity: 0.5,
   },
   tryAnotherText: {
     fontSize: 13,
@@ -532,19 +493,24 @@ const styles = StyleSheet.create({
   },
   keepNameBtn: {
     flex: 1,
-    minHeight: 40,
+    minHeight: 46,
     borderRadius: 12,
+    backgroundColor: Theme.colors.primary,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.colors.primary,
+  },
+  keepNameBtnDisabled: {
+    opacity: 0.48,
   },
   keepNameText: {
     fontSize: 13,
     lineHeight: 18,
-    color: Theme.colors.white,
+    color: "#FFFFFF",
     fontFamily: Theme.fonts.body.semibold,
   },
-
+  actionDisabled: {
+    opacity: 0.58,
+  },
   saveButton: {
     marginVertical: 0,
   },
