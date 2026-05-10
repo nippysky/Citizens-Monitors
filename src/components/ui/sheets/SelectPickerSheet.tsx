@@ -14,6 +14,7 @@ import AppText from "@/components/ui/AppText";
 import { Theme } from "@/theme";
 
 type CountryItem = {
+  id: string;
   name: string;
   code: string;
   flag: string;
@@ -25,20 +26,13 @@ type WorldCountry = {
 };
 
 type Props = {
-  /** Sheet heading — defaults to "Nationality" */
   title?: string;
   query: string;
   onChangeQuery: (value: string) => void;
   selectedValue: string;
   onSelectValue: (value: string) => void;
-  /**
-   * If provided, renders these string options instead of the
-   * built-in world-countries list.  Used by polling-unit sheets, etc.
-   */
   options?: string[];
 };
-
-/* ─── helpers ─────────────────────────────────────────────────────────────── */
 
 function flagFromCode(code: string): string {
   return code
@@ -51,14 +45,36 @@ function flagFromCode(code: string): string {
 const typedCountries = countries as WorldCountry[];
 
 const countryData: CountryItem[] = typedCountries
-  .map((c) => ({
-    name: c.name.common,
-    code: c.cca2,
-    flag: flagFromCode(c.cca2),
+  .map((country) => ({
+    id: `country-${country.cca2}`,
+    name: country.name.common,
+    code: country.cca2,
+    flag: flagFromCode(country.cca2),
   }))
   .sort((a, b) => a.name.localeCompare(b.name));
 
-/* ─── component ───────────────────────────────────────────────────────────── */
+function normalizeSearch(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function buildCustomOptionItems(options: string[]): CountryItem[] {
+  const seen = new Map<string, number>();
+
+  return options
+    .map((option) => option.trim())
+    .filter(Boolean)
+    .map((option, index) => {
+      const count = seen.get(option) ?? 0;
+      seen.set(option, count + 1);
+
+      return {
+        id: `option-${index}-${count}-${option}`,
+        name: option,
+        code: option,
+        flag: "",
+      };
+    });
+}
 
 const SelectPickerSheet = forwardRef<BottomSheetModal, Props>(
   function SelectPickerSheet(
@@ -73,22 +89,26 @@ const SelectPickerSheet = forwardRef<BottomSheetModal, Props>(
     ref
   ) {
     const insets = useSafeAreaInsets();
-
-    /*
-     * FIX: Use fixed snap-points and disable dynamic sizing.
-     * Previously the sheet would collapse when a search filter reduced the
-     * list to only a few items. By keeping two fixed snap-points and always
-     * opening at the first one (55 %) the user never has to drag up manually.
-     */
     const snapPoints = useMemo(() => ["55%", "92%"], []);
 
     const listData = useMemo(() => {
+      const q = normalizeSearch(query);
+
       if (options) {
-        return options.map((o) => ({ name: o, code: o, flag: "" }));
+        const customOptions = buildCustomOptionItems(options);
+
+        if (!q) return customOptions;
+
+        return customOptions.filter((item) =>
+          item.name.toLowerCase().includes(q)
+        );
       }
-      const q = query.trim().toLowerCase();
+
       if (!q) return countryData;
-      return countryData.filter((c) => c.name.toLowerCase().includes(q));
+
+      return countryData.filter((item) =>
+        item.name.toLowerCase().includes(q)
+      );
     }, [options, query]);
 
     const dismiss = useCallback(() => {
@@ -98,7 +118,7 @@ const SelectPickerSheet = forwardRef<BottomSheetModal, Props>(
     }, [ref]);
 
     const renderBackdrop = useCallback(
-      (props: any) => (
+      (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
         <BottomSheetBackdrop
           {...props}
           appearsOnIndex={0}
@@ -112,6 +132,7 @@ const SelectPickerSheet = forwardRef<BottomSheetModal, Props>(
     const renderItem = useCallback(
       ({ item }: { item: CountryItem }) => {
         const selected = selectedValue === item.name;
+
         return (
           <Pressable
             style={[styles.row, selected && styles.rowSelected]}
@@ -143,7 +164,7 @@ const SelectPickerSheet = forwardRef<BottomSheetModal, Props>(
       [selectedValue, onSelectValue, dismiss]
     );
 
-    const keyExtractor = useCallback((item: CountryItem) => item.code, []);
+    const keyExtractor = useCallback((item: CountryItem) => item.id, []);
 
     return (
       <BottomSheetModal
@@ -161,7 +182,6 @@ const SelectPickerSheet = forwardRef<BottomSheetModal, Props>(
         backdropComponent={renderBackdrop}
       >
         <View style={styles.sheetWrap}>
-          {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <AppText variant="title" style={styles.title}>
@@ -173,6 +193,7 @@ const SelectPickerSheet = forwardRef<BottomSheetModal, Props>(
                 color={Theme.colors.textMuted}
               />
             </View>
+
             <Pressable onPress={dismiss} style={styles.closeBtn}>
               <Ionicons
                 name="close"
@@ -184,7 +205,6 @@ const SelectPickerSheet = forwardRef<BottomSheetModal, Props>(
 
           <View style={styles.divider} />
 
-          {/* Search */}
           <View style={styles.searchWrap}>
             <AppInput
               placeholder={options ? "Search…" : "Enter Country Name"}
@@ -200,7 +220,6 @@ const SelectPickerSheet = forwardRef<BottomSheetModal, Props>(
             />
           </View>
 
-          {/* List */}
           <View style={styles.listWrap}>
             <BottomSheetFlatList
               data={listData}
@@ -228,8 +247,6 @@ const SelectPickerSheet = forwardRef<BottomSheetModal, Props>(
 );
 
 export default SelectPickerSheet;
-
-/* ─── styles ──────────────────────────────────────────────────────────────── */
 
 const styles = StyleSheet.create({
   sheetBgTransparent: {

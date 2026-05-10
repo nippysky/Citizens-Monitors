@@ -5,7 +5,6 @@ import AuthShell from "@/components/auth/AuthShell";
 import AppButton from "@/components/ui/AppButton";
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
-import { useAuth } from "@/context/AuthContext";
 import CheckIcon from "@/svgs/app/CheckIcon";
 import CitizenIcon from "@/svgs/app/CitizenIcon";
 import { Theme } from "@/theme";
@@ -31,16 +30,12 @@ function ReadySprinkles() {
 }
 
 export default function OnboardingReady({ draft }: Props) {
-  const { completeOnboarding } = useAuth();
-
   const firstName = draft.stepOne.firstName || "Citizen";
 
-  const handleOpen = async (): Promise<void> => {
-    completeOnboarding({
-      firstName: draft.stepOne.firstName,
-    });
-
-    console.log("Final onboarding payload:", draft);
+  const handleOpen = (): void => {
+    if (__DEV__) {
+      console.log("Final onboarding payload:", draft);
+    }
 
     router.replace(Paths.appHome);
   };

@@ -1,12 +1,7 @@
-import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
-import { useState, useCallback } from "react";
-import {
-  Image,
-  Pressable,
-  StyleSheet,
-  View,
-} from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import { useCallback, useState } from "react";
+import { Image, Pressable, StyleSheet, View } from "react-native";
 
 import TutorialBanner from "@/components/onboarding/TutorialBanner";
 import AppButton from "@/components/ui/AppButton";
@@ -16,6 +11,7 @@ import { ensureMediaLibraryPermission } from "@/lib/permissions";
 import { Theme } from "@/theme";
 
 type Props = {
+  loading?: boolean;
   onComplete: (payload: { frontPvcUri: string; backPvcUri: string }) => void;
   onSkip: () => void;
 };
@@ -23,6 +19,7 @@ type Props = {
 type UploadCardProps = {
   label: string;
   uri: string | null;
+  disabled?: boolean;
   onPick: () => void;
   onRemove: () => void;
 };
@@ -30,6 +27,7 @@ type UploadCardProps = {
 function UploadCard({
   label,
   uri,
+  disabled,
   onPick,
   onRemove,
 }: UploadCardProps) {
@@ -38,14 +36,20 @@ function UploadCard({
       <AppText style={styles.uploadLabel}>{label}</AppText>
 
       <Pressable
+        disabled={disabled}
         onPress={onPick}
-        style={[styles.uploadCard, uri && styles.uploadCardFilled]}
+        style={[
+          styles.uploadCard,
+          uri && styles.uploadCardFilled,
+          disabled && styles.disabled,
+        ]}
       >
         {uri ? (
           <>
             <Image source={{ uri }} style={styles.previewImage} />
 
             <Pressable
+              disabled={disabled}
               onPress={onRemove}
               hitSlop={10}
               style={styles.removeButton}
@@ -72,6 +76,7 @@ function UploadCard({
 }
 
 export default function OnboardingStepFourVerifyIdentity({
+  loading = false,
   onComplete,
   onSkip,
 }: Props) {
@@ -107,7 +112,10 @@ export default function OnboardingStepFourVerifyIdentity({
   }, [showToast]);
 
   const handlePickFront = useCallback(async (): Promise<void> => {
+    if (loading) return;
+
     const uri = await pickImage();
+
     if (uri) {
       setFrontPvcUri(uri);
       showToast({
@@ -115,10 +123,13 @@ export default function OnboardingStepFourVerifyIdentity({
         message: "Front PVC uploaded.",
       });
     }
-  }, [pickImage, showToast]);
+  }, [loading, pickImage, showToast]);
 
   const handlePickBack = useCallback(async (): Promise<void> => {
+    if (loading) return;
+
     const uri = await pickImage();
+
     if (uri) {
       setBackPvcUri(uri);
       showToast({
@@ -126,7 +137,7 @@ export default function OnboardingStepFourVerifyIdentity({
         message: "Back PVC uploaded.",
       });
     }
-  }, [pickImage, showToast]);
+  }, [loading, pickImage, showToast]);
 
   const handleFinish = (): void => {
     if (!frontPvcUri || !backPvcUri) {
@@ -143,7 +154,7 @@ export default function OnboardingStepFourVerifyIdentity({
     });
   };
 
-  const canFinish = Boolean(frontPvcUri && backPvcUri);
+  const canFinish = Boolean(frontPvcUri && backPvcUri) && !loading;
 
   return (
     <View style={styles.container}>
@@ -177,6 +188,7 @@ export default function OnboardingStepFourVerifyIdentity({
         <UploadCard
           label="Front of PVC"
           uri={frontPvcUri}
+          disabled={loading}
           onPick={handlePickFront}
           onRemove={() => {
             setFrontPvcUri(null);
@@ -190,6 +202,7 @@ export default function OnboardingStepFourVerifyIdentity({
         <UploadCard
           label="Back of PVC"
           uri={backPvcUri}
+          disabled={loading}
           onPick={handlePickBack}
           onRemove={() => {
             setBackPvcUri(null);
@@ -206,6 +219,7 @@ export default function OnboardingStepFourVerifyIdentity({
           title="Finish Setup"
           onPress={handleFinish}
           disabled={!canFinish}
+          loading={loading}
           style={styles.primaryButton}
         />
 
@@ -213,6 +227,7 @@ export default function OnboardingStepFourVerifyIdentity({
           title="Skip For Now (Limited Access)"
           variant="secondary"
           onPress={onSkip}
+          disabled={loading}
           style={styles.secondaryButton}
         />
       </View>
@@ -294,6 +309,10 @@ const styles = StyleSheet.create({
     borderStyle: "solid",
     borderColor: Theme.colors.primary,
     backgroundColor: "#FFFFFF",
+  },
+
+  disabled: {
+    opacity: 0.7,
   },
 
   emptyUploadContent: {

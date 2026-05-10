@@ -14,7 +14,7 @@ import { EmailIcon, LockIcon } from "@/components/ui/InputIcons";
 import SocialButton from "@/components/ui/SocialButton";
 import { Paths } from "@/constants/paths";
 import { useAppToast } from "@/hooks/useAppToast";
-import { useRegisterMutation } from "@/hooks/useRegisterMutation";
+import { useRegisterMutation } from "@/hooks/api/useRegisterMutation";
 import { useSignUpForm } from "@/hooks/useSignUpForms";
 import { Theme } from "@/theme";
 

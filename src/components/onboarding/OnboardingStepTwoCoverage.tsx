@@ -3,7 +3,12 @@ import { StyleSheet, View } from "react-native";
 import TutorialBanner from "@/components/onboarding/TutorialBanner";
 import AppText from "@/components/ui/AppText";
 import { Theme } from "@/theme";
-import { JoinReason, StepThreeForm, VoterStatus, YesNo } from "@/types/onboarding";
+import {
+  JoinReason,
+  StepThreeForm,
+  VoterStatus,
+  YesNo,
+} from "@/types/onboarding";
 
 type Props = {
   value: StepThreeForm;
@@ -36,7 +41,7 @@ const JOIN_REASON_OPTIONS: JoinReason[] = [
   "Academic research",
 ];
 
-const VOTER_OPTIONS: VoterStatus[] = ["Yes", "No", "In Progress"];
+const VOTER_OPTIONS: VoterStatus[] = ["Yes", "No"];
 const YES_NO_OPTIONS: YesNo[] = ["Yes", "No"];
 
 export default function OnboardingStepTwoCoverage({

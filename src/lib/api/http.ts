@@ -1,3 +1,4 @@
+import { getApiAccessToken } from "@/lib/api/authToken";
 import { ApiEnv } from "@/lib/api/env";
 
 type ApiErrorPayload = {
@@ -10,6 +11,7 @@ type ApiRequestOptions = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   headers?: Record<string, string>;
+  auth?: boolean;
 };
 
 function buildUrl(path: string): string {
@@ -20,6 +22,10 @@ function buildUrl(path: string): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
 
   return `${ApiEnv.baseUrl}${normalizedPath}`;
+}
+
+function isFormDataBody(value: unknown): value is FormData {
+  return typeof FormData !== "undefined" && value instanceof FormData;
 }
 
 function getApiErrorMessage(data: ApiErrorPayload | null): string {
@@ -77,24 +83,35 @@ export async function apiRequest<T>(
 ): Promise<T> {
   const method = options.method ?? "GET";
   const url = buildUrl(path);
+  const isMultipart = isFormDataBody(options.body);
+  const token = getApiAccessToken();
 
   const headers: Record<string, string> = {
     Accept: "application/json",
-    "Content-Type": "application/json",
     "X-Inhouse-Access-Token": ApiEnv.inhouseAccessToken,
     ...options.headers,
   };
+
+  if (!isMultipart) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  if (options.auth !== false && token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
 
   if (__DEV__) {
     console.log("[API Fetch Request]", {
       method,
       url,
       hasInhouseToken: Boolean(ApiEnv.inhouseAccessToken),
+      hasAuthToken: Boolean(token),
       tokenPreview: `${ApiEnv.inhouseAccessToken.slice(
         0,
         6
       )}...${ApiEnv.inhouseAccessToken.slice(-6)}`,
-      body: options.body,
+      bodyType: isMultipart ? "FormData" : "JSON",
+      body: isMultipart ? "[multipart form-data]" : options.body,
     });
   }
 
@@ -107,7 +124,9 @@ export async function apiRequest<T>(
       body:
         method === "GET" || method === "DELETE" || options.body === undefined
           ? undefined
-          : JSON.stringify(options.body),
+          : isMultipart
+            ? (options.body as FormData)
+            : JSON.stringify(options.body),
     });
   } catch (error) {
     if (__DEV__) {

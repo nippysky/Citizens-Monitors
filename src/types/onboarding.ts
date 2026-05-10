@@ -3,7 +3,7 @@ export type Gender = "Male" | "Female" | "";
 export type CitizenType = "observer" | "volunteer" | "public-viewer" | "";
 
 export type YesNo = "Yes" | "No" | "";
-export type VoterStatus = "Yes" | "No" | "In Progress" | "";
+export type VoterStatus = "Yes" | "No";
 export type MonitoringExperience = "First time" | "1-5 year" | "10 yr above" | "";
 
 export type JoinReason =

@@ -3,10 +3,16 @@ import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import SelectPickerSheet from "@/components/ui/sheets/SelectPickerSheet";
 import TutorialBanner from "@/components/onboarding/TutorialBanner";
 import AppSelectField from "@/components/ui/AppSelectField";
 import AppText from "@/components/ui/AppText";
+import SelectPickerSheet from "@/components/ui/sheets/SelectPickerSheet";
+import {
+  useLocalGovernmentsQuery,
+  usePollingUnitsQuery,
+  useStatesQuery,
+  useWardsQuery,
+} from "@/hooks/api/useLocationQueries";
 import { Theme } from "@/theme";
 import { StepFourForm } from "@/types/onboarding";
 
@@ -15,39 +21,15 @@ type Props = {
   onChange: (value: StepFourForm) => void;
 };
 
-type PollingData = {
-  [state: string]: {
-    [lga: string]: {
-      [ward: string]: string[];
-    };
-  };
-};
+const EMPTY_OPTIONS: string[] = [];
 
-const POLLING_DATA: PollingData = {
-  Lagos: {
-    Ikeja: {
-      "Ward A": ["PU 001", "PU 002", "PU 003"],
-      "Ward B": ["PU 004", "PU 005"],
-    },
-    Surulere: {
-      "Ward C": ["PU 006", "PU 007"],
-      "Ward D": ["PU 008"],
-    },
-  },
-  Abuja: {
-    Gwagwalada: {
-      "Ward Central": ["PU 009", "PU 010"],
-    },
-    Bwari: {
-      "Ward North": ["PU 011", "PU 012"],
-    },
-  },
-  Rivers: {
-    PortHarcourt: {
-      "Ward East": ["PU 013", "PU 014"],
-    },
-  },
-};
+function filterOptions(options: string[], query: string): string[] {
+  const q = query.trim().toLowerCase();
+
+  if (!q) return options;
+
+  return options.filter((item) => item.toLowerCase().includes(q));
+}
 
 export default function OnboardingStepOnePollingUnit({
   value,
@@ -63,62 +45,36 @@ export default function OnboardingStepOnePollingUnit({
   const [wardQuery, setWardQuery] = useState("");
   const [unitQuery, setUnitQuery] = useState("");
 
-  const states = useMemo(() => Object.keys(POLLING_DATA), []);
-
-  const lgas = useMemo(() => {
-    if (!value.pollingState) return [];
-    return Object.keys(POLLING_DATA[value.pollingState] ?? {});
-  }, [value.pollingState]);
-
-  const wards = useMemo(() => {
-    if (!value.pollingState || !value.localGovernmentArea) return [];
-    return Object.keys(
-      POLLING_DATA[value.pollingState]?.[value.localGovernmentArea] ?? {}
-    );
-  }, [value.pollingState, value.localGovernmentArea]);
-
-  const pollingUnits = useMemo(() => {
-    if (!value.pollingState || !value.localGovernmentArea || !value.ward) {
-      return [];
-    }
-
-    return (
-      POLLING_DATA[value.pollingState]?.[value.localGovernmentArea]?.[
-        value.ward
-      ] ?? []
-    );
-  }, [value.pollingState, value.localGovernmentArea, value.ward]);
+  const statesQuery = useStatesQuery();
+  const lgasQuery = useLocalGovernmentsQuery(value.pollingState);
+  const wardsQuery = useWardsQuery(
+    value.pollingState,
+    value.localGovernmentArea
+  );
+  const pollingUnitsQuery = usePollingUnitsQuery(
+    value.pollingState,
+    value.localGovernmentArea,
+    value.ward
+  );
 
   const filteredStates = useMemo(
-    () =>
-      states.filter((item) =>
-        item.toLowerCase().includes(stateQuery.trim().toLowerCase())
-      ),
-    [states, stateQuery]
+    () => filterOptions(statesQuery.data ?? EMPTY_OPTIONS, stateQuery),
+    [statesQuery.data, stateQuery]
   );
 
   const filteredLgas = useMemo(
-    () =>
-      lgas.filter((item) =>
-        item.toLowerCase().includes(lgaQuery.trim().toLowerCase())
-      ),
-    [lgas, lgaQuery]
+    () => filterOptions(lgasQuery.data ?? EMPTY_OPTIONS, lgaQuery),
+    [lgasQuery.data, lgaQuery]
   );
 
   const filteredWards = useMemo(
-    () =>
-      wards.filter((item) =>
-        item.toLowerCase().includes(wardQuery.trim().toLowerCase())
-      ),
-    [wards, wardQuery]
+    () => filterOptions(wardsQuery.data ?? EMPTY_OPTIONS, wardQuery),
+    [wardsQuery.data, wardQuery]
   );
 
   const filteredUnits = useMemo(
-    () =>
-      pollingUnits.filter((item) =>
-        item.toLowerCase().includes(unitQuery.trim().toLowerCase())
-      ),
-    [pollingUnits, unitQuery]
+    () => filterOptions(pollingUnitsQuery.data ?? EMPTY_OPTIONS, unitQuery),
+    [pollingUnitsQuery.data, unitQuery]
   );
 
   return (
@@ -140,8 +96,11 @@ export default function OnboardingStepOnePollingUnit({
           <AppSelectField
             label="Polling Unit State"
             value={value.pollingState}
-            placeholder="Select state"
+            placeholder={
+              statesQuery.isPending ? "Loading states..." : "Select state"
+            }
             onPress={() => {
+              if (statesQuery.isPending) return;
               setStateQuery("");
               stateSheetRef.current?.present();
             }}
@@ -157,9 +116,15 @@ export default function OnboardingStepOnePollingUnit({
           <AppSelectField
             label="Local Government Area"
             value={value.localGovernmentArea}
-            placeholder="Select state first"
+            placeholder={
+              !value.pollingState
+                ? "Select state first"
+                : lgasQuery.isPending
+                  ? "Loading LGAs..."
+                  : "Select LGA"
+            }
             onPress={() => {
-              if (!value.pollingState) return;
+              if (!value.pollingState || lgasQuery.isPending) return;
               setLgaQuery("");
               lgaSheetRef.current?.present();
             }}
@@ -175,9 +140,15 @@ export default function OnboardingStepOnePollingUnit({
           <AppSelectField
             label="Ward"
             value={value.ward}
-            placeholder="Select LGA first"
+            placeholder={
+              !value.localGovernmentArea
+                ? "Select LGA first"
+                : wardsQuery.isPending
+                  ? "Loading wards..."
+                  : "Select ward"
+            }
             onPress={() => {
-              if (!value.localGovernmentArea) return;
+              if (!value.localGovernmentArea || wardsQuery.isPending) return;
               setWardQuery("");
               wardSheetRef.current?.present();
             }}
@@ -193,9 +164,15 @@ export default function OnboardingStepOnePollingUnit({
           <AppSelectField
             label="Polling Unit"
             value={value.pollingUnit}
-            placeholder="Select ward first"
+            placeholder={
+              !value.ward
+                ? "Select ward first"
+                : pollingUnitsQuery.isPending
+                  ? "Loading polling units..."
+                  : "Select polling unit"
+            }
             onPress={() => {
-              if (!value.ward) return;
+              if (!value.ward || pollingUnitsQuery.isPending) return;
               setUnitQuery("");
               unitSheetRef.current?.present();
             }}

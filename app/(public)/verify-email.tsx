@@ -15,9 +15,10 @@ import AppButton from "@/components/ui/AppButton";
 import AppText from "@/components/ui/AppText";
 import BackButton from "@/components/ui/BackButton";
 import { Paths } from "@/constants/paths";
+import { useResendForgotPasswordOtpMutation } from "@/hooks/api/useResendForgotPasswordOtpMutation";
+import { useResendVerificationTokenMutation } from "@/hooks/api/useResendVerificationTokenMutation";
+import { useVerifyEmailMutation } from "@/hooks/api/useVerifyEmailMutation";
 import { useAppToast } from "@/hooks/useAppToast";
-import { useResendVerificationTokenMutation } from "@/hooks/useResendVerificationTokenMutation";
-import { useVerifyEmailMutation } from "@/hooks/useVerifyEmailMutation";
 import CheckIcon from "@/svgs/app/CheckIcon";
 import { Theme } from "@/theme";
 
@@ -25,6 +26,10 @@ const OTP_LENGTH = 6;
 const INITIAL_SECONDS = 60;
 
 type VerifyFlow = "sign-up" | "reset-password";
+
+function getRestartPath(flow: VerifyFlow) {
+  return flow === "reset-password" ? Paths.resetPassword : Paths.signUp;
+}
 
 export default function VerifyEmailScreen() {
   const params = useLocalSearchParams<{
@@ -40,6 +45,7 @@ export default function VerifyEmailScreen() {
 
   const verifyEmailMutation = useVerifyEmailMutation();
   const resendVerificationTokenMutation = useResendVerificationTokenMutation();
+  const resendForgotPasswordOtpMutation = useResendForgotPasswordOtpMutation();
 
   const [code, setCode] = useState<string[]>(Array(OTP_LENGTH).fill(""));
   const [secondsLeft, setSecondsLeft] = useState(INITIAL_SECONDS);
@@ -53,10 +59,22 @@ export default function VerifyEmailScreen() {
     [code]
   );
 
-  const isLoading =
-    verifyEmailMutation.isPending || resendVerificationTokenMutation.isPending;
+  const isResending =
+    resendVerificationTokenMutation.isPending ||
+    resendForgotPasswordOtpMutation.isPending;
+
+  const isVerifying = verifyEmailMutation.isPending;
+
+  const isLoading = isVerifying || isResending;
 
   const canResend = secondsLeft === 0 && !isLoading;
+
+  const title = flow === "reset-password" ? "Verify Reset Code" : "Verify Email";
+
+  const intro =
+    flow === "reset-password"
+      ? `Enter the ${OTP_LENGTH}-digit password reset code sent to`
+      : `Check your inbox & spam folder. We just sent a ${OTP_LENGTH}-digit code to`;
 
   useEffect(() => {
     if (secondsLeft === 0) return;
@@ -84,6 +102,10 @@ export default function VerifyEmailScreen() {
     requestAnimationFrame(() => focusInput(0));
   };
 
+  const restartFlow = (): void => {
+    router.replace(getRestartPath(flow));
+  };
+
   const handleChangeDigit = (index: number, rawValue: string): void => {
     const digits = rawValue.replace(/[^0-9]/g, "");
 
@@ -96,9 +118,6 @@ export default function VerifyEmailScreen() {
 
     const next = [...code];
 
-    /**
-     * Supports both normal single-digit typing and OTP paste/autofill.
-     */
     digits
       .slice(0, OTP_LENGTH - index)
       .split("")
@@ -109,17 +128,14 @@ export default function VerifyEmailScreen() {
     setCode(next);
 
     const nextFocusIndex = Math.min(index + digits.length, OTP_LENGTH - 1);
-
-    if (nextFocusIndex < OTP_LENGTH) {
-      focusInput(nextFocusIndex);
-    }
+    focusInput(nextFocusIndex);
   };
 
   const handleKeyPressDigit = (
     index: number,
-    e: NativeSyntheticEvent<{ key: string }>
+    event: NativeSyntheticEvent<{ key: string }>
   ): void => {
-    if (e.nativeEvent.key === "Backspace" && !code[index] && index > 0) {
+    if (event.nativeEvent.key === "Backspace" && !code[index] && index > 0) {
       focusInput(index - 1);
     }
   };
@@ -133,14 +149,15 @@ export default function VerifyEmailScreen() {
         message: "Email address is missing. Please start again.",
       });
 
-      router.replace(Paths.signUp);
+      restartFlow();
       return;
     }
 
     try {
-      const response = await resendVerificationTokenMutation.mutateAsync({
-        email,
-      });
+      const response =
+        flow === "reset-password"
+          ? await resendForgotPasswordOtpMutation.mutateAsync({ email })
+          : await resendVerificationTokenMutation.mutateAsync({ email });
 
       resetCode();
       setSecondsLeft(INITIAL_SECONDS);
@@ -150,7 +167,7 @@ export default function VerifyEmailScreen() {
         message:
           response.message ??
           (flow === "reset-password"
-            ? "Password reset code resent to your email."
+            ? "Password reset OTP resent to your email."
             : "Verification code resent successfully"),
       });
     } catch (error) {
@@ -164,7 +181,7 @@ export default function VerifyEmailScreen() {
         message,
       });
 
-      console.log("Resend verification token error:", error);
+      console.log("Resend verification code error:", error);
     }
   };
 
@@ -177,29 +194,28 @@ export default function VerifyEmailScreen() {
         message: "Email address is missing. Please start again.",
       });
 
-      router.replace(Paths.signUp);
+      restartFlow();
       return;
     }
 
     try {
-      const response = await verifyEmailMutation.mutateAsync({
-        email,
-        verificationCode: joinedCode,
-      });
-
       if (flow === "reset-password") {
-        showToast({
-          type: "success",
-          message: response.message ?? "Email verified. Set your new password.",
-        });
-
         router.replace({
           pathname: Paths.setPassword,
-          params: { email, flow: "reset-password" },
+          params: {
+            email,
+            flow: "reset-password",
+            otp: joinedCode,
+          },
         });
 
         return;
       }
+
+      const response = await verifyEmailMutation.mutateAsync({
+        email,
+        verificationCode: joinedCode,
+      });
 
       showToast({
         type: "success",
@@ -233,10 +249,9 @@ export default function VerifyEmailScreen() {
             <CheckIcon width={54} height={54} />
 
             <View style={styles.introBlock}>
-              <AppText variant="title">Verify Email</AppText>
+              <AppText variant="title">{title}</AppText>
               <AppText style={styles.introText}>
-                Check your inbox & spam folder. We just sent a {OTP_LENGTH}
-                -digit code to{" "}
+                {intro}{" "}
                 <AppText style={styles.emailText}>
                   {email || "your email"}
                 </AppText>
@@ -254,10 +269,10 @@ export default function VerifyEmailScreen() {
             />
 
             <AppButton
-              title="Verify Email"
+              title={flow === "reset-password" ? "Continue" : "Verify Email"}
               onPress={handleVerify}
               disabled={!isComplete || isLoading}
-              loading={verifyEmailMutation.isPending}
+              loading={flow === "sign-up" && isVerifying}
             />
           </View>
 

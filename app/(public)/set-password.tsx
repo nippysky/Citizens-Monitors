@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 
 import AuthShell from "@/components/auth/AuthShell";
@@ -11,6 +11,7 @@ import AppText from "@/components/ui/AppText";
 import BackButton from "@/components/ui/BackButton";
 import { LockIcon } from "@/components/ui/InputIcons";
 import { Paths } from "@/constants/paths";
+import { useResetPasswordMutation } from "@/hooks/api/useResetPasswordMutation";
 import { useAppToast } from "@/hooks/useAppToast";
 import { useSetPasswordForm } from "@/hooks/useSetPasswordForm";
 import { Theme } from "@/theme";
@@ -20,15 +21,21 @@ type FlowType = "sign-up" | "reset-password";
 export default function SetPasswordScreen() {
   const params = useLocalSearchParams<{
     email?: string;
+    otp?: string;
     flow?: FlowType;
   }>();
+
+  const email = typeof params.email === "string" ? params.email : "";
+  const otp = typeof params.otp === "string" ? params.otp : "";
 
   const flow: FlowType =
     params.flow === "reset-password" ? "reset-password" : "sign-up";
 
   const { control, handleSubmit, formState } = useSetPasswordForm();
-  const [loading, setLoading] = useState(false);
   const { showToast } = useAppToast();
+  const resetPasswordMutation = useResetPasswordMutation();
+
+  const isLoading = formState.isSubmitting || resetPasswordMutation.isPending;
 
   const copy = useMemo(() => {
     if (flow === "reset-password") {
@@ -51,36 +58,50 @@ export default function SetPasswordScreen() {
 
   const onSubmit = handleSubmit(async (values) => {
     try {
-      setLoading(true);
+      if (flow === "reset-password") {
+        if (!email || !otp) {
+          showToast({
+            type: "error",
+            message: "Reset session expired. Please request a new code.",
+          });
 
-      await new Promise((resolve) => setTimeout(resolve, 1800));
-
-      showToast({
-        type: "success",
-        message: copy.successMessage,
-      });
-
-      console.log("Set password values:", {
-        ...values,
-        email: params.email,
-        flow,
-      });
-
-      setTimeout(() => {
-        if (flow === "reset-password") {
-          router.replace(Paths.signIn);
+          router.replace(Paths.resetPassword);
           return;
         }
 
-        router.replace(Paths.onboarding);
-      }, 400);
-    } catch {
+        const response = await resetPasswordMutation.mutateAsync({
+          email,
+          otp,
+          password: values.password,
+        });
+
+        showToast({
+          type: "success",
+          message: response.message ?? copy.successMessage,
+        });
+
+        router.replace(Paths.signIn);
+        return;
+      }
+
+      /**
+       * Current email signup already sets password at register.
+       * This branch is kept for future Google/social auth password setup.
+       */
       showToast({
         type: "error",
-        message: "Something went wrong.",
+        message: "Password setup is not available for this flow yet.",
       });
-    } finally {
-      setLoading(false);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Something went wrong.";
+
+      showToast({
+        type: "error",
+        message,
+      });
+
+      console.log("Set password error:", error);
     }
   });
 
@@ -98,7 +119,9 @@ export default function SetPasswordScreen() {
               control={control}
               name="password"
               label={flow === "reset-password" ? "New Password" : "Set Password"}
-              placeholder={flow === "reset-password" ? "Password" : "Your password"}
+              placeholder={
+                flow === "reset-password" ? "Password" : "Your password"
+              }
               secureTextEntry
               secureToggle
               autoCapitalize="none"
@@ -121,8 +144,8 @@ export default function SetPasswordScreen() {
             <AppButton
               title={copy.buttonLabel}
               onPress={onSubmit}
-              loading={formState.isSubmitting || loading}
-              disabled={!formState.isValid || loading}
+              loading={isLoading}
+              disabled={!formState.isValid || isLoading}
             />
           </View>
 
@@ -134,7 +157,7 @@ export default function SetPasswordScreen() {
         </View>
       </AuthShell>
 
-      <AppScreenLoader visible={loading} />
+      <AppScreenLoader visible={isLoading} />
     </>
   );
 }
