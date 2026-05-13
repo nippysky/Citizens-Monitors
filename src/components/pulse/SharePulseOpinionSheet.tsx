@@ -12,17 +12,17 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AppButton from "@/components/ui/AppButton";
 import AppInput from "@/components/ui/AppInput";
 import AppText from "@/components/ui/AppText";
+import ProfileAvatar from "@/svgs/app/profile/ProfileAvatar";
+import { useOfflineSync } from "@/context/OfflineSyncContext";
 import { PickedMedia, useCollationMedia } from "@/hooks/useCollationMedia";
 import { useAppToast } from "@/hooks/useAppToast";
-import { useOfflineSync } from "@/context/OfflineSyncContext";
 import {
   pulseQueryKeys,
   useCreatePulsePostMutation,
-  useGenerateAnonymousUsernameMutation,
   usePulseViewerQuery,
 } from "@/hooks/api/usePulseQueries";
+import { useGenerateAnonymousUsernameMutation } from "@/hooks/api/useProfileMutations";
 import { Theme } from "@/theme";
-import ProfileAvatar from "@/svgs/app/profile/ProfileAvatar";
 
 type Props = {
   onSubmitted?: () => void;
@@ -60,18 +60,26 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
     const generateAnonymousMutation = useGenerateAnonymousUsernameMutation();
 
     const viewer = viewerQuery.data;
+
     const realName = getFullName(viewer?.firstName, viewer?.lastName);
-    const profileImageUrl = viewer?.profileImage?.url;
-    const resolvedAnonymousName =
-      viewer?.anonymousUsername || "Anonymous Citizen";
+    const profileImageUrl = viewer?.profileImageUrl ?? null;
 
     const [body, setBody] = useState("");
     const [anonymous, setAnonymous] = useState(false);
     const [imgAsset, setImgAsset] = useState<PickedMedia | null>(null);
+    const [generatedAnonymousName, setGeneratedAnonymousName] = useState("");
+
+    const resolvedAnonymousName =
+      generatedAnonymousName.trim() ||
+      viewer?.anonymousUsername?.trim() ||
+      "Anonymous Citizen";
 
     const snaps = useMemo(() => ["85%"], []);
-    const canSubmit =
-      body.trim().length > 3 && !createPostMutation.isPending && !busy;
+
+    const isSubmitting =
+      busy || createPostMutation.isPending || generateAnonymousMutation.isPending;
+
+    const canSubmit = body.trim().length > 3 && !isSubmitting;
 
     const close = () => {
       if (ref && typeof ref !== "function" && ref.current) {
@@ -98,6 +106,30 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
       }
     };
 
+    const ensureAnonymousName = async (): Promise<void> => {
+      if (!anonymous || viewer?.anonymousUsername || generatedAnonymousName) {
+        return;
+      }
+
+      if (!isOnline) {
+        return;
+      }
+
+      try {
+        const response = await generateAnonymousMutation.mutateAsync();
+
+        if (response.anonymousUsername) {
+          setGeneratedAnonymousName(response.anonymousUsername);
+        }
+
+        await queryClient.invalidateQueries({
+          queryKey: pulseQueryKeys.viewer,
+        });
+      } catch {
+        // Non-blocking. Backend can still accept useAnonymousDisplay.
+      }
+    };
+
     const submit = async () => {
       const trimmedBody = body.trim();
 
@@ -106,13 +138,7 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
         return;
       }
 
-      if (anonymous && !viewer?.anonymousUsername && isOnline) {
-        try {
-          await generateAnonymousMutation.mutateAsync();
-        } catch {
-          // Non-blocking. Backend can still accept useAnonymousDisplay.
-        }
-      }
+      await ensureAnonymousName();
 
       const payload = {
         body: trimmedBody,
@@ -150,7 +176,9 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
         close();
         onSubmitted?.();
 
-        void queryClient.invalidateQueries({ queryKey: pulseQueryKeys.posts });
+        await queryClient.invalidateQueries({
+          queryKey: pulseQueryKeys.posts,
+        });
       } catch (error) {
         if (shouldQueueAfterError(error)) {
           enqueue({
@@ -172,9 +200,7 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
         showToast({
           type: "error",
           message:
-            error instanceof Error
-              ? error.message
-              : "Unable to submit post.",
+            error instanceof Error ? error.message : "Unable to submit post.",
         });
       }
     };
@@ -188,9 +214,9 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
-        backdropComponent={(p) => (
+        backdropComponent={(props) => (
           <BottomSheetBackdrop
-            {...p}
+            {...props}
             appearsOnIndex={0}
             disappearsOnIndex={-1}
             opacity={0.3}
@@ -217,6 +243,7 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
                   <ProfileAvatar width={32} height={32} />
                 )}
               </View>
+
               <View>
                 <AppText style={st.headerTitle}>Share Your Opinion</AppText>
                 <AppText style={st.headerSubtitle}>
@@ -238,6 +265,7 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
                 color={Theme.colors.primary}
               />
             </View>
+
             <AppText style={st.guideText}>
               Be factual. Be respectful. The Electoral Act protects free
               expression but prohibits hate speech and incitement. — Citizen
@@ -247,6 +275,7 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
 
           <View style={st.sec}>
             <AppText style={st.label}>Your Opinion</AppText>
+
             <AppInput
               placeholder="What's happening in your ward?"
               value={body}
@@ -270,6 +299,7 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
             {imgAsset?.uri ? (
               <View style={st.previewWrap}>
                 <Image source={{ uri: imgAsset.uri }} style={st.preview} />
+
                 <Pressable
                   onPress={() => setImgAsset(null)}
                   style={st.removePreview}
@@ -288,6 +318,7 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
                 color={Theme.colors.primary}
               />
             </View>
+
             <View style={st.scopeTextWrap}>
               <AppText style={st.scopeTitle}>Ward visibility</AppText>
               <AppText style={st.scopeText}>
@@ -299,6 +330,7 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
           <View style={st.switchRow}>
             <View style={st.switchTextWrap}>
               <AppText style={st.switchTitle}>Post Anonymously</AppText>
+
               <AppText style={st.switchSubtitle}>
                 This post will be shown as{" "}
                 <AppText style={st.switchBold}>
@@ -307,6 +339,7 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
                 .
               </AppText>
             </View>
+
             <Switch
               value={anonymous}
               onValueChange={setAnonymous}
@@ -318,9 +351,11 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
 
           <AppButton
             title={isOnline ? "Submit Post" : "Save Offline"}
-            onPress={submit}
+            onPress={() => {
+              void submit();
+            }}
             disabled={!canSubmit}
-            loading={busy || createPostMutation.isPending}
+            loading={isSubmitting}
             style={{ marginVertical: 0 }}
           />
         </BottomSheetScrollView>
@@ -337,8 +372,15 @@ const st = StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
   },
-  handle: { backgroundColor: "rgba(17,26,50,0.12)", width: 44 },
-  content: { paddingHorizontal: 16, paddingTop: 8, gap: 18 },
+  handle: {
+    backgroundColor: "rgba(17,26,50,0.12)",
+    width: 44,
+  },
+  content: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    gap: 18,
+  },
   header: {
     minHeight: 54,
     flexDirection: "row",
@@ -406,15 +448,24 @@ const st = StyleSheet.create({
     lineHeight: 19,
     color: Theme.colors.text,
   },
-  sec: { gap: 10 },
+  sec: {
+    gap: 10,
+  },
   label: {
     fontSize: 15,
     lineHeight: 20,
     fontFamily: Theme.fonts.body.medium,
     color: Theme.colors.text,
   },
-  taWrap: { minHeight: 140, alignItems: "flex-start", paddingTop: 14 },
-  ta: { minHeight: 100, textAlignVertical: "top" },
+  taWrap: {
+    minHeight: 140,
+    alignItems: "flex-start",
+    paddingTop: 14,
+  },
+  ta: {
+    minHeight: 100,
+    textAlignVertical: "top",
+  },
   attachBtn: {
     minHeight: 44,
     borderRadius: 16,
@@ -429,7 +480,9 @@ const st = StyleSheet.create({
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.semibold,
   },
-  previewWrap: { position: "relative" },
+  previewWrap: {
+    position: "relative",
+  },
   preview: {
     width: "100%",
     height: 160,
@@ -437,7 +490,11 @@ const st = StyleSheet.create({
     resizeMode: "cover",
     backgroundColor: "#EEF2F6",
   },
-  removePreview: { position: "absolute", top: 8, right: 8 },
+  removePreview: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+  },
   scopeCard: {
     borderRadius: 18,
     backgroundColor: "rgba(25,183,176,0.08)",
@@ -477,7 +534,10 @@ const st = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
   },
-  switchTextWrap: { flex: 1, gap: 4 },
+  switchTextWrap: {
+    flex: 1,
+    gap: 4,
+  },
   switchTitle: {
     fontSize: 15,
     lineHeight: 20,

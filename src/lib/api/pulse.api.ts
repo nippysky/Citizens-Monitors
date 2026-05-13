@@ -21,22 +21,7 @@ export type PulsePost = {
   isLikedByCurrentUser: boolean;
 };
 
-export type PulseComment = {
-  id: string;
-  body: string;
-  createdAt: string;
-  updatedAt: string;
-  author: PulseAuthor;
-  likesCount: number;
-  isLikedByCurrentUser: boolean;
-};
-
-export type ListPulsePostsParams = {
-  page?: number;
-  limit?: number;
-};
-
-export type ListPulsePostsResponse = {
+export type PulsePostsResponse = {
   posts: PulsePost[];
   total: number;
   page: number;
@@ -60,12 +45,21 @@ export type LikePulsePostResponse = {
   isLikedByCurrentUser: boolean;
 };
 
-export type ListPulseCommentsResponse = {
+export type PulseComment = {
+  id: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+  author: PulseAuthor;
+  likesCount: number;
+  isLikedByCurrentUser: boolean;
+};
+
+export type PulseCommentsResponse = {
   comments: PulseComment[];
 };
 
 export type CreatePulseCommentPayload = {
-  postId: string;
   body: string;
   useAnonymousDisplay: boolean;
 };
@@ -78,21 +72,35 @@ export type LikePulseCommentResponse = {
   comment: PulseComment;
 };
 
-export type PulseViewerProfile = {
-  _id?: string;
+export type PulseViewer = {
+  id?: string;
   email?: string;
   firstName?: string;
   lastName?: string;
   anonymousUsername?: string;
   useAnonymousIdentity?: boolean;
-  profileImage?: {
-    url?: string;
-  } | null;
+  profileImageUrl?: string | null;
 };
 
-export type GenerateAnonymousUsernameResponse = {
-  message: string;
-  anonymousUsername: string;
+export type PulseLiveElectionStatus = "live" | "ended" | string;
+
+export type PulseLiveElection = {
+  id: string;
+  electionName: string;
+  electionType: string;
+  electionLocation: string | null;
+  startDate: string;
+  endDate: string;
+  mockElection: boolean;
+  partiesCount: number;
+  status: PulseLiveElectionStatus;
+};
+
+export type PulseLiveCarouselResponse = {
+  status: PulseLiveElectionStatus;
+  scope: string;
+  total: number;
+  elections: PulseLiveElection[];
 };
 
 type ReactNativeFile = {
@@ -101,14 +109,16 @@ type ReactNativeFile = {
   type: string;
 };
 
-function clean(value: string): string {
-  return value.trim();
+function encodePathSegment(value: string): string {
+  return encodeURIComponent(value.trim());
 }
 
-function toQueryString(params: Record<string, string | number>): string {
-  return Object.entries(params)
-    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
-    .join("&");
+function encodeQueryValue(value: string | number): string {
+  return encodeURIComponent(String(value));
+}
+
+function normalizeBody(value: string): string {
+  return value.trim();
 }
 
 function getFileExtension(uri: string): string {
@@ -150,31 +160,46 @@ function createImageFile(uri: string, fallbackName: string): ReactNativeFile {
   };
 }
 
-export async function getPulseViewerProfile(): Promise<PulseViewerProfile> {
-  return apiRequest<PulseViewerProfile>("/profile/me", {
+export async function getPulseViewer(): Promise<PulseViewer> {
+  const response = await apiRequest<Record<string, unknown>>("/profile/me", {
     method: "GET",
     auth: true,
   });
+
+  const profileImage =
+    response.profileImage &&
+    typeof response.profileImage === "object" &&
+    "url" in response.profileImage
+      ? String((response.profileImage as { url?: string }).url ?? "")
+      : "";
+
+  return {
+    id: typeof response._id === "string" ? response._id : undefined,
+    email: typeof response.email === "string" ? response.email : undefined,
+    firstName:
+      typeof response.firstName === "string" ? response.firstName : undefined,
+    lastName:
+      typeof response.lastName === "string" ? response.lastName : undefined,
+    anonymousUsername:
+      typeof response.anonymousUsername === "string"
+        ? response.anonymousUsername
+        : undefined,
+    useAnonymousIdentity:
+      typeof response.useAnonymousIdentity === "boolean"
+        ? response.useAnonymousIdentity
+        : undefined,
+    profileImageUrl: profileImage || null,
+  };
 }
 
-export async function generateAnonymousUsername(): Promise<GenerateAnonymousUsernameResponse> {
-  return apiRequest<GenerateAnonymousUsernameResponse>(
-    "/profile/me/anonymous-username/generate",
-    {
-      method: "POST",
-      auth: true,
-    }
-  );
-}
-
-export async function listPulsePosts(
-  params: ListPulsePostsParams = {}
-): Promise<ListPulsePostsResponse> {
-  const page = params.page ?? 1;
-  const limit = params.limit ?? 20;
-
-  return apiRequest<ListPulsePostsResponse>(
-    `/pulse/posts?${toQueryString({ page, limit })}`,
+export async function getPulsePosts(params: {
+  page: number;
+  limit: number;
+}): Promise<PulsePostsResponse> {
+  return apiRequest<PulsePostsResponse>(
+    `/pulse/posts?page=${encodeQueryValue(params.page)}&limit=${encodeQueryValue(
+      params.limit
+    )}`,
     {
       method: "GET",
       auth: true,
@@ -187,14 +212,17 @@ export async function createPulsePost(
 ): Promise<CreatePulsePostResponse> {
   const formData = new FormData();
 
-  formData.append("body", clean(payload.body));
+  formData.append("body", normalizeBody(payload.body));
   formData.append("visibilityScope", payload.visibilityScope);
-  formData.append("useAnonymousDisplay", payload.useAnonymousDisplay ? "true" : "false");
+  formData.append(
+    "useAnonymousDisplay",
+    payload.useAnonymousDisplay ? "true" : "false"
+  );
 
   if (payload.imageUri) {
     formData.append(
       "image",
-      createImageFile(payload.imageUri, "pulse-post-image") as unknown as Blob
+      createImageFile(payload.imageUri, "pulse-post") as unknown as Blob
     );
   }
 
@@ -205,9 +233,11 @@ export async function createPulsePost(
   });
 }
 
-export async function likePulsePost(postId: string): Promise<LikePulsePostResponse> {
+export async function likePulsePost(
+  postId: string
+): Promise<LikePulsePostResponse> {
   return apiRequest<LikePulsePostResponse>(
-    `/pulse/posts/${encodeURIComponent(postId)}/like`,
+    `/pulse/posts/${encodePathSegment(postId)}/like`,
     {
       method: "POST",
       auth: true,
@@ -215,11 +245,11 @@ export async function likePulsePost(postId: string): Promise<LikePulsePostRespon
   );
 }
 
-export async function listPulseComments(
+export async function getPulseComments(
   postId: string
-): Promise<ListPulseCommentsResponse> {
-  return apiRequest<ListPulseCommentsResponse>(
-    `/pulse/posts/${encodeURIComponent(postId)}/comments`,
+): Promise<PulseCommentsResponse> {
+  return apiRequest<PulseCommentsResponse>(
+    `/pulse/posts/${encodePathSegment(postId)}/comments`,
     {
       method: "GET",
       auth: true,
@@ -227,17 +257,18 @@ export async function listPulseComments(
   );
 }
 
-export async function createPulseComment(
-  payload: CreatePulseCommentPayload
-): Promise<CreatePulseCommentResponse> {
+export async function createPulseComment(params: {
+  postId: string;
+  payload: CreatePulseCommentPayload;
+}): Promise<CreatePulseCommentResponse> {
   return apiRequest<CreatePulseCommentResponse>(
-    `/pulse/posts/${encodeURIComponent(payload.postId)}/comments`,
+    `/pulse/posts/${encodePathSegment(params.postId)}/comments`,
     {
       method: "POST",
       auth: true,
       body: {
-        body: clean(payload.body),
-        useAnonymousDisplay: payload.useAnonymousDisplay,
+        body: normalizeBody(params.payload.body),
+        useAnonymousDisplay: params.payload.useAnonymousDisplay,
       },
     }
   );
@@ -248,12 +279,19 @@ export async function likePulseComment(params: {
   commentId: string;
 }): Promise<LikePulseCommentResponse> {
   return apiRequest<LikePulseCommentResponse>(
-    `/pulse/posts/${encodeURIComponent(params.postId)}/comments/${encodeURIComponent(
-      params.commentId
-    )}/like`,
+    `/pulse/posts/${encodePathSegment(
+      params.postId
+    )}/comments/${encodePathSegment(params.commentId)}/like`,
     {
       method: "POST",
       auth: true,
     }
   );
+}
+
+export async function getLiveElectionCarousel(): Promise<PulseLiveCarouselResponse> {
+  return apiRequest<PulseLiveCarouselResponse>("/elections/live-carousel", {
+    method: "GET",
+    auth: true,
+  });
 }

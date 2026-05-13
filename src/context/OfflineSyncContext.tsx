@@ -12,6 +12,7 @@ import {
   useState,
 } from "react";
 
+import { pulseQueryKeys } from "@/hooks/api/usePulseQueries";
 import {
   createPulseComment,
   createPulsePost,
@@ -19,7 +20,6 @@ import {
   likePulsePost,
   PulseVisibilityScope,
 } from "@/lib/api/pulse.api";
-import { pulseQueryKeys } from "@/hooks/api/usePulseQueries";
 
 export type QueuedActionType =
   | "flag-report"
@@ -60,13 +60,27 @@ async function persistQueue(items: QueuedAction[]) {
   try {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   } catch {
-    // best effort
+    // Best effort only.
   }
 }
 
 function getString(payload: Record<string, unknown>, key: string): string {
   const value = payload[key];
-  return typeof value === "string" ? value : "";
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function getNullableString(
+  payload: Record<string, unknown>,
+  key: string
+): string | null {
+  const value = payload[key];
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 function getBoolean(payload: Record<string, unknown>, key: string): boolean {
@@ -83,11 +97,17 @@ async function syncQueuedAction(item: QueuedAction): Promise<boolean> {
   try {
     switch (item.type) {
       case "pulse-create-post": {
+        const body = getString(item.payload, "body");
+
+        if (!body) {
+          return true;
+        }
+
         await createPulsePost({
-          body: getString(item.payload, "body"),
+          body,
           visibilityScope: getVisibilityScope(item.payload),
           useAnonymousDisplay: getBoolean(item.payload, "useAnonymousDisplay"),
-          imageUri: getString(item.payload, "imageUri") || null,
+          imageUri: getNullableString(item.payload, "imageUri"),
         });
 
         return true;
@@ -95,9 +115,13 @@ async function syncQueuedAction(item: QueuedAction): Promise<boolean> {
 
       case "pulse-like-post": {
         const postId = getString(item.payload, "postId");
-        if (!postId) return true;
+
+        if (!postId) {
+          return true;
+        }
 
         await likePulsePost(postId);
+
         return true;
       }
 
@@ -105,12 +129,19 @@ async function syncQueuedAction(item: QueuedAction): Promise<boolean> {
         const postId = getString(item.payload, "postId");
         const body = getString(item.payload, "body");
 
-        if (!postId || !body) return true;
+        if (!postId || !body) {
+          return true;
+        }
 
         await createPulseComment({
           postId,
-          body,
-          useAnonymousDisplay: getBoolean(item.payload, "useAnonymousDisplay"),
+          payload: {
+            body,
+            useAnonymousDisplay: getBoolean(
+              item.payload,
+              "useAnonymousDisplay"
+            ),
+          },
         });
 
         return true;
@@ -120,9 +151,15 @@ async function syncQueuedAction(item: QueuedAction): Promise<boolean> {
         const postId = getString(item.payload, "postId");
         const commentId = getString(item.payload, "commentId");
 
-        if (!postId || !commentId) return true;
+        if (!postId || !commentId) {
+          return true;
+        }
 
-        await likePulseComment({ postId, commentId });
+        await likePulseComment({
+          postId,
+          commentId,
+        });
+
         return true;
       }
 
@@ -150,6 +187,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
 
   const [queue, setQueue] = useState<QueuedAction[]>([]);
   const [isOnline, setIsOnline] = useState(true);
+
   const syncingRef = useRef(false);
 
   useEffect(() => {
@@ -160,19 +198,19 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
         const parsed = JSON.parse(raw) as QueuedAction[];
         setQueue(parsed.filter((item) => !item.synced));
       } catch {
-        // ignore corrupted queue
+        // Ignore corrupted queue.
       }
     });
   }, []);
 
   useEffect(() => {
-    const unsub = NetInfo.addEventListener((state) => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
       setIsOnline(
         Boolean(state.isConnected) && state.isInternetReachable !== false
       );
     });
 
-    return unsub;
+    return unsubscribe;
   }, []);
 
   const enqueue = useCallback(
@@ -227,11 +265,14 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       }
 
       const compacted = currentQueue.filter((item) => !item.synced);
+
       setQueue(compacted);
       await persistQueue(compacted);
 
       if (didSyncPulse) {
-        void queryClient.invalidateQueries({ queryKey: pulseQueryKeys.posts });
+        void queryClient.invalidateQueries({
+          queryKey: pulseQueryKeys.posts,
+        });
       }
 
       syncingRef.current = false;
@@ -240,10 +281,9 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     void run();
   }, [isOnline, queue, queryClient]);
 
-  const pendingCount = useMemo(
-    () => queue.filter((item) => !item.synced).length,
-    [queue]
-  );
+  const pendingCount = useMemo(() => {
+    return queue.filter((item) => !item.synced).length;
+  }, [queue]);
 
   const value = useMemo(
     () => ({
@@ -263,11 +303,11 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
 }
 
 export function useOfflineSync() {
-  const ctx = useContext(OfflineSyncContext);
+  const context = useContext(OfflineSyncContext);
 
-  if (!ctx) {
+  if (!context) {
     throw new Error("useOfflineSync must be used within OfflineSyncProvider");
   }
 
-  return ctx;
+  return context;
 }

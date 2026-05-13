@@ -6,20 +6,36 @@ import {
   submitFeedback,
   SubmitFeedbackPayload,
   updateAnonymousIdentity,
-  updateMobileNotificationSettings,
-  updateMyPassword,
   UpdateAnonymousIdentityPayload,
+  updateMyProfile,
+  UpdateMyProfilePayload,
+  updateNotificationSettings,
+  updatePassword,
   UpdatePasswordPayload,
 } from "@/lib/api/profile.api";
 
-export function useUpdatePasswordMutation() {
+export const profileQueryKeys = {
+  me: ["profile", "me"] as const,
+  notifications: ["profile", "notifications"] as const,
+  banks: ["profile", "banks"] as const,
+};
+
+export function useUpdateMyProfileMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: UpdatePasswordPayload) => updateMyPassword(payload),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["profile", "me"] });
+    mutationFn: (payload: UpdateMyProfilePayload) => updateMyProfile(payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: profileQueryKeys.me,
+      });
     },
+  });
+}
+
+export function useUpdatePasswordMutation() {
+  return useMutation({
+    mutationFn: (payload: UpdatePasswordPayload) => updatePassword(payload),
   });
 }
 
@@ -28,24 +44,27 @@ export function useUpdateNotificationSettingsMutation() {
 
   return useMutation({
     mutationFn: (payload: MobileNotificationSettingsState) =>
-      updateMobileNotificationSettings(payload),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["profile", "me"] });
-      void queryClient.invalidateQueries({
-        queryKey: ["profile", "notifications"],
+      updateNotificationSettings(payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: profileQueryKeys.notifications,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: profileQueryKeys.me,
       });
     },
   });
 }
 
 export function useGenerateAnonymousUsernameMutation() {
-  const queryClient = useQueryClient();
-
+  /**
+   * Important:
+   * Do NOT invalidate/refetch profile here.
+   * The generated name is treated as a local draft inside the profile sheet
+   * until the user taps "Save Changes".
+   */
   return useMutation({
     mutationFn: generateAnonymousUsername,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["profile", "me"] });
-    },
   });
 }
 
@@ -55,8 +74,10 @@ export function useUpdateAnonymousIdentityMutation() {
   return useMutation({
     mutationFn: (payload: UpdateAnonymousIdentityPayload) =>
       updateAnonymousIdentity(payload),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["profile", "me"] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: profileQueryKeys.me,
+      });
     },
   });
 }

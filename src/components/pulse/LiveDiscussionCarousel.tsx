@@ -1,4 +1,5 @@
 // ─── src/components/pulse/LiveDiscussionCarousel.tsx ──────────────────────────
+import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useRef } from "react";
 import {
   FlatList,
@@ -10,36 +11,81 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import Animated, {
-  useSharedValue,
+  Easing,
   useAnimatedStyle,
+  useSharedValue,
   withRepeat,
   withTiming,
-  Easing,
 } from "react-native-reanimated";
 
 import AppText from "@/components/ui/AppText";
-import { LiveElectionDiscussion } from "@/data/pulse";
+import { PulseLiveElection } from "@/lib/api/pulse.api";
 import { Theme } from "@/theme";
 
+import HouseOfRepsElection from "@/svgs/app/HouseOfRepsElection";
 import PresidentialElection from "@/svgs/app/PresidentialElection";
 import SenatorElection from "@/svgs/app/SenatorElection";
-import HouseOfRepsElection from "@/svgs/app/HouseOfRepsElection";
 
 type Props = {
-  items: LiveElectionDiscussion[];
+  items: PulseLiveElection[];
   activeIndex: number;
   onIndexChange: (index: number) => void;
-  onJoinDiscussion: (item: LiveElectionDiscussion) => void;
+  onJoinDiscussion: (item: PulseLiveElection) => void;
 };
 
+const SIDE_PADDING = 16;
+const CARD_GAP = 12;
+const NEXT_CARD_PEEK = 24;
+
 function getElectionIcon(type: string) {
-  const t = type.toLowerCase();
-  if (t.includes("senatorial") || t.includes("senate")) return SenatorElection;
-  if (t.includes("house of rep") || t.includes("state house"))
+  const normalizedType = type.toLowerCase();
+
+  if (
+    normalizedType.includes("senatorial") ||
+    normalizedType.includes("senate")
+  ) {
+    return SenatorElection;
+  }
+
+  if (
+    normalizedType.includes("house-of-representatives") ||
+    normalizedType.includes("house of representatives") ||
+    normalizedType.includes("house of rep") ||
+    normalizedType.includes("state house")
+  ) {
     return HouseOfRepsElection;
+  }
+
   return PresidentialElection;
+}
+
+function formatElectionType(type: string): string {
+  return type
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function getElectionTitle(item: PulseLiveElection): string {
+  if (item.electionName?.trim()) {
+    return item.electionName.trim();
+  }
+
+  return formatElectionType(item.electionType);
+}
+
+function getDiscussionCountText(item: PulseLiveElection): string {
+  if (item.partiesCount > 0) {
+    return `${item.partiesCount} parties active`;
+  }
+
+  return "Live collation discussion";
+}
+
+function clampIndex(index: number, total: number): number {
+  return Math.max(0, Math.min(index, Math.max(0, total - 1)));
 }
 
 export default function LiveDiscussionCarousel({
@@ -48,15 +94,56 @@ export default function LiveDiscussionCarousel({
   onIndexChange,
   onJoinDiscussion,
 }: Props) {
-  const listRef = useRef<FlatList<LiveElectionDiscussion>>(null);
+  const listRef = useRef<FlatList<PulseLiveElection>>(null);
   const { width } = useWindowDimensions();
-  const cardWidth = useMemo(() => width - 52, [width]);
-  const snapInterval = useMemo(() => cardWidth + 12, [cardWidth]);
 
-  const onMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const next = Math.round(e.nativeEvent.contentOffset.x / snapInterval);
-    onIndexChange(Math.max(0, Math.min(next, items.length - 1)));
+  const cardWidth = useMemo(() => {
+    return width - SIDE_PADDING * 2 - NEXT_CARD_PEEK;
+  }, [width]);
+
+  const snapInterval = useMemo(() => {
+    return cardWidth + CARD_GAP;
+  }, [cardWidth]);
+
+  const scrollEnabled = items.length > 1;
+
+  const handleMomentumEnd = (
+    event: NativeSyntheticEvent<NativeScrollEvent>
+  ) => {
+    if (!scrollEnabled) return;
+
+    const offsetX = event.nativeEvent.contentOffset.x;
+    const nextIndex = clampIndex(Math.round(offsetX / snapInterval), items.length);
+
+    if (nextIndex !== activeIndex) {
+      onIndexChange(nextIndex);
+    }
   };
+
+  const handleScrollEndDrag = (
+    event: NativeSyntheticEvent<NativeScrollEvent>
+  ) => {
+    if (!scrollEnabled) return;
+
+    const velocityX = event.nativeEvent.velocity?.x ?? 0;
+
+    /**
+     * If there is no real momentum, iOS may not fire momentum end.
+     * This keeps the dot correct after slow drags.
+     */
+    if (Math.abs(velocityX) < 0.05) {
+      handleMomentumEnd(event);
+    }
+  };
+
+  const getItemLayout = (
+    _: ArrayLike<PulseLiveElection> | null | undefined,
+    index: number
+  ) => ({
+    length: snapInterval,
+    offset: snapInterval * index,
+    index,
+  });
 
   if (!items.length) return null;
 
@@ -68,14 +155,26 @@ export default function LiveDiscussionCarousel({
         ref={listRef}
         data={items}
         horizontal
+        scrollEnabled={scrollEnabled}
         showsHorizontalScrollIndicator={false}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, index) => `${item.id}-${index}`}
         decelerationRate="fast"
-        snapToInterval={snapInterval}
+        disableIntervalMomentum
+        bounces={false}
+        alwaysBounceHorizontal={false}
+        overScrollMode="never"
+        snapToInterval={scrollEnabled ? snapInterval : undefined}
         snapToAlignment="start"
+        contentInsetAdjustmentBehavior="never"
         contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={{ width: 12 }} />}
-        onMomentumScrollEnd={onMomentumEnd}
+        ItemSeparatorComponent={() => <View style={{ width: CARD_GAP }} />}
+        onMomentumScrollEnd={handleMomentumEnd}
+        onScrollEndDrag={handleScrollEndDrag}
+        getItemLayout={getItemLayout}
+        initialNumToRender={Math.min(items.length, 3)}
+        maxToRenderPerBatch={3}
+        windowSize={5}
+        removeClippedSubviews={false}
         renderItem={({ item }) => (
           <DiscussionCard
             item={item}
@@ -87,10 +186,10 @@ export default function LiveDiscussionCarousel({
 
       {items.length > 1 ? (
         <View style={styles.dotsRow}>
-          {items.map((item, i) => (
+          {items.map((item, index) => (
             <View
-              key={item.id}
-              style={[styles.dot, i === activeIndex && styles.dotActive]}
+              key={`${item.id}-dot-${index}`}
+              style={[styles.dot, index === activeIndex && styles.dotActive]}
             />
           ))}
         </View>
@@ -104,29 +203,38 @@ function DiscussionCard({
   width,
   onJoin,
 }: {
-  item: LiveElectionDiscussion;
+  item: PulseLiveElection;
   width: number;
   onJoin: () => void;
 }) {
   const ElectionIcon = getElectionIcon(item.electionType);
+  const isLive = item.status === "live";
 
   return (
     <View style={[styles.card, { width }]}>
       <View style={styles.cardHeader}>
-        <View style={styles.livePill}>
-          {item.status === "live" ? <PulsingDot /> : null}
-          <AppText style={styles.liveText}>
-            {item.status === "live" ? "LIVE NOW" : "ENDED"}
+        <View style={[styles.livePill, !isLive && styles.endedPill]}>
+          {isLive ? <PulsingDot /> : null}
+
+          <AppText style={[styles.liveText, !isLive && styles.endedText]}>
+            {isLive ? "LIVE NOW" : "ENDED"}
           </AppText>
         </View>
+
         <View style={styles.electionIconWrap}>
           <ElectionIcon width={42} height={42} />
         </View>
       </View>
 
       <AppText style={styles.electionTitle} numberOfLines={2}>
-        {item.electionTitle}
+        {getElectionTitle(item)}
       </AppText>
+
+      {item.electionLocation ? (
+        <AppText style={styles.locationText} numberOfLines={1}>
+          {item.electionLocation}
+        </AppText>
+      ) : null}
 
       <View style={styles.cardFooter}>
         <View style={styles.discussionCountRow}>
@@ -135,12 +243,12 @@ function DiscussionCard({
             size={14}
             color={Theme.colors.textMuted}
           />
+
           <AppText style={styles.discussionCountText}>
-            {item.activeDiscussions} active discussions
+            {getDiscussionCountText(item)}
           </AppText>
         </View>
 
-        {/* Join Discussion — soft green bg + thick teal border */}
         <Pressable onPress={onJoin} style={styles.joinBtn}>
           <AppText style={styles.joinBtnText}>Join Discussion</AppText>
         </Pressable>
@@ -154,26 +262,44 @@ function PulsingDot() {
 
   useEffect(() => {
     opacity.value = withRepeat(
-      withTiming(0.2, { duration: 1200, easing: Easing.inOut(Easing.ease) }),
+      withTiming(0.2, {
+        duration: 1200,
+        easing: Easing.inOut(Easing.ease),
+      }),
       -1,
       true
     );
   }, [opacity]);
 
   const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+
   return <Animated.View style={[styles.liveDot, animStyle]} />;
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: 12 },
+  wrap: {
+    gap: 12,
+    paddingTop: 4,
+    paddingBottom: 14,
+  },
+
   sectionTitle: {
     fontSize: 16,
     lineHeight: 22,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.heading.bold,
-    paddingHorizontal: 16,
+    paddingHorizontal: SIDE_PADDING,
   },
-  listContent: { paddingHorizontal: 16 },
+
+  /**
+   * Right padding is intentionally larger than left padding.
+   * This is what lets the final card scroll fully into position while keeping
+   * the next-card peek on earlier slides.
+   */
+  listContent: {
+    paddingLeft: SIDE_PADDING,
+    paddingRight: SIDE_PADDING + NEXT_CARD_PEEK,
+  },
 
   card: {
     borderRadius: 18,
@@ -182,7 +308,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.colors.surface,
     borderWidth: 1,
     borderColor: Theme.colors.border,
-    gap: 6,
+    gap: 7,
     ...Platform.select({
       ios: {
         shadowColor: "#000",
@@ -190,7 +316,9 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.06,
         shadowRadius: 12,
       },
-      android: { elevation: 3 },
+      android: {
+        elevation: 3,
+      },
     }),
   },
 
@@ -198,21 +326,40 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 2,
   },
-  livePill: { flexDirection: "row", alignItems: "center", gap: 6 },
+
+  livePill: {
+    minHeight: 24,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    backgroundColor: "rgba(239,68,68,0.08)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  endedPill: {
+    backgroundColor: "rgba(17,26,50,0.06)",
+  },
+
   liveDot: {
-    width: 10,
-    height: 10,
+    width: 9,
+    height: 9,
     borderRadius: 999,
     backgroundColor: "#EF4444",
   },
+
   liveText: {
     fontSize: 12,
     lineHeight: 16,
     color: "#EF4444",
     fontFamily: Theme.fonts.body.semibold,
   },
+
+  endedText: {
+    color: Theme.colors.textMuted,
+  },
+
   electionIconWrap: {
     width: 48,
     height: 48,
@@ -227,24 +374,35 @@ const styles = StyleSheet.create({
     fontFamily: Theme.fonts.heading.bold,
   },
 
+  locationText: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Theme.colors.textMuted,
+    fontFamily: Theme.fonts.body.medium,
+  },
+
   cardFooter: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 8,
+    gap: 12,
+    marginTop: 7,
   },
+
   discussionCountRow: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
+
   discussionCountText: {
+    flex: 1,
     fontSize: 12,
     lineHeight: 16,
     color: Theme.colors.textMuted,
   },
 
-  // Soft green transparent bg + thick primary border
   joinBtn: {
     minHeight: 38,
     borderRadius: 12,
@@ -255,6 +413,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.8,
     borderColor: Theme.colors.primary,
   },
+
   joinBtnText: {
     fontSize: 13,
     lineHeight: 18,
@@ -268,12 +427,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
   },
+
   dot: {
     width: 6,
     height: 6,
     borderRadius: 999,
     backgroundColor: "#CDE9E6",
   },
+
   dotActive: {
     width: 22,
     backgroundColor: Theme.colors.primary,

@@ -6,20 +6,13 @@ import { StyleSheet, View } from "react-native";
 import AppGradientScreen from "@/components/app/AppGradientScreen";
 import ScreenHeader from "@/components/elections/ScreenHeader";
 import AppText from "@/components/ui/AppText";
-import PulseScopeTabs, {
-  PulseTabKey,
-} from "@/components/pulse/PulseScopeTabs";
 import PulseForYouTab from "@/components/pulse/PulseForYouTab";
 import PulsePostButton from "@/components/pulse/PulsePostButton";
 import SharePulseOpinionSheet from "@/components/pulse/SharePulseOpinionSheet";
-import TourTarget from "@/components/tour/TourTarget";
 import { Paths } from "@/constants/paths";
-import { pulseReviewReports } from "@/data/pulse";
 import { Theme } from "@/theme";
-import PulseReviewCollationTab from "@/components/pulse/PulseReviewCollaborationTab";
 
 export default function PulseScreen() {
-  const [activeTab, setActiveTab] = useState<PulseTabKey>("for-you");
   const [scrolling, setScrolling] = useState(false);
   const shareSheetRef = useRef<BottomSheetModal>(null);
 
@@ -37,33 +30,16 @@ export default function PulseScreen() {
             onHelp={() => router.push(Paths.appHelpSupport)}
           />
 
-          <TourTarget id="pulse.scope-tabs">
-            <PulseScopeTabs
-              value={activeTab}
-              onChange={setActiveTab}
-              reviewCount={pulseReviewReports.length}
-            />
-          </TourTarget>
-
           <AppText style={styles.subtitle}>
             Stay informed. Stay vigilant. Every update matters.
           </AppText>
         </View>
 
         <View style={styles.body}>
-          {activeTab === "for-you" ? (
-            <PulseForYouTab onScrollStateChange={setScrolling} />
-          ) : null}
-
-          {activeTab === "review-collation" ? <PulseReviewCollationTab /> : null}
+          <PulseForYouTab onScrollStateChange={setScrolling} />
         </View>
 
-        {activeTab === "for-you" ? (
-          <PulsePostButton
-            onPress={handleOpenShareSheet}
-            collapsed={scrolling}
-          />
-        ) : null}
+        <PulsePostButton onPress={handleOpenShareSheet} collapsed={scrolling} />
       </View>
 
       <SharePulseOpinionSheet ref={shareSheetRef} />
@@ -72,7 +48,9 @@ export default function PulseScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: {
+    flex: 1,
+  },
   topSection: {
     paddingHorizontal: 16,
     paddingTop: 8,

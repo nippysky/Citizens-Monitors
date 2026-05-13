@@ -1,7 +1,7 @@
 import {
   BottomSheetBackdrop,
-  BottomSheetModal,
   BottomSheetFlatList,
+  BottomSheetModal,
   BottomSheetTextInput,
 } from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
@@ -41,7 +41,10 @@ function getMinutesAgo(dateValue?: string): number {
   if (!dateValue) return 0;
 
   const date = new Date(dateValue);
-  if (Number.isNaN(date.getTime())) return 0;
+
+  if (Number.isNaN(date.getTime())) {
+    return 0;
+  }
 
   return Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000));
 }
@@ -73,26 +76,43 @@ function getViewerName(params: {
   return name || "@You";
 }
 
+function shouldQueueAfterError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+
+  const message = error.message.toLowerCase();
+
+  return (
+    message.includes("unable to reach") ||
+    message.includes("network") ||
+    message.includes("connection") ||
+    message.includes("timeout")
+  );
+}
+
 const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
-  function CommentsBottomSheet({ postId, comments = [], onSubmitComment }, ref) {
+  function CommentsBottomSheet(
+    { postId: rawPostId, comments = [], onSubmitComment },
+    ref
+  ) {
     const insets = useSafeAreaInsets();
     const snapPoints = useMemo(() => ["75%", "92%"], []);
+
+    const postId = rawPostId ?? null;
 
     const { enqueue, isOnline, queue } = useOfflineSync();
 
     const commentsQuery = usePulseCommentsQuery(postId);
-    const createCommentMutation = useCreatePulseCommentMutation(postId);
-    const likeCommentMutation = useLikePulseCommentMutation(postId);
+    const createCommentMutation = useCreatePulseCommentMutation();
+    const likeCommentMutation = useLikePulseCommentMutation();
     const viewerQuery = usePulseViewerQuery();
 
     const [text, setText] = useState("");
     const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
     const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
 
-    const apiComments = useMemo(
-      () => commentsQuery.data?.comments.map(mapPulseComment) ?? [],
-      [commentsQuery.data]
-    );
+    const apiComments = useMemo(() => {
+      return commentsQuery.data?.comments.map(mapPulseComment) ?? [];
+    }, [commentsQuery.data]);
 
     const pendingComments = useMemo<DiscussionComment[]>(() => {
       if (!postId) return [];
@@ -100,32 +120,41 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
       const viewer = viewerQuery.data;
 
       return queue
-        .filter(
-          (item) =>
+        .filter((item) => {
+          return (
             item.type === "pulse-create-comment" &&
             !item.synced &&
             item.payload.postId === postId
-        )
-        .map((item) => ({
-          id: item.id,
-          author: getViewerName({
-            firstName: viewer?.firstName,
-            lastName: viewer?.lastName,
-            anonymousUsername: viewer?.anonymousUsername,
-            anonymous: item.payload.useAnonymousDisplay === true,
-          }),
-          body: typeof item.payload.body === "string" ? item.payload.body : "",
-          minutesAgo: getMinutesAgo(new Date(item.createdAt).toISOString()),
-          likes: 0,
-          shares: 0,
-          pendingSync: true,
-        }))
+          );
+        })
+        .map((item) => {
+          const body =
+            typeof item.payload.body === "string" ? item.payload.body : "";
+
+          return {
+            id: item.id,
+            author: getViewerName({
+              firstName: viewer?.firstName,
+              lastName: viewer?.lastName,
+              anonymousUsername: viewer?.anonymousUsername,
+              anonymous: item.payload.useAnonymousDisplay === true,
+            }),
+            body,
+            minutesAgo: getMinutesAgo(new Date(item.createdAt).toISOString()),
+            likes: 0,
+            shares: 0,
+            pendingSync: true,
+          };
+        })
+        .filter((item) => item.body.trim().length > 0)
         .reverse();
     }, [postId, queue, viewerQuery.data]);
 
-    const resolvedComments = postId
-      ? [...pendingComments, ...apiComments]
-      : comments;
+    const resolvedComments = useMemo(() => {
+      if (!postId) return comments;
+
+      return [...pendingComments, ...apiComments];
+    }, [apiComments, comments, pendingComments, postId]);
 
     const close = useCallback(() => {
       if (ref && typeof ref !== "function" && ref.current) {
@@ -135,6 +164,7 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
 
     const submit = useCallback(async () => {
       const trimmed = text.trim();
+
       if (!trimmed) return;
 
       if (!postId) {
@@ -143,7 +173,7 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
         return;
       }
 
-      const payload = {
+      const queuedPayload = {
         postId,
         body: trimmed,
         useAnonymousDisplay: false,
@@ -152,7 +182,7 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
       if (!isOnline) {
         enqueue({
           type: "pulse-create-comment",
-          payload,
+          payload: queuedPayload,
         });
 
         setText("");
@@ -161,21 +191,30 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
 
       try {
         await createCommentMutation.mutateAsync({
-          body: trimmed,
-          useAnonymousDisplay: false,
+          postId,
+          payload: {
+            body: trimmed,
+            useAnonymousDisplay: false,
+          },
         });
 
         setText("");
+        await commentsQuery.refetch();
       } catch (error) {
-        enqueue({
-          type: "pulse-create-comment",
-          payload,
-        });
+        if (shouldQueueAfterError(error)) {
+          enqueue({
+            type: "pulse-create-comment",
+            payload: queuedPayload,
+          });
 
-        setText("");
-        console.log("Pulse comment queued:", error);
+          setText("");
+          return;
+        }
+
+        console.log("Pulse comment submit error:", error);
       }
     }, [
+      commentsQuery,
       createCommentMutation,
       enqueue,
       isOnline,
@@ -186,10 +225,11 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
 
     const toggleLike = useCallback(
       async (comment: DiscussionComment) => {
-        if (comment.pendingSync) return;
+        if (!postId || comment.pendingSync) return;
 
         const already =
           likedIds.has(comment.id) || comment.isLikedByCurrentUser === true;
+
         const nextLiked = !already;
 
         setLikedIds((prev) => {
@@ -212,38 +252,43 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
           ),
         }));
 
-        if (!postId) return;
+        const queuedPayload = {
+          postId,
+          commentId: comment.id,
+        };
 
         if (!isOnline) {
           enqueue({
             type: "pulse-like-comment",
-            payload: {
-              postId,
-              commentId: comment.id,
-            },
+            payload: queuedPayload,
           });
 
           return;
         }
 
         try {
-          await likeCommentMutation.mutateAsync(comment.id);
-        } catch (error) {
-          enqueue({
-            type: "pulse-like-comment",
-            payload: {
-              postId,
-              commentId: comment.id,
-            },
+          await likeCommentMutation.mutateAsync({
+            postId,
+            commentId: comment.id,
           });
+        } catch (error) {
+          if (shouldQueueAfterError(error)) {
+            enqueue({
+              type: "pulse-like-comment",
+              payload: queuedPayload,
+            });
 
-          console.log("Pulse comment like queued:", error);
+            return;
+          }
+
+          console.log("Pulse comment like error:", error);
         }
       },
       [enqueue, isOnline, likeCommentMutation, likedIds, postId]
     );
 
-    const canSend = text.trim().length > 0;
+    const canSend =
+      text.trim().length > 0 && !createCommentMutation.isPending;
 
     return (
       <BottomSheetModal
@@ -255,9 +300,9 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
-        backdropComponent={(p) => (
+        backdropComponent={(props) => (
           <BottomSheetBackdrop
-            {...p}
+            {...props}
             appearsOnIndex={0}
             disappearsOnIndex={-1}
             opacity={0.3}
@@ -270,6 +315,7 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
         <View style={styles.header}>
           <View>
             <AppText style={styles.headerTitle}>Comments</AppText>
+
             {postId && !isOnline ? (
               <AppText style={styles.headerSubtitle}>
                 Offline comments will sync automatically
@@ -312,6 +358,7 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
           renderItem={({ item }) => {
             const isLiked =
               likedIds.has(item.id) || item.isLikedByCurrentUser === true;
+
             const displayLikes = likeCounts[item.id] ?? item.likes;
 
             return (
@@ -327,10 +374,12 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
                       size={14}
                       color={Theme.colors.textMuted}
                     />
+
                     <AppText style={styles.commentAuthor}>
                       {item.author}
                     </AppText>
                   </View>
+
                   <AppText style={styles.commentTime}>
                     {item.pendingSync
                       ? "Pending sync"
@@ -356,6 +405,7 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
                         isLiked ? Theme.colors.primary : Theme.colors.textMuted
                       }
                     />
+
                     <AppText
                       style={[
                         styles.likeText,
@@ -385,6 +435,7 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
                 color={Theme.colors.textMuted}
               />
             </View>
+
             <View style={styles.inputFieldWrap}>
               <BottomSheetTextInput
                 placeholder="Leave Comment, @ To Mention"
@@ -405,7 +456,7 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
             onPress={() => {
               void submit();
             }}
-            disabled={!canSend || createCommentMutation.isPending}
+            disabled={!canSend}
             style={[styles.submitBtn, !canSend && styles.submitBtnDisabled]}
           >
             <AppText
@@ -431,7 +482,10 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
   },
-  handle: { backgroundColor: "rgba(17,26,50,0.12)", width: 44 },
+  handle: {
+    backgroundColor: "rgba(17,26,50,0.12)",
+    width: 44,
+  },
   header: {
     minHeight: 58,
     flexDirection: "row",
@@ -477,23 +531,43 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  commentAuthorRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  commentAuthorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
   commentAuthor: {
     fontSize: 14,
     lineHeight: 18,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
   },
-  commentTime: { fontSize: 11, lineHeight: 14, color: Theme.colors.textMuted },
-  commentBody: { fontSize: 14, lineHeight: 22, color: Theme.colors.text },
+  commentTime: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: Theme.colors.textMuted,
+  },
+  commentBody: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: Theme.colors.text,
+  },
   commentActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: 16,
     paddingTop: 2,
   },
-  likeBtn: { flexDirection: "row", alignItems: "center", gap: 5 },
-  likeText: { fontSize: 12, lineHeight: 16, color: Theme.colors.textMuted },
+  likeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  likeText: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Theme.colors.textMuted,
+  },
   emptyWrap: {
     alignItems: "center",
     justifyContent: "center",

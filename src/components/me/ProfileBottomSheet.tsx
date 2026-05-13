@@ -5,16 +5,22 @@ import {
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
 import * as ImagePicker from "expo-image-picker";
-import { forwardRef, RefObject, useCallback, useMemo, useState } from "react";
+import {
+  forwardRef,
+  RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import BirthdaySheet from "@/components/ui/sheets/BirthdaySheet";
-import GenderSheet from "@/components/ui/sheets/GenderSheet";
-import SelectPickerSheet from "@/components/ui/sheets/SelectPickerSheet";
 import AppButton from "@/components/ui/AppButton";
 import AppInput from "@/components/ui/AppInput";
 import AppSelectField from "@/components/ui/AppSelectField";
+import BirthdaySheet from "@/components/ui/sheets/BirthdaySheet";
+import GenderSheet from "@/components/ui/sheets/GenderSheet";
 import AppText from "@/components/ui/AppText";
 import { useAppToast } from "@/hooks/useAppToast";
 import { ensureMediaLibraryPermission } from "@/lib/permissions";
@@ -27,9 +33,8 @@ export type ProfileFormState = {
   lastName: string;
   birthday: BirthdayValue;
   gender: Gender;
-  nationality: string;
-  nationalityQuery: string;
-  residence: string;
+  avatarUri: string | null;
+  avatarChanged: boolean;
 };
 
 type Props = {
@@ -37,14 +42,12 @@ type Props = {
   onChange: (value: ProfileFormState) => void;
   onSave: () => void;
   birthdaySheetRef: RefObject<BottomSheetModal | null>;
-  nationalitySheetRef: RefObject<BottomSheetModal | null>;
   genderSheetRef: RefObject<BottomSheetModal | null>;
   publicName?: string;
   generatingPublicName?: boolean;
-  keepingPublicName?: boolean;
   saving?: boolean;
+  currentAvatarUri?: string | null;
   onGeneratePublicName: () => void;
-  onKeepPublicName: () => void;
 };
 
 const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
@@ -54,22 +57,26 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
       onChange,
       onSave,
       birthdaySheetRef,
-      nationalitySheetRef,
       genderSheetRef,
       publicName,
       generatingPublicName = false,
-      keepingPublicName = false,
       saving = false,
+      currentAvatarUri,
       onGeneratePublicName,
-      onKeepPublicName,
     },
     ref
   ) {
     const insets = useSafeAreaInsets();
     const { showToast } = useAppToast();
-    const snapPoints = useMemo(() => ["92%"], []);
+    const snapPoints = useMemo(() => ["82%"], []);
 
-    const [avatarUri, setAvatarUri] = useState<string | null>(null);
+    const [previewAvatarUri, setPreviewAvatarUri] = useState<string | null>(
+      value.avatarUri || currentAvatarUri || null
+    );
+
+    useEffect(() => {
+      setPreviewAvatarUri(value.avatarUri || currentAvatarUri || null);
+    }, [currentAvatarUri, value.avatarUri]);
 
     const close = () => {
       if (ref && typeof ref !== "function" && ref.current) {
@@ -87,15 +94,22 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
           allowsEditing: true,
           aspect: [1, 1],
           quality: 0.85,
+          selectionLimit: 1,
         });
 
         if (!result.canceled && result.assets?.length) {
-          setAvatarUri(result.assets[0].uri);
+          const uri = result.assets[0].uri;
+
+          setPreviewAvatarUri(uri);
+          onChange({
+            ...value,
+            avatarUri: uri,
+            avatarChanged: true,
+          });
 
           showToast({
             type: "success",
-            message:
-              "Profile photo selected. Upload will be connected with the profile update endpoint.",
+            message: "Profile photo selected.",
           });
         }
       } catch {
@@ -104,9 +118,10 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
           message: "Could not open gallery. Try again.",
         });
       }
-    }, [showToast]);
+    }, [onChange, showToast, value]);
 
     const hasPublicName = Boolean(publicName?.trim());
+    const actionDisabled = saving || generatingPublicName;
 
     return (
       <>
@@ -156,8 +171,11 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
 
             <View style={styles.avatarSection}>
               <View style={styles.avatarWrap}>
-                {avatarUri ? (
-                  <Image source={{ uri: avatarUri }} style={styles.avatarImg} />
+                {previewAvatarUri ? (
+                  <Image
+                    source={{ uri: previewAvatarUri }}
+                    style={styles.avatarImg}
+                  />
                 ) : (
                   <ProfilePhoto width={72} height={72} />
                 )}
@@ -165,7 +183,8 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
 
               <Pressable
                 onPress={handleChangeAvatar}
-                style={styles.changeAvatarBtn}
+                disabled={saving}
+                style={[styles.changeAvatarBtn, saving && styles.actionDisabled]}
               >
                 <AppText style={styles.changeAvatarText}>Change Avatar</AppText>
               </Pressable>
@@ -214,20 +233,6 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
               onPress={() => genderSheetRef.current?.present()}
             />
 
-            <AppSelectField
-              label="Nationality"
-              value={value.nationality}
-              placeholder="Select nationality"
-              onPress={() => nationalitySheetRef.current?.present()}
-            />
-
-            <AppInput
-              label="Current Residence City / Country"
-              value={value.residence}
-              onChangeText={(residence) => onChange({ ...value, residence })}
-              placeholder="City, Country"
-            />
-
             <View style={styles.publicNameSection}>
               <View style={styles.publicNameHeader}>
                 <AppText style={styles.publicNameTitle}>
@@ -236,8 +241,8 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
               </View>
 
               <AppText style={styles.publicNameDesc}>
-                Your anonymous name is used for sensitive public participation
-                inside Citizen Monitor.
+                Generate a public anonymous name for sensitive participation.
+                It will apply when you tap Save Changes.
               </AppText>
 
               <View style={styles.publicNameCard}>
@@ -255,42 +260,27 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
                 </AppText>
               </View>
 
-              <View style={styles.publicNameActions}>
-                <Pressable
-                  onPress={onGeneratePublicName}
-                  disabled={generatingPublicName || keepingPublicName}
-                  style={[
-                    styles.tryAnotherBtn,
-                    (generatingPublicName || keepingPublicName) &&
-                      styles.actionDisabled,
-                  ]}
-                >
-                  <Ionicons
-                    name="refresh-outline"
-                    size={14}
-                    color={Theme.colors.primary}
-                  />
-                  <AppText style={styles.tryAnotherText}>
-                    {hasPublicName ? "Regenerate" : "Generate"}
-                  </AppText>
-                </Pressable>
-
-                <Pressable
-                  onPress={onKeepPublicName}
-                  disabled={!hasPublicName || generatingPublicName || keepingPublicName}
-                  style={[
-                    styles.keepNameBtn,
-                    (!hasPublicName ||
-                      generatingPublicName ||
-                      keepingPublicName) &&
-                      styles.keepNameBtnDisabled,
-                  ]}
-                >
-                  <AppText style={styles.keepNameText}>
-                    {keepingPublicName ? "Saving..." : "Keep This Name"}
-                  </AppText>
-                </Pressable>
-              </View>
+              <Pressable
+                onPress={onGeneratePublicName}
+                disabled={actionDisabled}
+                style={[
+                  styles.generateNameBtn,
+                  actionDisabled && styles.actionDisabled,
+                ]}
+              >
+                <Ionicons
+                  name="refresh-outline"
+                  size={15}
+                  color={Theme.colors.primary}
+                />
+                <AppText style={styles.generateNameText}>
+                  {generatingPublicName
+                    ? "Generating..."
+                    : hasPublicName
+                      ? "Regenerate Public Name"
+                      : "Generate Public Name"}
+                </AppText>
+              </Pressable>
             </View>
 
             <AppButton
@@ -315,18 +305,6 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
           selected={value.gender}
           onSelect={(gender) => onChange({ ...value, gender })}
           onConfirm={() => genderSheetRef.current?.dismiss()}
-        />
-
-        <SelectPickerSheet
-          ref={nationalitySheetRef}
-          query={value.nationalityQuery}
-          onChangeQuery={(nationalityQuery) =>
-            onChange({ ...value, nationalityQuery })
-          }
-          selectedValue={value.nationality}
-          onSelectValue={(nationality) =>
-            onChange({ ...value, nationality, nationalityQuery: "" })
-          }
         />
       </>
     );
@@ -469,12 +447,7 @@ const styles = StyleSheet.create({
     color: Theme.colors.textMuted,
     fontFamily: Theme.fonts.body.medium,
   },
-  publicNameActions: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  tryAnotherBtn: {
-    flex: 1,
+  generateNameBtn: {
     minHeight: 46,
     borderRadius: 12,
     borderWidth: 1,
@@ -483,29 +456,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
-    gap: 6,
+    gap: 7,
   },
-  tryAnotherText: {
+  generateNameText: {
     fontSize: 13,
     lineHeight: 18,
     color: Theme.colors.primary,
-    fontFamily: Theme.fonts.body.semibold,
-  },
-  keepNameBtn: {
-    flex: 1,
-    minHeight: 46,
-    borderRadius: 12,
-    backgroundColor: Theme.colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  keepNameBtnDisabled: {
-    opacity: 0.48,
-  },
-  keepNameText: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: "#FFFFFF",
     fontFamily: Theme.fonts.body.semibold,
   },
   actionDisabled: {

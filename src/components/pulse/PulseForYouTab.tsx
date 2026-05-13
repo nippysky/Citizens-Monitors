@@ -16,20 +16,17 @@ import AppText from "@/components/ui/AppText";
 import CommentsBottomSheet from "@/components/collation/CommentsBottomSheet";
 import LiveDiscussionCarousel from "@/components/pulse/LiveDiscussionCarousel";
 import PulseDiscussionCard from "@/components/pulse/PulseDiscussionCard";
-import {
-  LiveElectionDiscussion,
-  PulseDiscussionPost,
-  liveElectionDiscussions,
-} from "@/data/pulse";
+import { PulseDiscussionPost } from "@/data/pulse";
 import { Paths } from "@/constants/paths";
 import { useAppToast } from "@/hooks/useAppToast";
 import { useOfflineSync } from "@/context/OfflineSyncContext";
 import {
   useLikePulsePostMutation,
+  useLiveElectionCarouselQuery,
   usePulsePostsInfiniteQuery,
   usePulseViewerQuery,
 } from "@/hooks/api/usePulseQueries";
-import { PulsePost } from "@/lib/api/pulse.api";
+import { PulseLiveElection, PulsePost } from "@/lib/api/pulse.api";
 import { Theme } from "@/theme";
 import NoDiscussion from "@/svgs/app/collation/NoDiscussion";
 
@@ -88,6 +85,72 @@ function getQueuedPostAuthor(params: {
   return name || "@You";
 }
 
+function PulseSkeletonBlock({ style }: { style?: object }) {
+  return <View style={[styles.skeletonBlock, style]} />;
+}
+
+function LiveCarouselSkeleton() {
+  return (
+    <View style={styles.skeletonCarouselWrap}>
+      <PulseSkeletonBlock style={styles.skeletonSectionTitle} />
+
+      <View style={styles.skeletonCarouselCard}>
+        <View style={styles.skeletonCarouselTop}>
+          <PulseSkeletonBlock style={styles.skeletonLivePill} />
+          <PulseSkeletonBlock style={styles.skeletonElectionIcon} />
+        </View>
+
+        <PulseSkeletonBlock style={styles.skeletonElectionTitleOne} />
+        <PulseSkeletonBlock style={styles.skeletonElectionTitleTwo} />
+
+        <View style={styles.skeletonCarouselBottom}>
+          <PulseSkeletonBlock style={styles.skeletonDiscussionCount} />
+          <PulseSkeletonBlock style={styles.skeletonJoinButton} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function PulsePostSkeleton() {
+  return (
+    <View style={styles.skeletonPostCard}>
+      <View style={styles.skeletonAuthorRow}>
+        <PulseSkeletonBlock style={styles.skeletonAvatar} />
+
+        <View style={styles.skeletonAuthorTextWrap}>
+          <PulseSkeletonBlock style={styles.skeletonAuthorName} />
+          <PulseSkeletonBlock style={styles.skeletonPostMeta} />
+        </View>
+
+        <PulseSkeletonBlock style={styles.skeletonTime} />
+      </View>
+
+      <PulseSkeletonBlock style={styles.skeletonBodyOne} />
+      <PulseSkeletonBlock style={styles.skeletonBodyTwo} />
+      <PulseSkeletonBlock style={styles.skeletonImage} />
+
+      <View style={styles.skeletonActionsRow}>
+        <PulseSkeletonBlock style={styles.skeletonAction} />
+        <PulseSkeletonBlock style={styles.skeletonAction} />
+        <PulseSkeletonBlock style={styles.skeletonAction} />
+      </View>
+    </View>
+  );
+}
+
+function PulseFeedSkeleton() {
+  return (
+    <View>
+      <LiveCarouselSkeleton />
+      <PulsePostSkeleton />
+      <PulsePostSkeleton />
+      <PulsePostSkeleton />
+      <View style={{ height: 120 }} />
+    </View>
+  );
+}
+
 export default function PulseForYouTab({ onScrollStateChange }: Props) {
   const { showToast } = useAppToast();
   const { enqueue, isOnline, queue } = useOfflineSync();
@@ -97,12 +160,18 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
 
   const postsQuery = usePulsePostsInfiniteQuery();
   const viewerQuery = usePulseViewerQuery();
+  const liveCarouselQuery = useLiveElectionCarouselQuery();
   const likePostMutation = useLikePulsePostMutation();
 
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
+
+  const liveElections = useMemo(
+    () => liveCarouselQuery.data?.elections ?? [],
+    [liveCarouselQuery.data]
+  );
 
   const apiPosts = useMemo(
     () =>
@@ -157,9 +226,15 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
 
   const hasPosts = posts.length > 0;
 
+  const isInitialLoading =
+    postsQuery.isLoading && !postsQuery.data && pendingPosts.length === 0;
+
+  const isRefreshing =
+    postsQuery.isRefetching || liveCarouselQuery.isRefetching;
+
   const onRefresh = useCallback(() => {
-    void postsQuery.refetch();
-  }, [postsQuery]);
+    void Promise.all([postsQuery.refetch(), liveCarouselQuery.refetch()]);
+  }, [liveCarouselQuery, postsQuery]);
 
   const handleScroll = useCallback(
     (_: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -242,7 +317,9 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
     async (post: PulseFeedItem) => {
       try {
         await Share.share({
-          message: `💬 ${post.author}\n🗳 ${post.electionLabel}\n\n${post.body}\n\n👍 ${
+          message: `💬 ${post.author}\n🗳 ${post.electionLabel}\n\n${
+            post.body
+          }\n\n👍 ${
             likeCounts[post.apiPostId] ?? post.likes
           } Likes · 💬 ${
             post.commentCount
@@ -255,25 +332,29 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
     [likeCounts, showToast]
   );
 
-  const handleOpenComments = useCallback((post: PulseFeedItem) => {
-    if (post.pendingSync) {
-      showToast({
-        type: "error",
-        message: "Comments will be available after this post syncs.",
-      });
-      return;
-    }
+  const handleOpenComments = useCallback(
+    (post: PulseFeedItem) => {
+      if (post.pendingSync) {
+        showToast({
+          type: "error",
+          message: "Comments will be available after this post syncs.",
+        });
+        return;
+      }
 
-    setSelectedPostId(post.apiPostId);
-    requestAnimationFrame(() => commentsRef.current?.present());
-  }, [showToast]);
+      setSelectedPostId(post.apiPostId);
+      requestAnimationFrame(() => commentsRef.current?.present());
+    },
+    [showToast]
+  );
 
-  const handleJoinDiscussion = useCallback((item: LiveElectionDiscussion) => {
+  const handleJoinDiscussion = useCallback((item: PulseLiveElection) => {
     router.push({
       pathname: Paths.appCollation as never,
       params: {
         tab: "discussions",
-        collationId: item.collationId,
+        collationId: item.id,
+        electionId: item.id,
       },
     });
   }, []);
@@ -284,22 +365,27 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
     }
   }, [postsQuery]);
 
-  const renderHeader = () => (
-    <>
-      {liveElectionDiscussions.length > 0 ? (
-        <LiveDiscussionCarousel
-          items={liveElectionDiscussions}
-          activeIndex={carouselIndex}
-          onIndexChange={setCarouselIndex}
-          onJoinDiscussion={handleJoinDiscussion}
-        />
-      ) : null}
-    </>
-  );
+  const renderHeader = () => {
+    if (liveCarouselQuery.isLoading && !liveCarouselQuery.data) {
+      return <LiveCarouselSkeleton />;
+    }
+
+    if (!liveElections.length) {
+      return null;
+    }
+
+    return (
+      <LiveDiscussionCarousel
+        items={liveElections}
+        activeIndex={carouselIndex}
+        onIndexChange={setCarouselIndex}
+        onJoinDiscussion={handleJoinDiscussion}
+      />
+    );
+  };
 
   const renderItem = ({ item }: ListRenderItemInfo<PulseFeedItem>) => {
-    const isLiked =
-      likedIds.has(item.apiPostId) || item.isLikedByCurrentUser;
+    const isLiked = likedIds.has(item.apiPostId) || item.isLikedByCurrentUser;
     const displayLikes = likeCounts[item.apiPostId] ?? item.likes;
 
     return (
@@ -318,6 +404,10 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
     );
   };
 
+  if (isInitialLoading) {
+    return <PulseFeedSkeleton />;
+  }
+
   return (
     <>
       <FlatList
@@ -335,7 +425,7 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
         windowSize={9}
         refreshControl={
           <RefreshControl
-            refreshing={postsQuery.isRefetching}
+            refreshing={isRefreshing}
             onRefresh={onRefresh}
             tintColor={Theme.colors.primary}
             colors={[Theme.colors.primary]}
@@ -346,23 +436,29 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
           !hasPosts && styles.listContentEmpty,
         ]}
         ListEmptyComponent={
-          postsQuery.isLoading ? null : (
-            <View style={styles.emptyWrap}>
-              <NoDiscussion width={110} height={110} />
-              <AppText style={styles.emptyTitle}>No Discussion yet</AppText>
-              <AppText style={styles.emptySubtitle}>
-                You will see discussions in your polling unit here.
-              </AppText>
-            </View>
-          )
+          <View style={styles.emptyWrap}>
+            <NoDiscussion width={110} height={110} />
+            <AppText style={styles.emptyTitle}>No Discussion yet</AppText>
+            <AppText style={styles.emptySubtitle}>
+              You will see discussions in your polling unit here.
+            </AppText>
+          </View>
         }
-        ListFooterComponent={<View style={{ height: 120 }} />}
+        ListFooterComponent={
+          <>
+            {postsQuery.isFetchingNextPage ? <PulsePostSkeleton /> : null}
+            <View style={{ height: 120 }} />
+          </>
+        }
       />
 
       <CommentsBottomSheet ref={commentsRef} postId={selectedPostId} />
     </>
   );
 }
+
+const skeletonColor = "rgba(17,26,50,0.08)";
+const skeletonColorStrong = "rgba(17,26,50,0.12)";
 
 const styles = StyleSheet.create({
   listContent: {
@@ -390,5 +486,138 @@ const styles = StyleSheet.create({
     color: Theme.colors.textMuted,
     textAlign: "center",
     maxWidth: 240,
+  },
+
+  skeletonBlock: {
+    backgroundColor: skeletonColor,
+    overflow: "hidden",
+  },
+  skeletonCarouselWrap: {
+    gap: 12,
+    paddingTop: 4,
+    paddingBottom: 14,
+  },
+  skeletonSectionTitle: {
+    width: 178,
+    height: 18,
+    borderRadius: 999,
+    marginHorizontal: 16,
+  },
+  skeletonCarouselCard: {
+    marginHorizontal: 16,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: Theme.colors.surface,
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+    gap: 10,
+  },
+  skeletonCarouselTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  skeletonLivePill: {
+    width: 86,
+    height: 20,
+    borderRadius: 999,
+    backgroundColor: skeletonColorStrong,
+  },
+  skeletonElectionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+  },
+  skeletonElectionTitleOne: {
+    width: "78%",
+    height: 22,
+    borderRadius: 999,
+  },
+  skeletonElectionTitleTwo: {
+    width: "48%",
+    height: 22,
+    borderRadius: 999,
+  },
+  skeletonCarouselBottom: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  skeletonDiscussionCount: {
+    width: 134,
+    height: 16,
+    borderRadius: 999,
+  },
+  skeletonJoinButton: {
+    width: 124,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: "rgba(5,163,156,0.10)",
+  },
+
+  skeletonPostCard: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.colors.border,
+    gap: 10,
+  },
+  skeletonAuthorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  skeletonAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+  skeletonAuthorTextWrap: {
+    flex: 1,
+    gap: 6,
+  },
+  skeletonAuthorName: {
+    width: "42%",
+    height: 14,
+    borderRadius: 999,
+    backgroundColor: skeletonColorStrong,
+  },
+  skeletonPostMeta: {
+    width: "56%",
+    height: 12,
+    borderRadius: 999,
+  },
+  skeletonTime: {
+    width: 44,
+    height: 12,
+    borderRadius: 999,
+  },
+  skeletonBodyOne: {
+    width: "92%",
+    height: 14,
+    borderRadius: 999,
+  },
+  skeletonBodyTwo: {
+    width: "64%",
+    height: 14,
+    borderRadius: 999,
+  },
+  skeletonImage: {
+    width: "100%",
+    height: 200,
+    borderRadius: 14,
+  },
+  skeletonActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 20,
+    paddingTop: 2,
+  },
+  skeletonAction: {
+    width: 78,
+    height: 16,
+    borderRadius: 999,
   },
 });

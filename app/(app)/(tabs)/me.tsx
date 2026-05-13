@@ -42,16 +42,23 @@ import {
   MeMenuItem,
   MeUser,
 } from "@/data/me";
+import {
+  useLocalGovernmentsQuery,
+  usePollingUnitsQuery,
+  useStatesQuery,
+  useWardsQuery,
+} from "@/hooks/api/useLocationQueries";
 import { useMyProfileQuery } from "@/hooks/api/useMyProfileQuery";
-import { useSelectRoleMutation } from "@/hooks/api/useSelectRoleMutation";
-import { useSubmitObserverRoleMutation } from "@/hooks/api/useSubmitObserverRoleMutation";
 import {
   useGenerateAnonymousUsernameMutation,
   useSubmitFeedbackMutation,
   useUpdateAnonymousIdentityMutation,
+  useUpdateMyProfileMutation,
   useUpdateNotificationSettingsMutation,
   useUpdatePasswordMutation,
 } from "@/hooks/api/useProfileMutations";
+import { useSelectRoleMutation } from "@/hooks/api/useSelectRoleMutation";
+import { useSubmitObserverRoleMutation } from "@/hooks/api/useSubmitObserverRoleMutation";
 import {
   useBanksQuery,
   useMobileNotificationSettingsQuery,
@@ -191,15 +198,51 @@ function toGender(value?: string): Gender {
   return "";
 }
 
+function monthNameToNumber(month: string): number {
+  const months = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+
+  const index = months.findIndex(
+    (item) => item.toLowerCase() === month.toLowerCase()
+  );
+
+  return index >= 0 ? index + 1 : 0;
+}
+
+function toApiDateOfBirth(birthday: BirthdayValue): string {
+  if (!birthday.day || !birthday.month || !birthday.year) return "";
+
+  const month = monthNameToNumber(birthday.month);
+
+  if (!month) return "";
+
+  const yyyy = String(birthday.year).padStart(4, "0");
+  const mm = String(month).padStart(2, "0");
+  const dd = String(birthday.day).padStart(2, "0");
+
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 function buildProfileForm(profile: MyProfileResponse): ProfileFormState {
   return {
     firstName: profile.firstName ?? "",
     lastName: profile.lastName ?? "",
     birthday: toBirthdayValue(profile.dateOfBirth),
     gender: toGender(profile.gender),
-    nationality: profile.nationality ?? "",
-    nationalityQuery: "",
-    residence: [profile.lga, profile.state].filter(Boolean).join(", "),
+    avatarUri: profile.profileImage?.url ?? null,
+    avatarChanged: false,
   };
 }
 
@@ -209,6 +252,21 @@ function buildPollingUnitForm(profile: MyProfileResponse): PollingUnitFormState 
     lga: profile.lga ?? "",
     ward: profile.ward ?? "",
     pollingUnit: profile.pollingUnit ?? "",
+  };
+}
+
+function applyPollingUnitOverride(
+  profile: MyProfileResponse,
+  override: PollingUnitFormState | null
+): MyProfileResponse {
+  if (!override) return profile;
+
+  return {
+    ...profile,
+    state: override.state,
+    lga: override.lga,
+    ward: override.ward,
+    pollingUnit: override.pollingUnit,
   };
 }
 
@@ -238,6 +296,20 @@ function buildBankForm(profile: MyProfileResponse): BankFormState {
     bankName: profile.bankName ?? "",
     accountNumber: profile.bankAccountNumber ?? "",
     accountFullName: profile.bankAccountName ?? "",
+  };
+}
+
+function applyAnonymousDraft(
+  profile: MyProfileResponse,
+  draftPublicName: string
+): MyProfileResponse {
+  const cleanName = draftPublicName.trim();
+
+  if (!cleanName) return profile;
+
+  return {
+    ...profile,
+    anonymousUsername: cleanName,
   };
 }
 
@@ -310,17 +382,13 @@ export default function MeScreen() {
   const { signOut, user: authUser } = useAuth();
   const { showToast } = useToastContext();
 
-  const {
-    profile,
-    isInitialProfileLoading,
-    isFetching,
-    refetch,
-    error,
-  } = useMyProfileQuery();
+  const { profile, isInitialProfileLoading, isFetching, refetch, error } =
+    useMyProfileQuery();
 
   const banksQuery = useBanksQuery();
   const notificationsQuery = useMobileNotificationSettingsQuery();
 
+  const updateMyProfileMutation = useUpdateMyProfileMutation();
   const selectRoleMutation = useSelectRoleMutation();
   const updatePasswordMutation = useUpdatePasswordMutation();
   const updateNotificationSettingsMutation =
@@ -333,34 +401,13 @@ export default function MeScreen() {
 
   const scrollViewRef = useRef<ScrollView>(null);
 
-  const meUser = useMemo(() => {
-    if (!profile) return null;
-
-    return buildMeUser(profile);
-  }, [profile]);
-
-  const banner = useMemo(() => {
-    if (!meUser) return null;
-
-    return getMeBanner(meUser);
-  }, [meUser]);
-
-  const accountItems = useMemo(() => {
-    if (!meUser) return [];
-
-    return getMeAccountItems(meUser);
-  }, [meUser]);
-
-  const otherItems = useMemo(() => getMeOtherItems(), []);
-
   const [profileForm, setProfileForm] = useState<ProfileFormState>({
     firstName: "",
     lastName: "",
     birthday: EMPTY_BIRTHDAY,
     gender: "",
-    nationality: "",
-    nationalityQuery: "",
-    residence: "",
+    avatarUri: null,
+    avatarChanged: false,
   });
 
   const [securityForm, setSecurityForm] = useState<SecurityFormState>({
@@ -375,6 +422,11 @@ export default function MeScreen() {
     ward: "",
     pollingUnit: "",
   });
+
+  const [savedPollingUnitOverride, setSavedPollingUnitOverride] =
+    useState<PollingUnitFormState | null>(null);
+
+  const [pollingUnitSaving, setPollingUnitSaving] = useState(false);
 
   const [notificationSettings, setNotificationSettings] =
     useState<MobileNotificationSettingsState>(DEFAULT_NOTIFICATION_SETTINGS);
@@ -396,6 +448,7 @@ export default function MeScreen() {
     useState<FeedbackFormState>(DEFAULT_FEEDBACK_FORM);
 
   const [pvcSubmitLocked, setPvcSubmitLocked] = useState(false);
+  const [draftPublicName, setDraftPublicName] = useState("");
 
   const profileSheetRef = useRef<BottomSheetModal>(null);
   const securitySheetRef = useRef<BottomSheetModal>(null);
@@ -407,7 +460,6 @@ export default function MeScreen() {
   const feedbackSheetRef = useRef<BottomSheetModal>(null);
 
   const birthdaySheetRef = useRef<BottomSheetModal>(null);
-  const nationalitySheetRef = useRef<BottomSheetModal>(null);
   const genderSheetRef = useRef<BottomSheetModal>(null);
 
   useEffect(() => {
@@ -415,12 +467,72 @@ export default function MeScreen() {
 
     setProfileForm(buildProfileForm(profile));
     setPollingUnitForm(buildPollingUnitForm(profile));
+    setSavedPollingUnitOverride(null);
     setObserverForm(buildObserverForm(profile));
     setBankForm(buildBankForm(profile));
+    setDraftPublicName(profile.anonymousUsername ?? "");
     setNotificationSettings((previous) =>
       buildNotificationSettings(profile, notificationsQuery.data ?? previous)
     );
   }, [notificationsQuery.data, profile]);
+
+  const profileWithDraftPublicName = useMemo(() => {
+    if (!profile) return null;
+
+    return applyAnonymousDraft(profile, draftPublicName);
+  }, [draftPublicName, profile]);
+
+  const displayProfile = useMemo(() => {
+    if (!profileWithDraftPublicName) return null;
+
+    return applyPollingUnitOverride(
+      profileWithDraftPublicName,
+      savedPollingUnitOverride
+    );
+  }, [profileWithDraftPublicName, savedPollingUnitOverride]);
+
+  const meUser = useMemo(() => {
+    if (!displayProfile) return null;
+
+    return buildMeUser(displayProfile);
+  }, [displayProfile]);
+
+  const banner = useMemo(() => {
+    if (!meUser) return null;
+
+    return getMeBanner(meUser);
+  }, [meUser]);
+
+  const accountItems = useMemo(() => {
+    if (!meUser) return [];
+
+    return getMeAccountItems(meUser);
+  }, [meUser]);
+
+  const otherItems = useMemo(() => getMeOtherItems(), []);
+
+  const statesQuery = useStatesQuery();
+  const lgasQuery = useLocalGovernmentsQuery(pollingUnitForm.state);
+  const wardsQuery = useWardsQuery(pollingUnitForm.state, pollingUnitForm.lga);
+  const pollingUnitsQuery = usePollingUnitsQuery(
+    pollingUnitForm.state,
+    pollingUnitForm.lga,
+    pollingUnitForm.ward
+  );
+
+  const stateOptions = useMemo(
+    () => statesQuery.data ?? [],
+    [statesQuery.data]
+  );
+
+  const lgaOptions = useMemo(() => lgasQuery.data ?? [], [lgasQuery.data]);
+
+  const wardOptions = useMemo(() => wardsQuery.data ?? [], [wardsQuery.data]);
+
+  const pollingUnitOptions = useMemo(
+    () => pollingUnitsQuery.data ?? [],
+    [pollingUnitsQuery.data]
+  );
 
   const bankOptions = useMemo(() => {
     const names = banksQuery.data?.map((bank) => bank.name) ?? [];
@@ -430,17 +542,107 @@ export default function MeScreen() {
     return profile?.bankName ? [profile.bankName] : [];
   }, [banksQuery.data, profile?.bankName]);
 
+  const isElectionLive = false;
+
   const isPvcSubmitting =
     pvcSubmitLocked ||
     selectRoleMutation.isPending ||
     submitObserverRoleMutation.isPending;
 
   const isMutating =
+    updateMyProfileMutation.isPending ||
+    pollingUnitSaving ||
     updatePasswordMutation.isPending ||
     updateNotificationSettingsMutation.isPending ||
     generateAnonymousUsernameMutation.isPending ||
     updateAnonymousIdentityMutation.isPending ||
+    submitFeedbackMutation.isPending ||
     isPvcSubmitting;
+
+  const handleGenerateAnonymousUsername = async () => {
+    try {
+      const response = await generateAnonymousUsernameMutation.mutateAsync();
+
+      setDraftPublicName(response.anonymousUsername);
+
+      showToast({
+        message: "Anonymous name generated. Tap Save Changes to apply it.",
+        type: "success",
+      });
+    } catch (mutationError) {
+      showToast({
+        message: getErrorMessage(
+          mutationError,
+          "Unable to generate anonymous username."
+        ),
+        type: "error",
+      });
+    }
+  };
+
+  const handleUpdateProfile = async () => {
+    const firstName = profileForm.firstName.trim();
+    const lastName = profileForm.lastName.trim();
+    const gender = profileForm.gender.trim();
+    const dateOfBirth = toApiDateOfBirth(profileForm.birthday);
+
+    if (!firstName || !lastName) {
+      showToast({
+        message: "Please enter your first and last name.",
+        type: "error",
+      });
+      return;
+    }
+
+    if (!gender) {
+      showToast({
+        message: "Please select your gender.",
+        type: "error",
+      });
+      return;
+    }
+
+    if (!dateOfBirth) {
+      showToast({
+        message: "Please select a valid birthday.",
+        type: "error",
+      });
+      return;
+    }
+
+    try {
+      await updateMyProfileMutation.mutateAsync({
+        firstName,
+        lastName,
+        gender,
+        dateOfBirth,
+        profileImageUri:
+          profileForm.avatarChanged && profileForm.avatarUri
+            ? profileForm.avatarUri
+            : null,
+      });
+
+      if (draftPublicName.trim()) {
+        await updateAnonymousIdentityMutation.mutateAsync({
+          enabled: true,
+        });
+      }
+
+      await refetch();
+
+      profileSheetRef.current?.dismiss();
+
+      showToast({
+        message: "Profile updated successfully.",
+        type: "success",
+      });
+    } catch (mutationError) {
+      showToast({
+        message: getErrorMessage(mutationError, "Unable to update profile."),
+        type: "error",
+      });
+    }
+  };
 
   const handleUpdatePassword = async () => {
     if (
@@ -490,6 +692,49 @@ export default function MeScreen() {
     }
   };
 
+  const handleUpdatePollingUnit = async () => {
+    if (isElectionLive) {
+      showToast({
+        message: "Polling unit changes are locked while an election is live.",
+        type: "error",
+      });
+      return;
+    }
+
+    if (
+      !pollingUnitForm.state.trim() ||
+      !pollingUnitForm.lga.trim() ||
+      !pollingUnitForm.ward.trim() ||
+      !pollingUnitForm.pollingUnit.trim()
+    ) {
+      showToast({
+        message: "Please complete your polling unit details.",
+        type: "error",
+      });
+      return;
+    }
+
+    try {
+      setPollingUnitSaving(true);
+
+      setSavedPollingUnitOverride({
+        state: pollingUnitForm.state.trim(),
+        lga: pollingUnitForm.lga.trim(),
+        ward: pollingUnitForm.ward.trim(),
+        pollingUnit: pollingUnitForm.pollingUnit.trim(),
+      });
+
+      pollingUnitSheetRef.current?.dismiss();
+
+      showToast({
+        message: "Polling unit details updated.",
+        type: "success",
+      });
+    } finally {
+      setPollingUnitSaving(false);
+    }
+  };
+
   const handleUpdateNotifications = async () => {
     try {
       const response =
@@ -509,61 +754,6 @@ export default function MeScreen() {
         message: getErrorMessage(
           mutationError,
           "Unable to update notification settings."
-        ),
-        type: "error",
-      });
-    }
-  };
-
-  const handleGenerateAnonymousUsername = async () => {
-    try {
-      const response = await generateAnonymousUsernameMutation.mutateAsync();
-
-      showToast({
-        message:
-          response.message ??
-          `Anonymous username generated: ${response.anonymousUsername}`,
-        type: "success",
-      });
-
-      await refetch();
-    } catch (mutationError) {
-      showToast({
-        message: getErrorMessage(
-          mutationError,
-          "Unable to generate anonymous username."
-        ),
-        type: "error",
-      });
-    }
-  };
-
-  const handleKeepPublicName = async () => {
-    if (!profile?.anonymousUsername) {
-      showToast({
-        message: "Generate an anonymous username first.",
-        type: "error",
-      });
-      return;
-    }
-
-    try {
-      const response = await updateAnonymousIdentityMutation.mutateAsync({
-        enabled: true,
-      });
-
-      showToast({
-        message:
-          response.message ?? "Anonymous identity setting updated successfully.",
-        type: "success",
-      });
-
-      await refetch();
-    } catch (mutationError) {
-      showToast({
-        message: getErrorMessage(
-          mutationError,
-          "Unable to keep this public name."
         ),
         type: "error",
       });
@@ -730,7 +920,7 @@ export default function MeScreen() {
     return <MeScreenSkeleton />;
   }
 
-  if (!profile || !meUser || !banner) {
+  if (!profile || !displayProfile || !meUser || !banner) {
     return (
       <SafeAreaView edges={["top"]} style={styles.safe}>
         <View style={[styles.screen, styles.emptyState]}>
@@ -795,23 +985,19 @@ export default function MeScreen() {
           value={profileForm}
           onChange={setProfileForm}
           onSave={() => {
-            profileSheetRef.current?.dismiss();
-            showToast({
-              message: "Profile update is not available yet.",
-              type: "success",
-            });
+            void handleUpdateProfile();
           }}
           birthdaySheetRef={birthdaySheetRef}
-          nationalitySheetRef={nationalitySheetRef}
           genderSheetRef={genderSheetRef}
-          publicName={profile.anonymousUsername}
+          publicName={draftPublicName}
           generatingPublicName={generateAnonymousUsernameMutation.isPending}
-          keepingPublicName={updateAnonymousIdentityMutation.isPending}
+          saving={
+            updateMyProfileMutation.isPending ||
+            updateAnonymousIdentityMutation.isPending
+          }
+          currentAvatarUri={profile.profileImage?.url ?? null}
           onGeneratePublicName={() => {
             void handleGenerateAnonymousUsername();
-          }}
-          onKeepPublicName={() => {
-            void handleKeepPublicName();
           }}
         />
 
@@ -828,6 +1014,16 @@ export default function MeScreen() {
         <PollingUnitBottomSheet
           ref={pollingUnitSheetRef}
           value={pollingUnitForm}
+          onChange={setPollingUnitForm}
+          onSave={() => {
+            void handleUpdatePollingUnit();
+          }}
+          stateOptions={stateOptions}
+          lgaOptions={lgaOptions}
+          wardOptions={wardOptions}
+          pollingUnitOptions={pollingUnitOptions}
+          saving={pollingUnitSaving}
+          isElectionLive={isElectionLive}
         />
 
         <NotificationAlertBottomSheet
