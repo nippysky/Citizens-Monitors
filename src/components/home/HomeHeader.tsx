@@ -11,19 +11,29 @@ type Props = {
   roleLabel: string;
 };
 
+function getRoleArticle(roleLabel: string): string {
+  const role = roleLabel.trim().toLowerCase();
+
+  if (role === "observer") return "an";
+  return "a";
+}
+
 export default function HomeHeader({ firstName, roleLabel }: Props) {
   return (
     <View style={styles.wrap}>
       <View style={styles.row}>
-        {/* Left: greeting */}
         <View style={styles.textBlock}>
           <AppText style={styles.title}>Hi, {firstName}!</AppText>
-          <AppText style={styles.subtitle}>You&apos;re an {roleLabel}.</AppText>
+          <AppText style={styles.subtitle}>
+            You&apos;re {getRoleArticle(roleLabel)} {roleLabel}.
+          </AppText>
         </View>
 
-        {/* Right: icons */}
         <View style={styles.actions}>
-          <Pressable style={styles.iconButton} onPress={() => router.push(Paths.appHelpSupport)}>
+          <Pressable
+            style={styles.iconButton}
+            onPress={() => router.push(Paths.appHelpSupport)}
+          >
             <Ionicons
               name="help-circle-outline"
               size={22}
@@ -58,6 +68,7 @@ const styles = StyleSheet.create({
   },
   textBlock: {
     gap: 2,
+    flex: 1,
   },
   title: {
     fontSize: 20,

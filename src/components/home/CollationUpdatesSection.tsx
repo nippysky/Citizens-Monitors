@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { FlatList, Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
@@ -11,101 +11,83 @@ type Props = {
   items: ElectionUpdateItem[];
 };
 
-function UpdateCard({
-  item,
-  onPress,
-}: {
-  item: ElectionUpdateItem;
-  onPress: () => void;
-}) {
-  const isIncident = item.tag === "INCIDENT";
-
-  return (
-    <Pressable
-      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-      onPress={onPress}
-    >
-      {/* LEFT column: tag, title, time — flex:1 so it shrinks cleanly */}
-      <View style={styles.cardContent}>
-        <View style={styles.tagRow}>
-          <View style={[styles.tagDot, isIncident && styles.tagDotIncident]} />
-          <AppText
-            style={[styles.tagText, isIncident && styles.tagTextIncident]}
-            numberOfLines={1}
-          >
-            {isIncident ? "INCIDENT" : "RESULT"}
-          </AppText>
-        </View>
-
-        <AppText
-          style={styles.cardTitle}
-          numberOfLines={2}
-          ellipsizeMode="tail"
-        >
-          {item.title}
-        </AppText>
-
-        <View style={styles.timeRow}>
-          <Ionicons
-            name="time-outline"
-            size={12}
-            color={Theme.colors.textMuted}
-          />
-          <AppText style={styles.timeText} numberOfLines={1}>
-            {item.timeAgo}
-          </AppText>
-        </View>
-      </View>
-
-      {/* RIGHT column: chevron in its own dedicated space — cannot overlap content */}
-      <View style={styles.chevronWrap}>
-        <Ionicons
-          name="chevron-forward"
-          size={16}
-          color={Theme.colors.textMuted}
-        />
-      </View>
-    </Pressable>
-  );
+function getIconName(tag: ElectionUpdateItem["tag"]): keyof typeof Ionicons.glyphMap {
+  return tag === "INCIDENT" ? "warning-outline" : "checkmark-done-outline";
 }
 
-export default function CollationUpdatesSection({ items }: Props) {
-  const handleCardPress = (item: ElectionUpdateItem) => {
-    // Deep-links into the collation screen on the "review-reports" tab for
-    // the specific collation this update belongs to. CollationScreen reads
-    // both params via useLocalSearchParams and reacts in its useEffect.
+function getTagColor(tag: ElectionUpdateItem["tag"]): string {
+  return tag === "INCIDENT" ? "#EF4444" : Theme.colors.primary;
+}
+
+function UpdateCard({ item }: { item: ElectionUpdateItem }) {
+  const color = getTagColor(item.tag);
+
+  const handlePress = () => {
     router.push({
-      pathname: Paths.appCollation,
+      pathname: Paths.appCollation as never,
       params: {
-        tab: "review-reports",
+        tab: item.tag === "INCIDENT" ? "review-reports" : "overview",
         collationId: item.collationId,
+        activeElectionId: item.collationId,
+        electionId: item.collationId,
       },
     });
   };
 
   return (
+    <Pressable
+      onPress={handlePress}
+      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+    >
+      <View style={[styles.iconWrap, { backgroundColor: `${color}18` }]}>
+        <Ionicons name={getIconName(item.tag)} size={18} color={color} />
+      </View>
+
+      <View style={styles.textBlock}>
+        <View style={styles.metaRow}>
+          <AppText style={[styles.tagText, { color }]}>{item.tag}</AppText>
+          <View style={styles.metaDot} />
+          <AppText style={styles.timeText}>{item.timeAgo}</AppText>
+        </View>
+
+        <AppText style={styles.title} numberOfLines={2}>
+          {item.title}
+        </AppText>
+
+        {item.info ? (
+          <AppText style={styles.info} numberOfLines={1}>
+            {item.info}
+          </AppText>
+        ) : null}
+      </View>
+
+      <Ionicons
+        name="chevron-forward"
+        size={17}
+        color={Theme.colors.textMuted}
+      />
+    </Pressable>
+  );
+}
+
+export default function CollationUpdatesSection({ items }: Props) {
+  if (!items.length) return null;
+
+  return (
     <View style={styles.wrap}>
       <View style={styles.headerRow}>
-        <AppText style={styles.sectionTitle}>Collation updates</AppText>
-        <Pressable
-          onPress={() => router.push(Paths.appCollation)}
-          hitSlop={8}
-        >
+        <AppText style={styles.sectionTitle}>Election Updates</AppText>
+
+        <Pressable onPress={() => router.push(Paths.appCollation)} hitSlop={8}>
           <AppText style={styles.seeAll}>SEE ALL</AppText>
         </Pressable>
       </View>
 
-      <FlatList
-        data={items}
-        keyExtractor={(item) => item.id}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={{ width: 12 }} />}
-        renderItem={({ item }) => (
-          <UpdateCard item={item} onPress={() => handleCardPress(item)} />
-        )}
-      />
+      <View style={styles.list}>
+        {items.slice(0, 4).map((item) => (
+          <UpdateCard key={item.id} item={item} />
+        ))}
+      </View>
     </View>
   );
 }
@@ -113,12 +95,12 @@ export default function CollationUpdatesSection({ items }: Props) {
 const styles = StyleSheet.create({
   wrap: {
     gap: 12,
+    paddingHorizontal: 16,
   },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 16,
   },
   sectionTitle: {
     fontSize: 15,
@@ -133,96 +115,67 @@ const styles = StyleSheet.create({
     color: Theme.colors.primary,
     letterSpacing: 0.4,
   },
-  listContent: {
-    paddingHorizontal: 16,
+  list: {
+    gap: 12,
   },
-
-  // Card is a HORIZONTAL row: [content | chevron].
-  // This replaces the old absolute-positioned chevron that was overlapping the title.
   card: {
-    width: 260,
+    minHeight: 74,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(17,26,50,0.07)",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 14,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "rgba(17, 24, 39, 0.06)",
-    paddingVertical: 14,
-    paddingLeft: 14,
-    paddingRight: 10, // tighter on the right since chevronWrap supplies its own breathing room
-    gap: 10,
-    shadowColor: "#0F172A",
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
+    gap: 12,
   },
   cardPressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.985 }],
+    opacity: 0.76,
   },
-
-  cardContent: {
+  iconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  textBlock: {
     flex: 1,
-    gap: 8,
-    // minWidth:0 is essential for flex children that contain truncating text.
-    // Without it, long unbroken words can force the column wider than intended
-    // and shove the chevron past the card edge.
+    gap: 4,
     minWidth: 0,
   },
-
-  tagRow: {
+  metaRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
-  tagDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: "#FF4D4D",
-  },
-  tagDotIncident: {
-    backgroundColor: "#FF4D4D",
-  },
   tagText: {
     fontSize: 11,
-    lineHeight: 14,
-    fontFamily: Theme.fonts.body.bold,
-    color: "#FF4D4D",
-    letterSpacing: 0.4,
-  },
-  tagTextIncident: {
-    color: "#FF4D4D",
-  },
-
-  cardTitle: {
-    fontSize: 14,
-    lineHeight: 19,
+    lineHeight: 15,
     fontFamily: Theme.fonts.body.semibold,
-    color: Theme.colors.text,
-    // Lock the title to EXACTLY the height of 2 lines regardless of content.
-    // Ensures every card in the row has the same height even when one has a
-    // 1-line title and another has a 2-line title. lineHeight (19) × 2 = 38.
-    minHeight: 38,
   },
-
-  timeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
+  metaDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: Theme.colors.textMuted,
+    opacity: 0.45,
   },
   timeText: {
     fontSize: 11,
-    lineHeight: 14,
+    lineHeight: 15,
     color: Theme.colors.textMuted,
   },
-
-  chevronWrap: {
-    width: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    // No longer absolutely positioned — this is a real flex column now,
-    // which is why the title can never bleed into it.
+  title: {
+    fontSize: 14,
+    lineHeight: 19,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+  info: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Theme.colors.textMuted,
   },
 });

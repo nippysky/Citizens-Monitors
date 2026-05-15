@@ -163,7 +163,10 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
   const liveCarouselQuery = useLiveElectionCarouselQuery();
   const likePostMutation = useLikePulsePostMutation();
 
-  const [carouselIndex, setCarouselIndex] = useState(0);
+  // NOTE: carouselIndex state intentionally removed. Tracking it here caused
+  // PulseForYouTab to re-render on every swipe, which (combined with the
+  // inline ListHeaderComponent) was remounting the carousel and snapping it
+  // back to card 0. The carousel now owns its own scroll state.
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
@@ -289,9 +292,7 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
       if (!isOnline) {
         enqueue({
           type: "pulse-like-post",
-          payload: {
-            postId: post.apiPostId,
-          },
+          payload: { postId: post.apiPostId },
         });
 
         return;
@@ -302,9 +303,7 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
       } catch (error) {
         enqueue({
           type: "pulse-like-post",
-          payload: {
-            postId: post.apiPostId,
-          },
+          payload: { postId: post.apiPostId },
         });
 
         console.log("Pulse post like queued:", error);
@@ -319,9 +318,7 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
         await Share.share({
           message: `💬 ${post.author}\n🗳 ${post.electionLabel}\n\n${
             post.body
-          }\n\n👍 ${
-            likeCounts[post.apiPostId] ?? post.likes
-          } Likes · 💬 ${
+          }\n\n👍 ${likeCounts[post.apiPostId] ?? post.likes} Likes · 💬 ${
             post.commentCount
           } Comments\n\nShared via Citizen Monitors`,
         });
@@ -365,7 +362,13 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
     }
   }, [postsQuery]);
 
-  const renderHeader = () => {
+  // ── Memoized header element ──
+  // CRITICAL: passing a fresh function as ListHeaderComponent on every render
+  // makes FlatList treat it as a NEW component type and remount it. That was
+  // what killed every carousel swipe. By memoizing the JSX element here, the
+  // header keeps its identity across parent re-renders, so the carousel
+  // preserves its scroll state.
+  const headerElement = useMemo(() => {
     if (liveCarouselQuery.isLoading && !liveCarouselQuery.data) {
       return <LiveCarouselSkeleton />;
     }
@@ -377,32 +380,38 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
     return (
       <LiveDiscussionCarousel
         items={liveElections}
-        activeIndex={carouselIndex}
-        onIndexChange={setCarouselIndex}
         onJoinDiscussion={handleJoinDiscussion}
       />
     );
-  };
+  }, [
+    liveCarouselQuery.isLoading,
+    liveCarouselQuery.data,
+    liveElections,
+    handleJoinDiscussion,
+  ]);
 
-  const renderItem = ({ item }: ListRenderItemInfo<PulseFeedItem>) => {
-    const isLiked = likedIds.has(item.apiPostId) || item.isLikedByCurrentUser;
-    const displayLikes = likeCounts[item.apiPostId] ?? item.likes;
+  const renderItem = useCallback(
+    ({ item }: ListRenderItemInfo<PulseFeedItem>) => {
+      const isLiked = likedIds.has(item.apiPostId) || item.isLikedByCurrentUser;
+      const displayLikes = likeCounts[item.apiPostId] ?? item.likes;
 
-    return (
-      <PulseDiscussionCard
-        post={item}
-        isLiked={isLiked}
-        displayLikes={displayLikes}
-        onLike={() => {
-          void handleLike(item);
-        }}
-        onComment={() => handleOpenComments(item)}
-        onShare={() => {
-          void handleShare(item);
-        }}
-      />
-    );
-  };
+      return (
+        <PulseDiscussionCard
+          post={item}
+          isLiked={isLiked}
+          displayLikes={displayLikes}
+          onLike={() => {
+            void handleLike(item);
+          }}
+          onComment={() => handleOpenComments(item)}
+          onShare={() => {
+            void handleShare(item);
+          }}
+        />
+      );
+    },
+    [handleLike, handleOpenComments, handleShare, likeCounts, likedIds]
+  );
 
   if (isInitialLoading) {
     return <PulseFeedSkeleton />;
@@ -414,7 +423,7 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
         data={posts}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
-        ListHeaderComponent={renderHeader}
+        ListHeaderComponent={headerElement}
         showsVerticalScrollIndicator={false}
         onScroll={handleScroll}
         scrollEventThrottle={16}

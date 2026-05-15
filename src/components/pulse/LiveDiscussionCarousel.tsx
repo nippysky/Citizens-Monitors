@@ -1,18 +1,19 @@
 // ─── src/components/pulse/LiveDiscussionCarousel.tsx ──────────────────────────
 import { Ionicons } from "@expo/vector-icons";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  FlatList,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
+  LayoutChangeEvent,
   Platform,
   Pressable,
   StyleSheet,
   View,
-  useWindowDimensions,
 } from "react-native";
 import Animated, {
   Easing,
+  Extrapolation,
+  interpolate,
+  SharedValue,
+  useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
@@ -27,36 +28,47 @@ import HouseOfRepsElection from "@/svgs/app/HouseOfRepsElection";
 import PresidentialElection from "@/svgs/app/PresidentialElection";
 import SenatorElection from "@/svgs/app/SenatorElection";
 
+// Self-contained carousel. Owns its own scroll/active-index state — does NOT
+// ask the parent to track it. Previously activeIndex/onIndexChange were props,
+// which caused the parent (PulseForYouTab) to re-render on every swipe and
+// remount this component, killing scroll state. Hence the "snap back" bug.
 type Props = {
   items: PulseLiveElection[];
-  activeIndex: number;
-  onIndexChange: (index: number) => void;
   onJoinDiscussion: (item: PulseLiveElection) => void;
 };
 
-const SIDE_PADDING = 16;
+// Layout constants.
+//
+// CARD_GAP       : space between adjacent cards
+// NEXT_CARD_PEEK : how much of each neighbour peeks on a middle card
+// SECTION_HPAD   : horizontal padding for the section title
+//
+// Derived:
+//   CARD_INSET    = NEXT_CARD_PEEK + CARD_GAP   ← symmetric on both sides
+//   CARD_WIDTH    = containerWidth − 2 × CARD_INSET
+//   SNAP_INTERVAL = CARD_WIDTH + CARD_GAP
 const CARD_GAP = 12;
-const NEXT_CARD_PEEK = 24;
+const NEXT_CARD_PEEK = 20;
+const SECTION_HPAD = 16;
+
+const DOT_COLOR = Theme.colors.primary;
+
+/* ------------------------------------------------------------------ */
+/* Helpers                                                            */
+/* ------------------------------------------------------------------ */
 
 function getElectionIcon(type: string) {
-  const normalizedType = type.toLowerCase();
+  const t = type.toLowerCase();
 
+  if (t.includes("senatorial") || t.includes("senate")) return SenatorElection;
   if (
-    normalizedType.includes("senatorial") ||
-    normalizedType.includes("senate")
-  ) {
-    return SenatorElection;
-  }
-
-  if (
-    normalizedType.includes("house-of-representatives") ||
-    normalizedType.includes("house of representatives") ||
-    normalizedType.includes("house of rep") ||
-    normalizedType.includes("state house")
+    t.includes("house-of-representatives") ||
+    t.includes("house of representatives") ||
+    t.includes("house of rep") ||
+    t.includes("state house")
   ) {
     return HouseOfRepsElection;
   }
-
   return PresidentialElection;
 }
 
@@ -64,154 +76,148 @@ function formatElectionType(type: string): string {
   return type
     .split("-")
     .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
     .join(" ");
 }
 
 function getElectionTitle(item: PulseLiveElection): string {
-  if (item.electionName?.trim()) {
-    return item.electionName.trim();
-  }
-
-  return formatElectionType(item.electionType);
+  return item.electionName?.trim() || formatElectionType(item.electionType);
 }
 
 function getDiscussionCountText(item: PulseLiveElection): string {
-  if (item.partiesCount > 0) {
-    return `${item.partiesCount} parties active`;
-  }
-
+  if (item.partiesCount > 0) return `${item.partiesCount} parties active`;
   return "Live collation discussion";
 }
 
-function clampIndex(index: number, total: number): number {
-  return Math.max(0, Math.min(index, Math.max(0, total - 1)));
+/* ------------------------------------------------------------------ */
+/* Pulsing LIVE indicator                                             */
+/* ------------------------------------------------------------------ */
+
+function PulsingDot() {
+  const opacity = useSharedValue(1);
+
+  useEffect(() => {
+    opacity.value = withRepeat(
+      withTiming(0.2, {
+        duration: 1200,
+        easing: Easing.inOut(Easing.ease),
+      }),
+      -1,
+      true
+    );
+  }, [opacity]);
+
+  const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+
+  return <Animated.View style={[styles.liveDot, animStyle]} />;
 }
 
-export default function LiveDiscussionCarousel({
-  items,
-  activeIndex,
-  onIndexChange,
-  onJoinDiscussion,
-}: Props) {
-  const listRef = useRef<FlatList<PulseLiveElection>>(null);
-  const { width } = useWindowDimensions();
+/* ------------------------------------------------------------------ */
+/* Pagination dot — driven by scrollX                                 */
+/* ------------------------------------------------------------------ */
 
-  const cardWidth = useMemo(() => {
-    return width - SIDE_PADDING * 2 - NEXT_CARD_PEEK;
-  }, [width]);
+function PageDot({
+  index,
+  scrollX,
+  snapInterval,
+}: {
+  index: number;
+  scrollX: SharedValue<number>;
+  snapInterval: number;
+}) {
+  const animatedStyle = useAnimatedStyle(() => {
+    if (snapInterval <= 0) return { width: 6, opacity: 0.32 };
 
-  const snapInterval = useMemo(() => {
-    return cardWidth + CARD_GAP;
-  }, [cardWidth]);
+    const inputRange = [
+      (index - 1) * snapInterval,
+      index * snapInterval,
+      (index + 1) * snapInterval,
+    ];
 
-  const scrollEnabled = items.length > 1;
+    const w = interpolate(
+      scrollX.value,
+      inputRange,
+      [6, 22, 6],
+      Extrapolation.CLAMP
+    );
 
-  const handleMomentumEnd = (
-    event: NativeSyntheticEvent<NativeScrollEvent>
-  ) => {
-    if (!scrollEnabled) return;
+    const opacity = interpolate(
+      scrollX.value,
+      inputRange,
+      [0.32, 1, 0.32],
+      Extrapolation.CLAMP
+    );
 
-    const offsetX = event.nativeEvent.contentOffset.x;
-    const nextIndex = clampIndex(Math.round(offsetX / snapInterval), items.length);
-
-    if (nextIndex !== activeIndex) {
-      onIndexChange(nextIndex);
-    }
-  };
-
-  const handleScrollEndDrag = (
-    event: NativeSyntheticEvent<NativeScrollEvent>
-  ) => {
-    if (!scrollEnabled) return;
-
-    const velocityX = event.nativeEvent.velocity?.x ?? 0;
-
-    /**
-     * If there is no real momentum, iOS may not fire momentum end.
-     * This keeps the dot correct after slow drags.
-     */
-    if (Math.abs(velocityX) < 0.05) {
-      handleMomentumEnd(event);
-    }
-  };
-
-  const getItemLayout = (
-    _: ArrayLike<PulseLiveElection> | null | undefined,
-    index: number
-  ) => ({
-    length: snapInterval,
-    offset: snapInterval * index,
-    index,
+    return { width: w, opacity };
   });
 
-  if (!items.length) return null;
-
-  return (
-    <View style={styles.wrap}>
-      <AppText style={styles.sectionTitle}>Live Election Discussions</AppText>
-
-      <FlatList
-        ref={listRef}
-        data={items}
-        horizontal
-        scrollEnabled={scrollEnabled}
-        showsHorizontalScrollIndicator={false}
-        keyExtractor={(item, index) => `${item.id}-${index}`}
-        decelerationRate="fast"
-        disableIntervalMomentum
-        bounces={false}
-        alwaysBounceHorizontal={false}
-        overScrollMode="never"
-        snapToInterval={scrollEnabled ? snapInterval : undefined}
-        snapToAlignment="start"
-        contentInsetAdjustmentBehavior="never"
-        contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={{ width: CARD_GAP }} />}
-        onMomentumScrollEnd={handleMomentumEnd}
-        onScrollEndDrag={handleScrollEndDrag}
-        getItemLayout={getItemLayout}
-        initialNumToRender={Math.min(items.length, 3)}
-        maxToRenderPerBatch={3}
-        windowSize={5}
-        removeClippedSubviews={false}
-        renderItem={({ item }) => (
-          <DiscussionCard
-            item={item}
-            width={cardWidth}
-            onJoin={() => onJoinDiscussion(item)}
-          />
-        )}
-      />
-
-      {items.length > 1 ? (
-        <View style={styles.dotsRow}>
-          {items.map((item, index) => (
-            <View
-              key={`${item.id}-dot-${index}`}
-              style={[styles.dot, index === activeIndex && styles.dotActive]}
-            />
-          ))}
-        </View>
-      ) : null}
-    </View>
-  );
+  return <Animated.View style={[styles.dot, animatedStyle]} />;
 }
+
+/* ------------------------------------------------------------------ */
+/* Card — scroll-driven scale + opacity                               */
+/* ------------------------------------------------------------------ */
 
 function DiscussionCard({
   item,
-  width,
+  index,
+  cardWidth,
+  snapInterval,
+  scrollX,
+  isLast,
   onJoin,
 }: {
   item: PulseLiveElection;
-  width: number;
+  index: number;
+  cardWidth: number;
+  snapInterval: number;
+  scrollX: SharedValue<number>;
+  isLast: boolean;
   onJoin: () => void;
 }) {
   const ElectionIcon = getElectionIcon(item.electionType);
   const isLive = item.status === "live";
 
+  const animatedStyle = useAnimatedStyle(() => {
+    if (snapInterval <= 0) return {};
+
+    const inputRange = [
+      (index - 1) * snapInterval,
+      index * snapInterval,
+      (index + 1) * snapInterval,
+    ];
+
+    const scale = interpolate(
+      scrollX.value,
+      inputRange,
+      [0.94, 1, 0.94],
+      Extrapolation.CLAMP
+    );
+
+    const opacity = interpolate(
+      scrollX.value,
+      inputRange,
+      [0.65, 1, 0.65],
+      Extrapolation.CLAMP
+    );
+
+    return {
+      transform: [{ scale }],
+      opacity,
+    };
+  });
+
   return (
-    <View style={[styles.card, { width }]}>
+    <Animated.View
+      style={[
+        styles.card,
+        {
+          width: cardWidth,
+          marginRight: isLast ? 0 : CARD_GAP,
+        },
+        animatedStyle,
+      ]}
+    >
       <View style={styles.cardHeader}>
         <View style={[styles.livePill, !isLive && styles.endedPill]}>
           {isLive ? <PulsingDot /> : null}
@@ -249,32 +255,125 @@ function DiscussionCard({
           </AppText>
         </View>
 
-        <Pressable onPress={onJoin} style={styles.joinBtn}>
+        <Pressable
+          onPress={onJoin}
+          style={({ pressed }) => [
+            styles.joinBtn,
+            pressed && styles.joinBtnPressed,
+          ]}
+        >
           <AppText style={styles.joinBtnText}>Join Discussion</AppText>
         </Pressable>
       </View>
+    </Animated.View>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Carousel                                                           */
+/* ------------------------------------------------------------------ */
+
+export default function LiveDiscussionCarousel({
+  items,
+  onJoinDiscussion,
+}: Props) {
+  // Measure the actual parent width — useWindowDimensions() lies inside
+  // PulseScreen's rounded body wrapper. onLayout is the source of truth.
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  const handleLayout = useCallback((e: LayoutChangeEvent) => {
+    const w = Math.floor(e.nativeEvent.layout.width);
+    setContainerWidth((prev) => (prev === w ? prev : w));
+  }, []);
+
+  const { CARD_WIDTH, SNAP_INTERVAL, CARD_INSET } = useMemo(() => {
+    if (containerWidth <= 0) {
+      return { CARD_WIDTH: 0, SNAP_INTERVAL: 0, CARD_INSET: 0 };
+    }
+
+    const inset = NEXT_CARD_PEEK + CARD_GAP;
+    const cw = Math.floor(containerWidth - 2 * inset);
+
+    return {
+      CARD_WIDTH: cw,
+      SNAP_INTERVAL: cw + CARD_GAP,
+      CARD_INSET: inset,
+    };
+  }, [containerWidth]);
+
+  // Single source of truth — everything (cards + dots) interpolates from this.
+  const scrollX = useSharedValue(0);
+
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollX.value = event.contentOffset.x;
+    },
+  });
+
+  const scrollEnabled = items.length > 1;
+
+  if (!items.length) return null;
+
+  return (
+    <View style={styles.wrap} onLayout={handleLayout}>
+      <AppText style={styles.sectionTitle}>Live Election Discussions</AppText>
+
+      {CARD_WIDTH > 0 && (
+        <Animated.ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          scrollEnabled={scrollEnabled}
+          decelerationRate="fast"
+          snapToInterval={SNAP_INTERVAL}
+          snapToAlignment="start"
+          bounces
+          alwaysBounceHorizontal={false}
+          overScrollMode="never"
+          // Stops vertical drags from the outer feed confusing this scroll.
+          directionalLockEnabled
+          // Symmetric inset → both neighbours peek on a middle card,
+          // and max scroll == (N−1) × SNAP_INTERVAL exactly (no drift).
+          contentContainerStyle={{
+            paddingLeft: CARD_INSET,
+            paddingRight: CARD_INSET,
+          }}
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+        >
+          {items.map((item, index) => (
+            <DiscussionCard
+              key={`${item.id}-${index}`}
+              item={item}
+              index={index}
+              cardWidth={CARD_WIDTH}
+              snapInterval={SNAP_INTERVAL}
+              scrollX={scrollX}
+              isLast={index === items.length - 1}
+              onJoin={() => onJoinDiscussion(item)}
+            />
+          ))}
+        </Animated.ScrollView>
+      )}
+
+      {items.length > 1 ? (
+        <View style={styles.dotsRow}>
+          {items.map((item, index) => (
+            <PageDot
+              key={`${item.id}-dot-${index}`}
+              index={index}
+              scrollX={scrollX}
+              snapInterval={SNAP_INTERVAL}
+            />
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
 
-function PulsingDot() {
-  const opacity = useSharedValue(1);
-
-  useEffect(() => {
-    opacity.value = withRepeat(
-      withTiming(0.2, {
-        duration: 1200,
-        easing: Easing.inOut(Easing.ease),
-      }),
-      -1,
-      true
-    );
-  }, [opacity]);
-
-  const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
-
-  return <Animated.View style={[styles.liveDot, animStyle]} />;
-}
+/* ------------------------------------------------------------------ */
+/* Styles                                                             */
+/* ------------------------------------------------------------------ */
 
 const styles = StyleSheet.create({
   wrap: {
@@ -288,17 +387,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.heading.bold,
-    paddingHorizontal: SIDE_PADDING,
-  },
-
-  /**
-   * Right padding is intentionally larger than left padding.
-   * This is what lets the final card scroll fully into position while keeping
-   * the next-card peek on earlier slides.
-   */
-  listContent: {
-    paddingLeft: SIDE_PADDING,
-    paddingRight: SIDE_PADDING + NEXT_CARD_PEEK,
+    paddingHorizontal: SECTION_HPAD,
   },
 
   card: {
@@ -414,6 +503,11 @@ const styles = StyleSheet.create({
     borderColor: Theme.colors.primary,
   },
 
+  joinBtnPressed: {
+    backgroundColor: "rgba(5, 163, 156, 0.14)",
+    transform: [{ scale: 0.98 }],
+  },
+
   joinBtnText: {
     fontSize: 13,
     lineHeight: 18,
@@ -426,17 +520,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
+    paddingVertical: Platform.OS === "android" ? 2 : 0,
   },
 
   dot: {
-    width: 6,
     height: 6,
-    borderRadius: 999,
-    backgroundColor: "#CDE9E6",
-  },
-
-  dotActive: {
-    width: 22,
-    backgroundColor: Theme.colors.primary,
+    borderRadius: 3,
+    backgroundColor: DOT_COLOR,
   },
 });

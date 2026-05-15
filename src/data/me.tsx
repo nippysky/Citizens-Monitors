@@ -1,10 +1,6 @@
 // ─── src/data/me.ts ──────────────────────────────────────────────────────────
-// ┌─────────────────────────────────────────────────────────────────────────┐
-// │  DEV SWITCH — change this to test different user views:                │
-// │    "observer-pending"  → observer awaiting PVC verification            │
-// │    "observer-verified" → verified observer with all features           │
-// │    "volunteer"         → volunteer, can upgrade to observer            │
-// │    "public-viewer"     → minimal view, can upgrade                     │
+
+import React, { ReactNode } from "react";
 
 import ArchiveReport from "@/svgs/app/profile/ArchiveReport";
 import BankDetails from "@/svgs/app/profile/BankDetails";
@@ -19,21 +15,13 @@ import PULocator from "@/svgs/app/profile/PULocator";
 import Security from "@/svgs/app/profile/Security";
 import Support from "@/svgs/app/profile/Support";
 import SignOut from "@/svgs/app/SignOut";
-import React, { ReactNode } from "react";
 
-// └─────────────────────────────────────────────────────────────────────────┘
-export const DEV_USER_TYPE: DevUserType = "observer-verified";
-// ─────────────────────────────────────────────────────────────────────────────
-
-/* ───── Types ───── */
-
-export type DevUserType =
-  | "observer-pending"
-  | "observer-verified"
-  | "volunteer"
-  | "public-viewer";
+/* ────────────────────────────────────────────────────────────────────────────
+ * Core Me/Profile Types
+ * -------------------------------------------------------------------------- */
 
 export type UserType = "observer" | "volunteer" | "public-viewer";
+
 export type VerificationStatus = "pending" | "verified" | "none";
 
 export type MeUser = {
@@ -50,8 +38,24 @@ export type MeUser = {
   incidentsCount: number;
 };
 
+export type MeMenuItemId =
+  | "personal-profile"
+  | "security"
+  | "polling-unit"
+  | "upgrade-user"
+  | "pvc-verification"
+  | "bank-details"
+  | "digital-vault"
+  | "citizen-academy"
+  | "polling-unit-locator"
+  | "notifications"
+  | "archive-reports"
+  | "support-faq"
+  | "feedback"
+  | "sign-out";
+
 export type MeMenuItem = {
-  id: string;
+  id: MeMenuItemId;
   title: string;
   subtitle: string;
   icon: ReactNode;
@@ -62,63 +66,38 @@ export type MeBannerConfig = {
   show: boolean;
   title: string;
   subtitle: string;
-  type: "complete-profile" | "observer-registration" | "none";
+  type:
+    | "complete-profile"
+    | "observer-registration"
+    | "volunteer-registration"
+    | "none";
 };
 
-/* ───── User presets ───── */
+/* ────────────────────────────────────────────────────────────────────────────
+ * Helpers
+ * -------------------------------------------------------------------------- */
 
-const userPresets: Record<DevUserType, MeUser> = {
-  "observer-pending": {
-    fullName: "Ifeoluwa Ajetomobi",
-    username: "IronEagel24",
-    roleLabel: "Observer at Alimosho PU",
-    userType: "observer",
-    verificationStatus: "pending",
-    pollingUnit: "PU 024, Alimosho",
-    reportsCount: 17,
-    electionsCount: 3,
-    incidentsCount: 24,
-  },
-  "observer-verified": {
-    fullName: "Ifeoluwa Ajetomobi",
-    username: "IronEagel24",
-    roleLabel: "Observer at Alimosho PU",
-    userType: "observer",
-    verificationStatus: "verified",
-    pollingUnit: "PU 024, Alimosho",
-    pvcVerifiedDate: "Mar 19, 2027",
-    reportsCount: 17,
-    electionsCount: 3,
-    incidentsCount: 24,
-  },
-  volunteer: {
-    fullName: "Ifeoluwa Ajetomobi",
-    username: "IronEagel24",
-    roleLabel: "Volunteer at Alimosho PU",
-    userType: "volunteer",
-    verificationStatus: "none",
-    pollingUnit: "PU 024, Alimosho",
-    reportsCount: 17,
-    electionsCount: 3,
-    incidentsCount: 24,
-  },
-  "public-viewer": {
-    fullName: "Ifeoluwa Ajetomobi",
-    username: "IronEagel24",
-    roleLabel: "Public  Viewer",
-    userType: "public-viewer",
-    verificationStatus: "none",
-    pollingUnit: "PU 024, Alimosho",
-    reportsCount: 0,
-    electionsCount: 0,
-    incidentsCount: 0,
-  },
-};
+function icon(node: React.ComponentType<{ width?: number; height?: number }>) {
+  return React.createElement(node, { width: 42, height: 42 });
+}
 
-/** Active mock user — driven by DEV_USER_TYPE flag */
-export const mockMeUser: MeUser = userPresets[DEV_USER_TYPE];
+function hasPollingUnit(user: MeUser): boolean {
+  return Boolean(user.pollingUnit?.trim());
+}
 
-/* ───── Banner logic ───── */
+function getPollingUnitSubtitle(user: MeUser): string {
+  return hasPollingUnit(user)
+    ? user.pollingUnit
+    : "Set your polling unit information";
+}
+
+function getDigitalVaultSubtitle(user: MeUser): string {
+  return `${user.reportsCount} reports across ${user.electionsCount} elections`;
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Banner Logic
+ * -------------------------------------------------------------------------- */
 
 export function getMeBanner(user: MeUser): MeBannerConfig {
   if (user.userType === "observer" && user.verificationStatus === "pending") {
@@ -139,92 +118,99 @@ export function getMeBanner(user: MeUser): MeBannerConfig {
     };
   }
 
-  return { show: false, title: "", subtitle: "", type: "none" };
-}
-/* ───── Dynamic menu items ───── */
-
-export function getMeAccountItems(user: MeUser): MeMenuItem[] {
-  const items: MeMenuItem[] = [];
-
-  // Personal Profile — always
-  items.push({
-    id: "personal-profile",
-    title: "Personal Profile",
-    subtitle: "Edit your profile information",
-    icon: <Profile width={42} height={42} />,
-  });
-
-  // Security — always
-  items.push({
-    id: "security",
-    title: "Security",
-    subtitle: "Set new login password",
-    icon: <Security width={42} height={42} />,
-  });
-
-  // Polling Unit — observer & volunteer only
-  if (user.userType === "observer" || user.userType === "volunteer") {
-    items.push({
-      id: "polling-unit",
-      title: "My Polling Unit",
-      subtitle: user.pollingUnit,
-      icon: <MyPollingUnit width={42} height={42} />,
-    });
+  if (user.userType === "public-viewer") {
+    return {
+      show: true,
+      title: "Volunteer Registration",
+      subtitle: "Upgrade to participate in your polling unit.",
+      type: "volunteer-registration",
+    };
   }
 
-  // Public viewer & volunteer: Upgrade User Type
-  if (user.userType === "public-viewer" || user.userType === "volunteer") {
+  return {
+    show: false,
+    title: "",
+    subtitle: "",
+    type: "none",
+  };
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Account Menu Logic
+ * -------------------------------------------------------------------------- */
+
+export function getMeAccountItems(user: MeUser): MeMenuItem[] {
+  const items: MeMenuItem[] = [
+    {
+      id: "personal-profile",
+      title: "Personal Profile",
+      subtitle: "Edit your profile information",
+      icon: icon(Profile),
+    },
+    {
+      id: "security",
+      title: "Security",
+      subtitle: "Set new login password",
+      icon: icon(Security),
+    },
+    {
+      id: "polling-unit",
+      title: "My Polling Unit",
+      subtitle: getPollingUnitSubtitle(user),
+      icon: icon(MyPollingUnit),
+    },
+  ];
+
+  if (user.userType === "public-viewer") {
     items.push({
       id: "upgrade-user",
       title: "Upgrade User Type",
-      subtitle: "Set polling unit you associated with",
-      icon: <PUCheck width={42} height={42} />,
+      subtitle: "Become a volunteer and participate in your polling unit.",
+      icon: icon(PUCheck),
     });
   }
 
-  // Observer verified: PVC, Bank, Archive
+  if (user.userType === "volunteer") {
+    items.push({
+      id: "upgrade-user",
+      title: "Upgrade User Type",
+      subtitle: "Submit your PVC to apply as a polling unit observer.",
+      icon: icon(PUCheck),
+    });
+  }
+
   if (user.userType === "observer" && user.verificationStatus === "verified") {
     items.push({
       id: "pvc-verification",
       title: "PVC Verification",
       subtitle: user.pvcVerifiedDate
         ? `Verified: ${user.pvcVerifiedDate}`
-        : "Upload your PVC",
-      icon: <PUCheck width={42} height={42} />,
+        : "PVC verification complete",
+      icon: icon(PUCheck),
     });
+
     items.push({
       id: "bank-details",
       title: "Observer Bank Detail",
-      subtitle: "Get remunerated for being an observer",
-      icon: <BankDetails width={42} height={42} />,
-    });
-    items.push({
-      id: "archive-reports",
-      title: "Digital Vault",
-      subtitle: `${user.reportsCount} reports across ${user.electionsCount} elections`,
-      icon: <ArchiveReport width={42} height={42} />,
+      subtitle: "Manage observer payout details",
+      icon: icon(BankDetails),
     });
   }
 
-  // Digital Vault — observer pending, volunteer (not verified observer, not public viewer)
-  if (
-    (user.userType === "observer" && user.verificationStatus === "pending") ||
-    user.userType === "volunteer"
-  ) {
+  if (user.userType === "observer" || user.userType === "volunteer") {
     items.push({
       id: "digital-vault",
       title: "Digital Vault",
-      subtitle: `${user.reportsCount} reports across ${user.electionsCount} elections`,
-      icon: <DigitalVaultCheck width={42} height={42} />,
+      subtitle: getDigitalVaultSubtitle(user),
+      icon: icon(DigitalVaultCheck),
     });
   }
 
-  // Citizen Academy — always
   items.push({
     id: "citizen-academy",
     title: "Citizen Academy",
     subtitle: "Know all about election practices",
-    icon: <CitizenAcademy width={42} height={42} />,
+    icon: icon(CitizenAcademy),
   });
 
   return items;
@@ -235,64 +221,74 @@ export function getMeOtherItems(): MeMenuItem[] {
     {
       id: "polling-unit-locator",
       title: "Polling Unit Locator",
-      subtitle: "Locate your polling unit",
-      icon: <PULocator width={42} height={42} />,
+      subtitle: "Find polling units by state, LGA and ward",
+      icon: icon(PULocator),
     },
     {
       id: "notifications",
       title: "Notifications",
-      subtitle: "Manage alerts and push messages",
-      icon: <Notification width={42} height={42} />,
+      subtitle: "Manage alerts and app messages",
+      icon: icon(Notification),
+    },
+    {
+      id: "archive-reports",
+      title: "Archive Reports",
+      subtitle: "View previous election submissions",
+      icon: icon(ArchiveReport),
     },
     {
       id: "support-faq",
       title: "Support & FAQ",
-      subtitle: "Get help from here",
-      icon: <Support width={42} height={42} />,
+      subtitle: "Get help using Citizen Monitor",
+      icon: icon(Support),
     },
     {
       id: "feedback",
       title: "Give Feedback",
-      subtitle: "Help improve this app",
-      icon: <Feedback width={42} height={42} />,
+      subtitle: "Tell us how to improve the app",
+      icon: icon(Feedback),
     },
     {
       id: "sign-out",
       title: "Sign Out",
       subtitle: "Log out from this device",
-      icon: <SignOut width={42} height={42} />,
+      icon: icon(SignOut),
       tone: "danger",
     },
   ];
 }
 
-/* ───── Notification settings ───── */
+/* ────────────────────────────────────────────────────────────────────────────
+ * Notification Settings
+ * Matches backend /profile/notifications response exactly.
+ * -------------------------------------------------------------------------- */
 
 export type NotificationSettingsState = {
   pollingUnitActivity: boolean;
   electionDayAlert: boolean;
   discussionReplies: boolean;
-  resultsAggregated: boolean;
-  resultsElectionDayAlert: boolean;
+  resultAggregated: boolean;
   reportConfirmed: boolean;
   reportFlagged: boolean;
   securityAlerts: boolean;
-  newsletters: boolean;
+  newsletter: boolean;
 };
 
 export const defaultNotificationSettings: NotificationSettingsState = {
   pollingUnitActivity: true,
   electionDayAlert: false,
   discussionReplies: false,
-  resultsAggregated: false,
-  resultsElectionDayAlert: false,
+  resultAggregated: false,
   reportConfirmed: false,
-  reportFlagged: true,
+  reportFlagged: false,
   securityAlerts: false,
-  newsletters: true,
+  newsletter: true,
 };
 
-/* ───── Citizen Academy ───── */
+/* ────────────────────────────────────────────────────────────────────────────
+ * Citizen Academy
+ * Static educational content for now. This is not user/profile dummy state.
+ * -------------------------------------------------------------------------- */
 
 export type AcademyItem = {
   id: string;
@@ -312,7 +308,7 @@ export const citizenAcademyItems: AcademyItem[] = [
     description:
       "Step-by-step process on how to register and collect your Permanent Voter Card.",
     content:
-      "The Permanent Voter Card (PVC) is the primary identity document for every voter in Nigeria. Without it, you cannot cast your ballot.\n\nStep 1: Check your registration status on the official INEC portal. If you are not registered, wait for the Continuous Voter Registration (CVR) window.\n\nStep 2: Visit your local government headquarters or designated registration center with a valid ID (National ID, Drivers License, or Passport).\n\nStep 3: Provide your biometric data (fingerprints and facial capture) to the registration officer.\n\nStep 4: Collect your Temporary Voter Card (TVC). You will be notified by SMS or Email when your PVC is ready for collection.",
+      "The Permanent Voter Card (PVC) is the primary identity document for every voter in Nigeria. Without it, you cannot cast your ballot.\n\nStep 1: Check your registration status on the official INEC portal. If you are not registered, wait for the Continuous Voter Registration (CVR) window.\n\nStep 2: Visit your local government headquarters or designated registration center with a valid ID such as National ID, Driver’s License, or Passport.\n\nStep 3: Provide your biometric data to the registration officer.\n\nStep 4: Collect your Temporary Voter Card and follow official collection updates for your PVC.",
   },
   {
     id: "voters-right",
@@ -322,7 +318,7 @@ export const citizenAcademyItems: AcademyItem[] = [
     description:
       "Understand what you can and cannot do at the polling unit as a citizen.",
     content:
-      "Every citizen has the right to vote freely without intimidation. You have the right to observe the counting process and to challenge any irregularity you witness.",
+      "Every citizen has the right to vote freely without intimidation. You have the right to observe the counting process peacefully and report irregularities through lawful channels.",
   },
   {
     id: "incident-reporting",
@@ -332,31 +328,25 @@ export const citizenAcademyItems: AcademyItem[] = [
     description:
       "How to accurately document and report irregularities during elections.",
     content:
-      "When reporting an incident, capture photographic or video evidence. Note the time, location, and names of any officials present. Submit through the Citizen Monitors app immediately.",
+      "When reporting an incident, capture clear photo or video evidence where safe. Note the time, location, and context. Submit reports through Citizen Monitor as soon as possible.",
   },
   {
     id: "electoral-act",
     title: "Electoral Act 2022",
-    category: "LAW",
+    category: "Law",
     readTime: "5 MIN READ",
     description:
-      "Full legal framework governing the conduct of elections in Nigeria.",
+      "A quick guide to the legal framework governing election conduct in Nigeria.",
     content:
-      "The Electoral Act 2022 (as amended) is the principal legislation governing elections in Nigeria. Key provisions include electronic transmission of results, BVAS for voter accreditation, and penalties for electoral offences.",
-  },
-  {
-    id: "voters-handbook",
-    title: "Voter's Handbook 2027 Edition",
-    category: "Security",
-    readTime: "5 MIN READ",
-    description:
-      "Step-by-step process on how to register and collect your Permanent Voter Card.",
-    content:
-      "This comprehensive handbook covers everything from registration to voting day procedures.",
+      "The Electoral Act 2022 is a core legal framework for elections in Nigeria. It covers voting procedures, electronic accreditation, offences, and responsibilities of election stakeholders.",
   },
 ];
 
-/* ───── Archive Reports ───── */
+/* ────────────────────────────────────────────────────────────────────────────
+ * Archive Reports
+ * Kept as an empty compatibility export to avoid old screens crashing.
+ * Real vault/report data should now come from production APIs.
+ * -------------------------------------------------------------------------- */
 
 export type ArchiveReportItem = {
   id: string;
@@ -377,39 +367,14 @@ export type ArchiveElection = {
   reports: ArchiveReportItem[];
 };
 
-export const archiveData = {
-  totalResults: 12,
-  totalIncidents: 24,
-  totalElections: 3,
-  elections: [
-    {
-      id: "ae-1",
-      title: "Lagos Governorship 2026",
-      location: "Ikotun Primary School, PU 024 · Alimosho",
-      electionType: "Gubernatorial",
-      reports: [
-        { id: "ar-1", type: "result" as const, title: "Result Report — EC8A", date: "Mar 20, 2027", time: "11:58am", partySummary: "APC 847 · PDP 612 · LP 234 · NNPP 42" },
-        { id: "ar-2", type: "incident" as const, title: "Incident — Ballot Stuffing", date: "Mar 20, 2027", time: "11:58am", evidenceLabel: "Video evidence uploaded", evidenceType: "video" as const },
-        { id: "ar-3", type: "incident" as const, title: "Incident — Underage Voting", date: "Mar 20, 2027", time: "11:58am", evidenceLabel: "Photo evidence uploaded", evidenceType: "photo" as const },
-      ],
-    },
-    {
-      id: "ae-2",
-      title: "House of Representative election 2026",
-      location: "Ikotun Primary School, PU 024 · Alimosho",
-      electionType: "House of Reps",
-      reports: [
-        { id: "ar-4", type: "result" as const, title: "Result Report — EC8A", date: "Mar 20, 2027", time: "11:58am", partySummary: "APC 847 · PDP 612 · LP 234 · NNPP 42" },
-      ],
-    },
-    {
-      id: "ae-3",
-      title: "Presidential election 2026",
-      location: "Alimosho LG Area 4, PU 024 · Alimosho",
-      electionType: "Presidential",
-      reports: [
-        { id: "ar-7", type: "result" as const, title: "Result Report — EC8A", date: "Mar 20, 2027", time: "11:58am", partySummary: "APC 847 · PDP 612 · LP 234 · NNPP 42" },
-      ],
-    },
-  ],
+export const archiveData: {
+  totalResults: number;
+  totalIncidents: number;
+  totalElections: number;
+  elections: ArchiveElection[];
+} = {
+  totalResults: 0,
+  totalIncidents: 0,
+  totalElections: 0,
+  elections: [],
 };

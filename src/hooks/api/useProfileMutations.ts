@@ -8,27 +8,27 @@ import {
   updateAnonymousIdentity,
   UpdateAnonymousIdentityPayload,
   updateMyProfile,
-  UpdateMyProfilePayload,
+  UpdatePasswordPayload,
   updateNotificationSettings,
   updatePassword,
-  UpdatePasswordPayload,
+  UpdateProfilePayload,
+  upgradePublicViewerToVolunteer,
+  upgradeVolunteerToObserver,
+  UpgradeVolunteerToObserverPayload,
 } from "@/lib/api/profile.api";
 
-export const profileQueryKeys = {
-  me: ["profile", "me"] as const,
-  notifications: ["profile", "notifications"] as const,
-  banks: ["profile", "banks"] as const,
-};
+function invalidateProfileQueries(queryClient: ReturnType<typeof useQueryClient>) {
+  void queryClient.invalidateQueries({ queryKey: ["profile", "me"] });
+  void queryClient.invalidateQueries({ queryKey: ["my-profile"] });
+}
 
 export function useUpdateMyProfileMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: UpdateMyProfilePayload) => updateMyProfile(payload),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: profileQueryKeys.me,
-      });
+    mutationFn: (payload: UpdateProfilePayload) => updateMyProfile(payload),
+    onSuccess: () => {
+      invalidateProfileQueries(queryClient);
     },
   });
 }
@@ -45,26 +45,23 @@ export function useUpdateNotificationSettingsMutation() {
   return useMutation({
     mutationFn: (payload: MobileNotificationSettingsState) =>
       updateNotificationSettings(payload),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: profileQueryKeys.notifications,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["profile", "notifications"],
       });
-      await queryClient.invalidateQueries({
-        queryKey: profileQueryKeys.me,
-      });
+      invalidateProfileQueries(queryClient);
     },
   });
 }
 
 export function useGenerateAnonymousUsernameMutation() {
-  /**
-   * Important:
-   * Do NOT invalidate/refetch profile here.
-   * The generated name is treated as a local draft inside the profile sheet
-   * until the user taps "Save Changes".
-   */
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: generateAnonymousUsername,
+    onSuccess: () => {
+      invalidateProfileQueries(queryClient);
+    },
   });
 }
 
@@ -74,10 +71,8 @@ export function useUpdateAnonymousIdentityMutation() {
   return useMutation({
     mutationFn: (payload: UpdateAnonymousIdentityPayload) =>
       updateAnonymousIdentity(payload),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: profileQueryKeys.me,
-      });
+    onSuccess: () => {
+      invalidateProfileQueries(queryClient);
     },
   });
 }
@@ -85,5 +80,28 @@ export function useUpdateAnonymousIdentityMutation() {
 export function useSubmitFeedbackMutation() {
   return useMutation({
     mutationFn: (payload: SubmitFeedbackPayload) => submitFeedback(payload),
+  });
+}
+
+export function useUpgradePublicViewerToVolunteerMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: upgradePublicViewerToVolunteer,
+    onSuccess: () => {
+      invalidateProfileQueries(queryClient);
+    },
+  });
+}
+
+export function useUpgradeVolunteerToObserverMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: UpgradeVolunteerToObserverPayload) =>
+      upgradeVolunteerToObserver(payload),
+    onSuccess: () => {
+      invalidateProfileQueries(queryClient);
+    },
   });
 }

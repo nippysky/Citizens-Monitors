@@ -1,16 +1,8 @@
 import { apiRequest } from "@/lib/api/http";
 
-export type ProfileImage = {
-  location?: string;
-  name?: string;
-  type?: string;
-  size?: number;
-  url?: string;
-  _id?: string;
-  __v?: number;
-};
+export type ProfileRole = "observer" | "volunteer" | "public-viewer";
 
-export type ObserverIdFile = {
+export type ApiFile = {
   location?: string;
   name?: string;
   type?: string;
@@ -48,14 +40,13 @@ export type MyProfileResponse = {
     mobile?: Partial<MobileNotificationSettingsState>;
   };
   _id?: string;
-  id?: string;
-  role?: "observer" | "volunteer" | "public-viewer" | string;
+  role?: ProfileRole;
   email?: string;
   firstName?: string;
   lastName?: string;
   gender?: string;
   dateOfBirth?: string;
-  profileImage?: ProfileImage | null;
+  profileImage?: ApiFile;
   state?: string;
   lga?: string;
   ward?: string;
@@ -71,7 +62,7 @@ export type MyProfileResponse = {
   isObserverInPollingUnit?: boolean;
   pendingObserverVerification?: boolean;
   coverageUpdateCount?: number;
-  observerId?: ObserverIdFile[];
+  observerId?: ApiFile[];
   phoneNumber?: string;
   bankName?: string;
   bankAccountNumber?: string;
@@ -85,18 +76,24 @@ export type MyProfileResponse = {
   [key: string]: unknown;
 };
 
-export type UpdateMyProfilePayload = {
-  firstName: string;
-  lastName: string;
-  gender: string;
-  dateOfBirth: string;
-  profileImageUri?: string | null;
-};
-
 export type UpdatePasswordPayload = {
   currentPassword: string;
   newPassword: string;
   confirmPassword: string;
+};
+
+export type UpdateProfilePayload = {
+  firstName?: string;
+  lastName?: string;
+  gender?: string;
+  dateOfBirth?: string;
+  state?: string;
+  lga?: string;
+  ward?: string;
+  pollingUnit?: string;
+  anonymousUsername?: string;
+  useAnonymousIdentity?: boolean;
+  profileImageUri?: string | null;
 };
 
 export type UpdateNotificationSettingsResponse = {
@@ -119,15 +116,6 @@ export type UpdateAnonymousIdentityResponse = {
   anonymousUsername?: string;
 };
 
-export type BankOption = {
-  code: string;
-  name: string;
-};
-
-export type BanksResponse = {
-  banks: BankOption[];
-};
-
 export type SubmitFeedbackPayload = {
   title: string;
   message: string;
@@ -138,101 +126,232 @@ export type SubmitFeedbackResponse = {
   feedbackId: string;
 };
 
+export type BankOption = {
+  code: string;
+  name: string;
+};
+
+export type BanksResponse = {
+  banks: BankOption[];
+};
+
+export type UpgradePublicViewerToVolunteerResponse = {
+  message: string;
+  user: MyProfileResponse;
+};
+
+export type UpgradeVolunteerToObserverPayload = {
+  phoneNumber: string;
+  pvcFrontUri: string;
+  pvcBackUri: string;
+};
+
+export type UpgradeVolunteerToObserverResponse = {
+  message: string;
+  user: MyProfileResponse;
+};
+
 type ReactNativeFile = {
   uri: string;
   name: string;
   type: string;
 };
 
-function trimPayload<T extends Record<string, unknown>>(payload: T): T {
-  const next: Record<string, unknown> = {};
+type UploadKind = "image" | "document";
 
-  Object.entries(payload).forEach(([key, value]) => {
-    next[key] = typeof value === "string" ? value.trim() : value;
-  });
+const BACKEND_ACCEPTED_EXTENSIONS = new Set([
+  "jpg",
+  "jpeg",
+  "png",
+  "webp",
+  "svg",
+  "pdf",
+]);
 
-  return next as T;
+function trimOrEmpty(value?: string): string {
+  return value?.trim() ?? "";
 }
 
-function getFileExtension(uri: string): string {
+function getRawFileExtension(uri: string): string {
   const cleanUri = uri.split("?")[0] ?? uri;
-  const extension = cleanUri.split(".").pop()?.toLowerCase();
+  const rawExtension = cleanUri.split(".").pop()?.toLowerCase() ?? "";
 
-  if (!extension || extension.length > 5) {
+  if (!rawExtension || rawExtension.length > 5) {
+    return "";
+  }
+
+  return rawExtension;
+}
+
+function normalizeFileExtension(uri: string, kind: UploadKind = "image"): string {
+  const extension = getRawFileExtension(uri);
+
+  if (!extension) {
+    return kind === "document" ? "pdf" : "jpg";
+  }
+
+  if (extension === "jpeg") {
     return "jpg";
+  }
+
+  if (extension === "heic" || extension === "heif") {
+    return "jpg";
+  }
+
+  if (!BACKEND_ACCEPTED_EXTENSIONS.has(extension)) {
+    return kind === "document" ? "pdf" : "jpg";
   }
 
   return extension;
 }
 
-function getMimeType(uri: string): string {
-  const extension = getFileExtension(uri);
-
+function getMimeType(extension: string): string {
   switch (extension) {
     case "png":
       return "image/png";
     case "webp":
       return "image/webp";
-    case "heic":
-    case "heif":
-      return "image/heic";
-    case "jpeg":
+    case "svg":
+      return "image/svg+xml";
+    case "pdf":
+      return "application/pdf";
     case "jpg":
+    case "jpeg":
     default:
       return "image/jpeg";
   }
 }
 
-function createImageFile(uri: string, fallbackName: string): ReactNativeFile {
-  const extension = getFileExtension(uri);
+function createNativeFile(
+  uri: string,
+  fallbackName: string,
+  kind: UploadKind = "image"
+): ReactNativeFile {
+  const extension = normalizeFileExtension(uri, kind);
 
   return {
     uri,
     name: `${fallbackName}.${extension}`,
-    type: getMimeType(uri),
+    type: getMimeType(extension),
   };
+}
+
+function appendFile(
+  formData: FormData,
+  key: string,
+  uri: string,
+  fallbackName: string,
+  kind: UploadKind = "image"
+): void {
+  formData.append(
+    key,
+    createNativeFile(uri, fallbackName, kind) as unknown as Blob
+  );
+}
+
+function appendTextIfPresent(
+  formData: FormData,
+  key: string,
+  value: string | undefined
+): void {
+  if (value === undefined) return;
+
+  formData.append(key, value.trim());
+}
+
+function appendBooleanIfPresent(
+  formData: FormData,
+  key: string,
+  value: boolean | undefined
+): void {
+  if (value === undefined) return;
+
+  formData.append(key, value ? "true" : "false");
+}
+
+function addTextIfPresent(
+  body: Record<string, unknown>,
+  key: string,
+  value: string | undefined
+): void {
+  if (value === undefined) return;
+
+  body[key] = value.trim();
+}
+
+function addBooleanIfPresent(
+  body: Record<string, unknown>,
+  key: string,
+  value: boolean | undefined
+): void {
+  if (value === undefined) return;
+
+  body[key] = value;
 }
 
 export async function getMyProfile(): Promise<MyProfileResponse> {
   return apiRequest<MyProfileResponse>("/profile/me", {
     method: "GET",
-    auth: true,
   });
 }
 
 export async function updateMyProfile(
-  payload: UpdateMyProfilePayload
+  payload: UpdateProfilePayload
 ): Promise<MyProfileResponse> {
-  const hasProfileImage = Boolean(payload.profileImageUri?.trim());
+  const hasImage = Boolean(payload.profileImageUri);
 
-  if (hasProfileImage && payload.profileImageUri) {
+  if (hasImage) {
     const formData = new FormData();
 
-    formData.append("firstName", payload.firstName.trim());
-    formData.append("lastName", payload.lastName.trim());
-    formData.append("gender", payload.gender.trim());
-    formData.append("dateOfBirth", payload.dateOfBirth.trim());
-    formData.append(
-      "profileImage",
-      createImageFile(payload.profileImageUri, "profile-image") as unknown as Blob
+    appendTextIfPresent(formData, "firstName", payload.firstName);
+    appendTextIfPresent(formData, "lastName", payload.lastName);
+    appendTextIfPresent(formData, "gender", payload.gender);
+    appendTextIfPresent(formData, "dateOfBirth", payload.dateOfBirth);
+    appendTextIfPresent(formData, "state", payload.state);
+    appendTextIfPresent(formData, "lga", payload.lga);
+    appendTextIfPresent(formData, "ward", payload.ward);
+    appendTextIfPresent(formData, "pollingUnit", payload.pollingUnit);
+    appendTextIfPresent(
+      formData,
+      "anonymousUsername",
+      payload.anonymousUsername
     );
+    appendBooleanIfPresent(
+      formData,
+      "useAnonymousIdentity",
+      payload.useAnonymousIdentity
+    );
+
+    if (payload.profileImageUri) {
+      appendFile(formData, "profileImage", payload.profileImageUri, "profile");
+    }
 
     return apiRequest<MyProfileResponse>("/profile/me", {
       method: "PUT",
-      auth: true,
       body: formData,
     });
   }
 
+  const body: Record<string, unknown> = {};
+
+  addTextIfPresent(body, "firstName", payload.firstName);
+  addTextIfPresent(body, "lastName", payload.lastName);
+  addTextIfPresent(body, "gender", payload.gender);
+  addTextIfPresent(body, "dateOfBirth", payload.dateOfBirth);
+  addTextIfPresent(body, "state", payload.state);
+  addTextIfPresent(body, "lga", payload.lga);
+  addTextIfPresent(body, "ward", payload.ward);
+  addTextIfPresent(body, "pollingUnit", payload.pollingUnit);
+  addTextIfPresent(body, "anonymousUsername", payload.anonymousUsername);
+  addBooleanIfPresent(
+    body,
+    "useAnonymousIdentity",
+    payload.useAnonymousIdentity
+  );
+
   return apiRequest<MyProfileResponse>("/profile/me", {
     method: "PUT",
-    auth: true,
-    body: trimPayload({
-      firstName: payload.firstName,
-      lastName: payload.lastName,
-      gender: payload.gender,
-      dateOfBirth: payload.dateOfBirth,
-    }),
+    body,
   });
 }
 
@@ -241,15 +360,17 @@ export async function updatePassword(
 ): Promise<MyProfileResponse> {
   return apiRequest<MyProfileResponse>("/profile/me/password", {
     method: "PUT",
-    auth: true,
-    body: trimPayload(payload),
+    body: {
+      currentPassword: payload.currentPassword,
+      newPassword: payload.newPassword,
+      confirmPassword: payload.confirmPassword,
+    },
   });
 }
 
 export async function getMobileNotificationSettings(): Promise<MobileNotificationSettingsState> {
   return apiRequest<MobileNotificationSettingsState>("/profile/notifications", {
     method: "GET",
-    auth: true,
   });
 }
 
@@ -260,7 +381,6 @@ export async function updateNotificationSettings(
     "/profile/notifications",
     {
       method: "PUT",
-      auth: true,
       body: payload,
     }
   );
@@ -271,7 +391,7 @@ export async function generateAnonymousUsername(): Promise<GenerateAnonymousUser
     "/profile/me/anonymous-username/generate",
     {
       method: "POST",
-      auth: true,
+      body: {},
     }
   );
 }
@@ -283,19 +403,16 @@ export async function updateAnonymousIdentity(
     "/profile/me/anonymous-identity",
     {
       method: "PUT",
-      auth: true,
       body: payload,
     }
   );
 }
 
-export async function getBanks(): Promise<BankOption[]> {
-  const response = await apiRequest<BanksResponse>("/banks", {
+export async function getBanks(): Promise<BanksResponse> {
+  return apiRequest<BanksResponse>("/banks", {
     method: "GET",
     auth: false,
   });
-
-  return response.banks;
 }
 
 export async function submitFeedback(
@@ -303,7 +420,38 @@ export async function submitFeedback(
 ): Promise<SubmitFeedbackResponse> {
   return apiRequest<SubmitFeedbackResponse>("/profile/feedback", {
     method: "POST",
-    auth: true,
-    body: trimPayload(payload),
+    body: {
+      title: trimOrEmpty(payload.title),
+      message: trimOrEmpty(payload.message),
+    },
   });
+}
+
+export async function upgradePublicViewerToVolunteer(): Promise<UpgradePublicViewerToVolunteerResponse> {
+  return apiRequest<UpgradePublicViewerToVolunteerResponse>(
+    "/profile/upgrade/public-viewer-to-volunteer",
+    {
+      method: "PUT",
+      body: {},
+    }
+  );
+}
+
+export async function upgradeVolunteerToObserver(
+  payload: UpgradeVolunteerToObserverPayload
+): Promise<UpgradeVolunteerToObserverResponse> {
+  const formData = new FormData();
+
+  formData.append("phoneNumber", payload.phoneNumber.trim());
+
+  appendFile(formData, "observerId[]", payload.pvcFrontUri, "front-pvc");
+  appendFile(formData, "observerId[]", payload.pvcBackUri, "back-pvc");
+
+  return apiRequest<UpgradeVolunteerToObserverResponse>(
+    "/profile/upgrade/volunteer-to-observer",
+    {
+      method: "PUT",
+      body: formData,
+    }
+  );
 }

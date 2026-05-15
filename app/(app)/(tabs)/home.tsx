@@ -1,70 +1,272 @@
+import { LinearGradient } from "expo-linear-gradient";
+import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import CollationUpdatesSection from "@/components/home/CollationUpdatesSection";
 import ElectionCarousel from "@/components/home/ElectionCarousel";
-import HomeHeader from "@/components/home/HomeHeader";
 import HomeCalendarStrip from "@/components/home/HomeCalenderStrip";
+import HomeHeader from "@/components/home/HomeHeader";
 import LatestNewsSection from "@/components/home/LatestNewsSection";
+import PulseAndDiscourseSection from "@/components/home/PulseAndDiscourseSection";
 import QuietDayBanner from "@/components/home/QuietDayBanner";
 import VoterEssentialsModal from "@/components/home/VoterEssentialsModal";
 import VoterEssentialsSection from "@/components/home/VoterEssentialSection";
-import CollationUpdatesSection from "@/components/home/CollationUpdatesSection";
-import PulseAndDiscourseSection from "@/components/home/PulseAndDiscourseSection";
 import TabBarSpacer from "@/components/layout/TabBarSpacer";
 import TourTarget from "@/components/tour/TourTarget";
+import AppButton from "@/components/ui/AppButton";
 import AppText from "@/components/ui/AppText";
-import { useAuth } from "@/context/AuthContext";
 import { useNetwork } from "@/context/NetworkContext";
 import { useTourScrollReset } from "@/context/TourContext";
-import { defaultHomeDate, homeContentByDate, mockRole } from "@/data/home";
+import {
+  buildCalendarWindow,
+  formatHomeDateKey,
+  startOfLocalDay,
+} from "@/data/home";
+import { useDashboardQuery } from "@/hooks/api/useDashboardQuery";
+import { useMyProfileQuery } from "@/hooks/api/useMyProfileQuery";
+import {
+  DashboardElectionUpdate,
+  DashboardLiveElection,
+  DashboardNewsItem,
+  DashboardSocialUpdate,
+} from "@/lib/api/dashboard.api";
 import { Theme } from "@/theme";
-import { CalendarDayItem } from "@/types/home";
+import {
+  CalendarDayItem,
+  DiscussionItem,
+  ElectionCardItem,
+  ElectionType,
+  ElectionUpdateItem,
+  NewsItem,
+  UserRole,
+} from "@/types/home";
 
-function roleLabelFromRole(role: typeof mockRole): string {
+const HOME_TOUR_TARGET_IDS = ["home.calendar-strip"];
+
+function roleLabelFromRole(role?: string): string {
   if (role === "observer") return "Observer";
   if (role === "public-viewer") return "Public Viewer";
   return "Volunteer";
 }
 
-function formatDateKey(date: Date) {
-  return date.toISOString().slice(0, 10);
+function userRoleFromProfileRole(role?: string): UserRole {
+  if (role === "observer") return "observer";
+  if (role === "public-viewer") return "public-viewer";
+  return "volunteer";
 }
 
-function buildStableCalendarWindow(anchorDate: Date, daysEachSide = 15): CalendarDayItem[] {
-  const items: CalendarDayItem[] = [];
+function getFirstName(params: {
+  profileFirstName?: string;
+  authFirstName?: string;
+  email?: string;
+}): string {
+  const cleanProfileName = params.profileFirstName?.trim();
+  if (cleanProfileName) return cleanProfileName;
 
-  for (let offset = -daysEachSide; offset <= daysEachSide; offset++) {
-    const date = new Date(anchorDate);
-    date.setDate(anchorDate.getDate() + offset);
+  const cleanAuthName = params.authFirstName?.trim();
+  if (cleanAuthName) return cleanAuthName;
 
-    items.push({
-      key: formatDateKey(date),
-      date,
-      weekdayShort: date
-        .toLocaleDateString("en-US", { weekday: "short" })
-        .toUpperCase(),
-      dayNumber: String(date.getDate()),
-      monthLabel: date.toLocaleDateString("en-US", {
-        month: "long",
-        year: "numeric",
-      }),
-    });
+  const emailName = params.email?.split("@")[0]?.trim();
+  if (emailName) return emailName;
+
+  return "Citizen";
+}
+
+function normalizeElectionType(value: string): ElectionType {
+  const clean = value.trim().toLowerCase();
+
+  if (clean.includes("presidential") || clean === "national") return "national";
+  if (clean.includes("senatorial") || clean.includes("senate")) {
+    return "senatorial";
+  }
+  if (clean.includes("representatives") || clean.includes("house-of-rep")) {
+    return "house-of-representatives";
+  }
+  if (clean.includes("assembly")) return "house-of-assembly";
+  if (clean.includes("gubernatorial")) return "gubernatorial";
+  if (clean.includes("local")) return "local-government";
+
+  return "other";
+}
+
+function formatDateRange(startDate?: string, endDate?: string): string {
+  if (!startDate && !endDate) return "Live now";
+
+  const formatter = new Intl.DateTimeFormat("en-NG", {
+    month: "short",
+    day: "numeric",
+    timeZone: "Africa/Lagos",
+  });
+
+  const start = startDate ? new Date(startDate) : null;
+  const end = endDate ? new Date(endDate) : null;
+
+  const startValid = start && !Number.isNaN(start.getTime());
+  const endValid = end && !Number.isNaN(end.getTime());
+
+  if (startValid && endValid) {
+    return `${formatter.format(start)} - ${formatter.format(end)} · WAT`;
   }
 
-  return items;
+  if (startValid) return `From ${formatter.format(start)} · WAT`;
+  if (endValid) return `Until ${formatter.format(end)} · WAT`;
+
+  return "Live now";
 }
 
-const HOME_TOUR_TARGET_IDS = ["home.calendar-strip"];
+function getElectionLocation(election: DashboardLiveElection): string {
+  return election.electionLocation?.trim() || "Nationwide";
+}
+
+function mapLiveElectionToCard(
+  election: DashboardLiveElection,
+  role: UserRole
+): ElectionCardItem {
+  return {
+    id: election.id,
+    activeElectionId: election.id,
+    title: election.electionName,
+    location: getElectionLocation(election),
+    time: formatDateRange(election.startDate, election.endDate),
+    ctaLabel: role === "public-viewer" ? "View Collation" : "Submit / Collation",
+    illustration: role,
+    live: election.status === "live",
+    electionType: normalizeElectionType(election.electionType),
+    pollingUnitsRecorded: 0,
+    totalPollingUnits: 0,
+    partiesCount: election.partiesCount,
+    status: election.status,
+  };
+}
+
+function mapElectionUpdate(
+  item: DashboardElectionUpdate,
+  fallbackElectionId?: string
+): ElectionUpdateItem {
+  return {
+    id: item.id,
+    collationId: item.activeElectionId ?? item.electionId ?? fallbackElectionId ?? item.id,
+    tag: item.type === "incident-upload" ? "INCIDENT" : "RESULT",
+    title: item.title,
+    info: item.info,
+    timeAgo: item.timeAgo,
+  };
+}
+
+function mapSocialUpdateToDiscussion(item: DashboardSocialUpdate): DiscussionItem {
+  return {
+    id: item.id,
+    source: item.source,
+    collationId: item.activeElectionId,
+    timeAgo: item.timeAgo,
+    title: item.body,
+    author: item.authorName || "Citizen",
+    pollingUnit:
+      item.source === "collation-discussion"
+        ? "Collation Discussion"
+        : "Pulse",
+    imageUrl: item.imageUrl ?? undefined,
+    likesCount: item.likesCount,
+    commentsCount: item.commentsCount,
+  };
+}
+
+function getNewsTitle(item: DashboardNewsItem): string {
+  return (
+    item.title?.trim() ||
+    item.headline?.trim() ||
+    item.body?.trim() ||
+    "News update"
+  );
+}
+
+function getNewsDate(item: DashboardNewsItem): string {
+  const rawDate = item.date ?? item.publishedAt ?? item.createdAt;
+
+  if (!rawDate) return "";
+
+  const date = new Date(rawDate);
+
+  if (Number.isNaN(date.getTime())) {
+    return rawDate;
+  }
+
+  return new Intl.DateTimeFormat("en-NG", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "Africa/Lagos",
+  }).format(date);
+}
+
+function mapNewsItem(item: DashboardNewsItem): NewsItem {
+  return {
+    id: item.id,
+    title: getNewsTitle(item),
+    date: getNewsDate(item),
+    imageUrl: item.imageUrl ?? item.thumbnailUrl ?? undefined,
+  };
+}
+
+function HomeSkeleton() {
+  return (
+    <SafeAreaView edges={["top"]} style={styles.safe}>
+      <View style={styles.root}>
+        <LinearGradient
+          colors={["#F4F1D9", "#F4F1D9", "#FFFFFF", "#FFFFFF"]}
+          locations={[0, 0.18, 0.48, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+
+        <View style={styles.skeletonContent}>
+          <View style={styles.skeletonHeaderRow}>
+            <View style={styles.skeletonHeaderCopy}>
+              <View style={styles.skeletonTitle} />
+              <View style={styles.skeletonSubtitle} />
+            </View>
+            <View style={styles.skeletonIconRow}>
+              <View style={styles.skeletonIcon} />
+              <View style={styles.skeletonIcon} />
+            </View>
+          </View>
+
+          <View style={styles.skeletonCalendarHeader} />
+          <View style={styles.skeletonCalendarRow}>
+            {[0, 1, 2, 3].map((item) => (
+              <View key={item} style={styles.skeletonCalendarChip} />
+            ))}
+          </View>
+
+          <View style={styles.skeletonElectionCard} />
+
+          <View style={styles.skeletonWhiteSection}>
+            <View style={styles.skeletonSectionTitle} />
+
+            {[0, 1, 2].map((item) => (
+              <View key={item} style={styles.skeletonListCard}>
+                <View style={styles.skeletonListText}>
+                  <View style={styles.skeletonLineLarge} />
+                  <View style={styles.skeletonLineSmall} />
+                </View>
+                <View style={styles.skeletonThumb} />
+              </View>
+            ))}
+          </View>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+}
 
 export default function HomeScreen() {
-  const { user } = useAuth();
   const { showToast, isConnected } = useNetwork();
+  const dashboardQuery = useDashboardQuery();
+  const { profile } = useMyProfileQuery();
 
-  const [selectedDate, setSelectedDate] = useState<Date>(defaultHomeDate);
-  const [refreshing, setRefreshing] = useState(false);
+  const [today, setToday] = useState(() => startOfLocalDay());
+  const [selectedDate, setSelectedDate] = useState(() => startOfLocalDay());
   const [voterEssentialsVisible, setVoterEssentialsVisible] = useState(false);
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
 
@@ -73,29 +275,24 @@ export default function HomeScreen() {
 
   useTourScrollReset(scrollViewRef, HOME_TOUR_TARGET_IDS);
 
-  const calendarAnchorRef = useRef(defaultHomeDate);
-
-  const calendarItems = useMemo(
-    () => buildStableCalendarWindow(calendarAnchorRef.current, 15),
-    []
+  useFocusEffect(
+    useCallback(() => {
+      const liveToday = startOfLocalDay();
+      setToday(liveToday);
+      setSelectedDate(liveToday);
+    }, [])
   );
 
-  const selectedKey = useMemo(() => formatDateKey(selectedDate), [selectedDate]);
+  const calendarItems = useMemo(() => buildCalendarWindow(today, 15), [today]);
 
-  const selectedContent = homeContentByDate[selectedKey] ?? {
-    dateKey: selectedKey,
-    hasElection: false,
-    quietDay: {
-      title: "QUIET DAY!",
-      subtitle: "No voting events happening today.",
-    },
-    electionCards: [],
-    banners: [],
-    notifications: [],
-    electionUpdates: [],
-    discussions: [],
-    news: [],
-  };
+  const selectedKey = useMemo(
+    () => formatHomeDateKey(selectedDate),
+    [selectedDate]
+  );
+
+  const todayKey = useMemo(() => formatHomeDateKey(today), [today]);
+
+  const isTodaySelected = selectedKey === todayKey;
 
   const monthLabel = useMemo(
     () =>
@@ -107,25 +304,78 @@ export default function HomeScreen() {
     [selectedDate]
   );
 
-  const firstName = user?.firstName ?? "Ifeoluwa";
+  const viewerRole = useMemo(
+    () => userRoleFromProfileRole(profile?.role),
+    [profile?.role]
+  );
+
+  const firstName = useMemo(
+    () =>
+      getFirstName({
+        profileFirstName: profile?.firstName,
+        email: profile?.email,
+      }),
+    [profile?.email, profile?.firstName]
+  );
+
+  const roleLabel = useMemo(
+    () => roleLabelFromRole(profile?.role),
+    [profile?.role]
+  );
+
+  const dashboard = dashboardQuery.data;
+
+  const liveElectionCards = useMemo(() => {
+    if (!dashboard || !isTodaySelected) return [];
+
+    return dashboard.liveElections.map((election) =>
+      mapLiveElectionToCard(election, viewerRole)
+    );
+  }, [dashboard, isTodaySelected, viewerRole]);
+
+  const fallbackElectionId = liveElectionCards[0]?.activeElectionId;
+
+  const electionUpdates = useMemo(() => {
+    if (!dashboard) return [];
+
+    return dashboard.electionUpdates.map((item) =>
+      mapElectionUpdate(item, fallbackElectionId)
+    );
+  }, [dashboard, fallbackElectionId]);
+
+  const discussions = useMemo(() => {
+    if (!dashboard) return [];
+
+    return [
+      ...dashboard.collationUpdates.map(mapSocialUpdateToDiscussion),
+      ...dashboard.pulseAndDiscourse.map(mapSocialUpdateToDiscussion),
+      ...dashboard.reportThreadUpdates.map(mapSocialUpdateToDiscussion),
+    ];
+  }, [dashboard]);
+
+  const news = useMemo(() => {
+    if (!dashboard) return [];
+
+    return dashboard.latestNewsAndInsights.map(mapNewsItem);
+  }, [dashboard]);
+
+  const hasElection = liveElectionCards.length > 0;
 
   const handleSelectDay = useCallback((item: CalendarDayItem): void => {
     setSelectedDate(item.date);
   }, []);
 
   const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await new Promise((resolve) => setTimeout(resolve, 1200));
-    setRefreshing(false);
+    await dashboardQuery.refetch();
 
     if (isConnected) {
       showToast({
         type: "info",
         title: "Data refreshed!",
-        subtitle: "You're viewing the latest updates.",
+        subtitle: "You're viewing the latest dashboard updates.",
       });
     }
-  }, [isConnected, showToast]);
+  }, [dashboardQuery, isConnected, showToast]);
 
   const handleOpenVoterEssentials = useCallback(() => {
     hasNavigatedRef.current = false;
@@ -160,9 +410,31 @@ export default function HomeScreen() {
     }, 220);
 
     return () => clearTimeout(timer);
-  }, [voterEssentialsVisible, pendingRoute]);
+  }, [pendingRoute, voterEssentialsVisible]);
 
-  const hasElection = selectedContent.hasElection;
+  if (dashboardQuery.isInitialDashboardLoading) {
+    return <HomeSkeleton />;
+  }
+
+  if (!dashboard && dashboardQuery.error) {
+    return (
+      <SafeAreaView edges={["top"]} style={styles.safe}>
+        <View style={[styles.root, styles.errorState]}>
+          <AppText style={styles.errorTitle}>Unable to load dashboard</AppText>
+          <AppText style={styles.errorText}>
+            Check your connection and try again. If you were previously signed
+            in, cached dashboard data will appear once available.
+          </AppText>
+          <AppButton
+            title="Retry"
+            onPress={() => {
+              void dashboardQuery.refetch();
+            }}
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safe}>
@@ -182,7 +454,7 @@ export default function HomeScreen() {
           overScrollMode="never"
           refreshControl={
             <RefreshControl
-              refreshing={refreshing}
+              refreshing={dashboardQuery.isRefetching}
               onRefresh={onRefresh}
               tintColor={Theme.colors.primary}
               colors={[Theme.colors.primary]}
@@ -190,12 +462,8 @@ export default function HomeScreen() {
             />
           }
         >
-          {/* ───── TOP SECTION ───── */}
           <View style={styles.topSection}>
-            <HomeHeader
-              firstName={firstName}
-              roleLabel={roleLabelFromRole(mockRole)}
-            />
+            <HomeHeader firstName={firstName} roleLabel={roleLabel} />
 
             <View style={styles.calendarBlock}>
               <TourTarget id="home.calendar-strip">
@@ -208,42 +476,39 @@ export default function HomeScreen() {
               </TourTarget>
 
               <AppText style={styles.calendarStatus}>
-                See elections being monitored live right now.
+                {isTodaySelected
+                  ? "See elections being monitored live right now."
+                  : "Live dashboard updates are shown for today."}
               </AppText>
             </View>
 
             {hasElection ? (
-              <ElectionCarousel items={selectedContent.electionCards} />
+              <ElectionCarousel
+                items={liveElectionCards}
+                viewerRole={viewerRole}
+              />
             ) : (
               <QuietDayBanner
-                title={selectedContent.quietDay?.title ?? "QUIET DAY!"}
+                title="QUIET DAY!"
                 subtitle={
-                  selectedContent.quietDay?.subtitle ??
-                  "No voting events happening today."
+                  isTodaySelected
+                    ? "No live voting events are available right now."
+                    : "No live dashboard events for this date."
                 }
               />
             )}
           </View>
 
-          {/* ───── CONTENT SECTION ───── */}
           <View style={styles.whiteSection}>
-            {/* ONLY show if election exists */}
-            {hasElection && selectedContent.electionUpdates.length > 0 && (
-              <CollationUpdatesSection
-                items={selectedContent.electionUpdates}
-              />
-            )}
+            {electionUpdates.length > 0 ? (
+              <CollationUpdatesSection items={electionUpdates} />
+            ) : null}
 
-            {/* ALWAYS show */}
-            {selectedContent.discussions.length > 0 && (
-              <PulseAndDiscourseSection
-                items={selectedContent.discussions}
-              />
-            )}
+            {discussions.length > 0 ? (
+              <PulseAndDiscourseSection items={discussions} />
+            ) : null}
 
-            {selectedContent.news.length > 0 && (
-              <LatestNewsSection items={selectedContent.news} />
-            )}
+            {news.length > 0 ? <LatestNewsSection items={news} /> : null}
 
             <VoterEssentialsSection onViewAll={handleOpenVoterEssentials} />
 
@@ -260,6 +525,8 @@ export default function HomeScreen() {
     </SafeAreaView>
   );
 }
+
+const skeletonColor = "rgba(17,26,50,0.08)";
 
 const styles = StyleSheet.create({
   safe: {
@@ -291,5 +558,126 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     paddingTop: 24,
     gap: 32,
+  },
+  errorState: {
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    gap: 14,
+    backgroundColor: "#FFFFFF",
+  },
+  errorTitle: {
+    fontSize: 22,
+    lineHeight: 28,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.heading.bold,
+    textAlign: "center",
+  },
+  errorText: {
+    fontSize: 15,
+    lineHeight: 23,
+    color: Theme.colors.textMuted,
+    textAlign: "center",
+  },
+  skeletonContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  skeletonHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  skeletonHeaderCopy: {
+    gap: 8,
+  },
+  skeletonTitle: {
+    width: 132,
+    height: 22,
+    borderRadius: 999,
+    backgroundColor: skeletonColor,
+  },
+  skeletonSubtitle: {
+    width: 184,
+    height: 14,
+    borderRadius: 999,
+    backgroundColor: skeletonColor,
+  },
+  skeletonIconRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  skeletonIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: skeletonColor,
+  },
+  skeletonCalendarHeader: {
+    width: "100%",
+    height: 20,
+    borderRadius: 999,
+    marginTop: 26,
+    backgroundColor: skeletonColor,
+  },
+  skeletonCalendarRow: {
+    flexDirection: "row",
+    gap: 14,
+    marginTop: 16,
+  },
+  skeletonCalendarChip: {
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    backgroundColor: skeletonColor,
+  },
+  skeletonElectionCard: {
+    height: 174,
+    borderRadius: 24,
+    marginTop: 20,
+    backgroundColor: "rgba(255,255,255,0.64)",
+    borderWidth: 1,
+    borderColor: "rgba(17,26,50,0.07)",
+  },
+  skeletonWhiteSection: {
+    marginHorizontal: -16,
+    marginTop: 26,
+    paddingTop: 24,
+    paddingHorizontal: 16,
+    backgroundColor: "#FFFFFF",
+    gap: 16,
+  },
+  skeletonSectionTitle: {
+    width: 148,
+    height: 16,
+    borderRadius: 999,
+    backgroundColor: skeletonColor,
+  },
+  skeletonListCard: {
+    minHeight: 72,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  skeletonListText: {
+    flex: 1,
+    gap: 8,
+  },
+  skeletonLineLarge: {
+    width: "78%",
+    height: 15,
+    borderRadius: 999,
+    backgroundColor: skeletonColor,
+  },
+  skeletonLineSmall: {
+    width: "48%",
+    height: 12,
+    borderRadius: 999,
+    backgroundColor: skeletonColor,
+  },
+  skeletonThumb: {
+    width: 52,
+    height: 52,
+    borderRadius: 12,
+    backgroundColor: skeletonColor,
   },
 });

@@ -27,7 +27,6 @@ import PollingUnitBottomSheet, {
 import ProfileBottomSheet, {
   ProfileFormState,
 } from "@/components/me/ProfileBottomSheet";
-import PVCVerificationBottomSheet from "@/components/me/PVCVerificationBottomSheet";
 import SecurityBottomSheet, {
   SecurityFormState,
 } from "@/components/me/SecurityBottomSheet";
@@ -56,19 +55,27 @@ import {
   useUpdateMyProfileMutation,
   useUpdateNotificationSettingsMutation,
   useUpdatePasswordMutation,
+  useUpgradePublicViewerToVolunteerMutation,
+  useUpgradeVolunteerToObserverMutation,
 } from "@/hooks/api/useProfileMutations";
-import { useSelectRoleMutation } from "@/hooks/api/useSelectRoleMutation";
-import { useSubmitObserverRoleMutation } from "@/hooks/api/useSubmitObserverRoleMutation";
 import {
   useBanksQuery,
   useMobileNotificationSettingsQuery,
 } from "@/hooks/api/useProfileSupportQueries";
 import {
+  BanksResponse,
   MobileNotificationSettingsState,
   MyProfileResponse,
 } from "@/lib/api/profile.api";
 import { Theme } from "@/theme";
 import { BirthdayValue, Gender } from "@/types/onboarding";
+
+type BankOption = {
+  code?: string;
+  name: string;
+};
+
+type BanksLikeResponse = BanksResponse | BankOption[] | null | undefined;
 
 const EMPTY_BIRTHDAY: BirthdayValue = {
   day: 0,
@@ -286,8 +293,8 @@ function buildObserverForm(
 ): ObserverRegistrationFormState {
   return {
     phoneNumber: profile.phoneNumber ?? "",
-    pvcFrontUri: profile.observerId?.[0]?.url ?? null,
-    pvcBackUri: profile.observerId?.[1]?.url ?? null,
+    pvcFrontUri: null,
+    pvcBackUri: null,
   };
 }
 
@@ -313,11 +320,29 @@ function applyAnonymousDraft(
   };
 }
 
-function resolveUserEmail(
-  profileEmail?: string | null,
-  authEmail?: string | null
-): string {
-  return (profileEmail || authEmail || "").trim().toLowerCase();
+function normalizeBankOptions(
+  response: BanksLikeResponse,
+  fallbackBankName?: string | null
+): string[] {
+  const banks = Array.isArray(response) ? response : response?.banks ?? [];
+
+  const names = banks
+    .map((bank) => bank.name?.trim())
+    .filter((name): name is string => Boolean(name));
+
+  const uniqueNames = Array.from(new Set(names)).sort((a, b) =>
+    a.localeCompare(b)
+  );
+
+  const cleanFallback = fallbackBankName?.trim();
+
+  if (uniqueNames.length > 0) {
+    return cleanFallback && !uniqueNames.includes(cleanFallback)
+      ? [cleanFallback, ...uniqueNames]
+      : uniqueNames;
+  }
+
+  return cleanFallback ? [cleanFallback] : [];
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -379,7 +404,7 @@ function MeScreenSkeleton() {
 }
 
 export default function MeScreen() {
-  const { signOut, user: authUser } = useAuth();
+  const { signOut } = useAuth();
   const { showToast } = useToastContext();
 
   const { profile, isInitialProfileLoading, isFetching, refetch, error } =
@@ -389,15 +414,17 @@ export default function MeScreen() {
   const notificationsQuery = useMobileNotificationSettingsQuery();
 
   const updateMyProfileMutation = useUpdateMyProfileMutation();
-  const selectRoleMutation = useSelectRoleMutation();
   const updatePasswordMutation = useUpdatePasswordMutation();
   const updateNotificationSettingsMutation =
     useUpdateNotificationSettingsMutation();
   const generateAnonymousUsernameMutation =
     useGenerateAnonymousUsernameMutation();
   const updateAnonymousIdentityMutation = useUpdateAnonymousIdentityMutation();
-  const submitObserverRoleMutation = useSubmitObserverRoleMutation();
   const submitFeedbackMutation = useSubmitFeedbackMutation();
+  const upgradePublicViewerToVolunteerMutation =
+    useUpgradePublicViewerToVolunteerMutation();
+  const upgradeVolunteerToObserverMutation =
+    useUpgradeVolunteerToObserverMutation();
 
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -447,7 +474,6 @@ export default function MeScreen() {
   const [feedbackForm, setFeedbackForm] =
     useState<FeedbackFormState>(DEFAULT_FEEDBACK_FORM);
 
-  const [pvcSubmitLocked, setPvcSubmitLocked] = useState(false);
   const [draftPublicName, setDraftPublicName] = useState("");
 
   const profileSheetRef = useRef<BottomSheetModal>(null);
@@ -455,7 +481,6 @@ export default function MeScreen() {
   const pollingUnitSheetRef = useRef<BottomSheetModal>(null);
   const notificationSheetRef = useRef<BottomSheetModal>(null);
   const observerSheetRef = useRef<BottomSheetModal>(null);
-  const pvcSheetRef = useRef<BottomSheetModal>(null);
   const bankSheetRef = useRef<BottomSheetModal>(null);
   const feedbackSheetRef = useRef<BottomSheetModal>(null);
 
@@ -534,20 +559,12 @@ export default function MeScreen() {
     [pollingUnitsQuery.data]
   );
 
-  const bankOptions = useMemo(() => {
-    const names = banksQuery.data?.map((bank) => bank.name) ?? [];
-
-    if (names.length > 0) return names;
-
-    return profile?.bankName ? [profile.bankName] : [];
-  }, [banksQuery.data, profile?.bankName]);
+  const bankOptions = useMemo(
+    () => normalizeBankOptions(banksQuery.data, profile?.bankName),
+    [banksQuery.data, profile?.bankName]
+  );
 
   const isElectionLive = false;
-
-  const isPvcSubmitting =
-    pvcSubmitLocked ||
-    selectRoleMutation.isPending ||
-    submitObserverRoleMutation.isPending;
 
   const isMutating =
     updateMyProfileMutation.isPending ||
@@ -557,7 +574,8 @@ export default function MeScreen() {
     generateAnonymousUsernameMutation.isPending ||
     updateAnonymousIdentityMutation.isPending ||
     submitFeedbackMutation.isPending ||
-    isPvcSubmitting;
+    upgradePublicViewerToVolunteerMutation.isPending ||
+    upgradeVolunteerToObserverMutation.isPending;
 
   const handleGenerateAnonymousUsername = async () => {
     try {
@@ -616,6 +634,7 @@ export default function MeScreen() {
         lastName,
         gender,
         dateOfBirth,
+        anonymousUsername: draftPublicName.trim() || undefined,
         profileImageUri:
           profileForm.avatarChanged && profileForm.avatarUri
             ? profileForm.avatarUri
@@ -760,52 +779,93 @@ export default function MeScreen() {
     }
   };
 
-  const handleSubmitPvcUpdate = async (frontUri: string, backUri: string) => {
-    if (pvcSubmitLocked) return;
+  const handleUpgradePublicViewerToVolunteer = async () => {
+    try {
+      const response =
+        await upgradePublicViewerToVolunteerMutation.mutateAsync();
 
-    const email = resolveUserEmail(profile?.email, authUser?.email);
+      await refetch();
 
-    if (!email) {
       showToast({
-        message: "Profile email is missing. Please sign in again.",
+        message:
+          response.message ??
+          "Your account has been upgraded to volunteer successfully.",
+        type: "success",
+      });
+    } catch (mutationError) {
+      showToast({
+        message: getErrorMessage(
+          mutationError,
+          "Unable to upgrade account to volunteer."
+        ),
+        type: "error",
+      });
+    }
+  };
+
+  const confirmPublicViewerUpgrade = () => {
+    Alert.alert(
+      "Upgrade to Volunteer",
+      "You will be able to participate in polling unit activity after this upgrade.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Upgrade",
+          onPress: () => {
+            void handleUpgradePublicViewerToVolunteer();
+          },
+        },
+      ]
+    );
+  };
+
+  const handleUpgradeVolunteerToObserver = async () => {
+    const phoneNumber = observerForm.phoneNumber.trim();
+
+    if (!phoneNumber || phoneNumber.length < 7) {
+      showToast({
+        message: "Please enter a valid phone number.",
+        type: "error",
+      });
+      return;
+    }
+
+    if (!observerForm.pvcFrontUri || !observerForm.pvcBackUri) {
+      showToast({
+        message: "Please upload the front and back of your PVC.",
         type: "error",
       });
       return;
     }
 
     try {
-      setPvcSubmitLocked(true);
-
-      if (profile?.role !== "observer") {
-        await selectRoleMutation.mutateAsync({
-          email,
-          role: "observer",
-        });
-      }
-
-      const response = await submitObserverRoleMutation.mutateAsync({
-        email,
-        frontPvcUri: frontUri,
-        backPvcUri: backUri,
+      const response = await upgradeVolunteerToObserverMutation.mutateAsync({
+        phoneNumber,
+        pvcFrontUri: observerForm.pvcFrontUri,
+        pvcBackUri: observerForm.pvcBackUri,
       });
+
+      observerSheetRef.current?.dismiss();
+
+      await refetch();
 
       showToast({
         message:
           response.message ??
-          "PVC submitted successfully, pending admin verification.",
+          "Observer application submitted successfully. Verification is pending.",
         type: "success",
       });
-
-      await refetch();
     } catch (mutationError) {
       showToast({
-        message: getErrorMessage(mutationError, "Unable to submit PVC."),
+        message: getErrorMessage(
+          mutationError,
+          "Unable to submit observer application."
+        ),
         type: "error",
       });
-
-      throw mutationError;
-    } finally {
-      setPvcSubmitLocked(false);
     }
   };
 
@@ -850,6 +910,23 @@ export default function MeScreen() {
     }
   };
 
+  const handleUpgradeEntry = () => {
+    if (profile?.role === "volunteer") {
+      observerSheetRef.current?.present();
+      return;
+    }
+
+    if (profile?.role === "public-viewer") {
+      confirmPublicViewerUpgrade();
+      return;
+    }
+
+    showToast({
+      message: "Your account is already on the observer track.",
+      type: "success",
+    });
+  };
+
   const handleItemPress = (item: MeMenuItem) => {
     switch (item.id) {
       case "personal-profile":
@@ -868,10 +945,14 @@ export default function MeScreen() {
         notificationSheetRef.current?.present();
         return;
       case "upgrade-user":
-        observerSheetRef.current?.present();
+        handleUpgradeEntry();
         return;
       case "pvc-verification":
-        pvcSheetRef.current?.present();
+        showToast({
+          message:
+            "PVC update is not available yet. The backend team will provide the separate endpoint.",
+          type: "success",
+        });
         return;
       case "bank-details":
         bankSheetRef.current?.present();
@@ -908,12 +989,7 @@ export default function MeScreen() {
   };
 
   const handleBannerPress = () => {
-    if (profile?.role === "observer") {
-      pvcSheetRef.current?.present();
-      return;
-    }
-
-    observerSheetRef.current?.present();
+    handleUpgradeEntry();
   };
 
   if (isInitialProfileLoading) {
@@ -1041,16 +1117,9 @@ export default function MeScreen() {
           value={observerForm}
           onChange={setObserverForm}
           onSubmit={() => {
-            observerSheetRef.current?.dismiss();
-            pvcSheetRef.current?.present();
+            void handleUpgradeVolunteerToObserver();
           }}
-        />
-
-        <PVCVerificationBottomSheet
-          ref={pvcSheetRef}
-          pvcVerifiedDate={meUser.pvcVerifiedDate}
-          saving={isPvcSubmitting}
-          onSubmit={handleSubmitPvcUpdate}
+          submitting={upgradeVolunteerToObserverMutation.isPending}
         />
 
         <BankDetailsBottomSheet

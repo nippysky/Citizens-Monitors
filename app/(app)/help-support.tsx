@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { VideoView, useVideoPlayer } from "expo-video";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Image,
@@ -18,9 +18,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AppGradientScreen from "@/components/app/AppGradientScreen";
 import { useToastContext } from "@/components/feedback/ToastProvider";
-import BackButton from "@/components/ui/BackButton";
 import AppText from "@/components/ui/AppText";
-import { mockMeUser, type UserType } from "@/data/me";
+import BackButton from "@/components/ui/BackButton";
+import { useMyProfileQuery } from "@/hooks/api/useMyProfileQuery";
 import { Theme } from "@/theme";
 
 if (
@@ -30,6 +30,7 @@ if (
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+type UserType = "observer" | "volunteer" | "public-viewer";
 type HelpScopeKey = "general" | "observer" | "volunteer";
 
 type HelpFaqItem = {
@@ -41,10 +42,6 @@ type HelpFaqItem = {
   videoUrl: string;
 };
 
-const DEV_HELP_ROLE_OVERRIDE: UserType | null = null;
-// Set to "general" | "observer" | "volunteer" to force a tab while testing.
-const DEV_HELP_TAB_OVERRIDE: HelpScopeKey | null = null;
-
 const FAQ_VIDEO_URL = "https://www.w3schools.com/html/mov_bbb.mp4";
 
 const GENERAL_FAQS: HelpFaqItem[] = [
@@ -52,28 +49,28 @@ const GENERAL_FAQS: HelpFaqItem[] = [
     id: "general-password",
     question: "How can I change my password?",
     answer:
-      "To change your Citizen Monitor password, visit settings page and open the security section. Enter your new password, confirm it, and save changes. For stronger protection, use a password you do not reuse elsewhere.",
-    videoTitle: "How to change password on Citizen Monitor App",
+      "To change your Citizen Monitor password, go to the Me tab, open Security, enter your current password, set a new password, confirm it, and save changes. Use a strong password you do not reuse elsewhere.",
+    videoTitle: "How to change your password",
     thumbnailUrl:
-      "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80",
     videoUrl: FAQ_VIDEO_URL,
   },
   {
-    id: "general-name",
-    question: "How can I change my name?",
+    id: "general-profile",
+    question: "How can I update my profile?",
     answer:
-      "Open your profile details from the Me screen and edit your personal profile information. Once updated, save changes and your new display details will reflect across supported parts of the app.",
-    videoTitle: "How to update your profile name",
+      "Open the Me tab, tap Personal Profile, edit the available fields, then save changes. Your updated details will reflect across your profile and supported app sections.",
+    videoTitle: "How to update your profile",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=1200&q=80",
     videoUrl: FAQ_VIDEO_URL,
   },
   {
-    id: "general-news",
-    question: "How can I get news updates?",
+    id: "general-notifications",
+    question: "How can I manage notifications?",
     answer:
-      "Turn on app notifications and visit News & Insight regularly. Important alerts, election-day activity, and platform notices are shown based on your notification settings and app activity.",
-    videoTitle: "How to receive updates faster",
+      "Open the Me tab and select Notification Settings. You can turn on or off election alerts, polling unit activity, report updates, discussion replies, newsletters, and security alerts.",
+    videoTitle: "Managing notification settings",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1495020689067-958852a7765e?auto=format&fit=crop&w=1200&q=80",
     videoUrl: FAQ_VIDEO_URL,
@@ -82,8 +79,8 @@ const GENERAL_FAQS: HelpFaqItem[] = [
     id: "general-anonymous",
     question: "How do I stay anonymous?",
     answer:
-      "Citizen Monitor protects sensitive identity context. Only the information required for platform integrity is collected internally. Public-facing content does not need to reveal your private identity unless a workflow explicitly requires it.",
-    videoTitle: "Privacy and anonymity basics",
+      "Citizen Monitor supports anonymous public participation where available. You can generate a public anonymous name from your profile and use it for sensitive discussions or posts when the screen supports anonymous display.",
+    videoTitle: "Privacy and anonymous participation",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80",
     videoUrl: FAQ_VIDEO_URL,
@@ -95,7 +92,7 @@ const OBSERVER_FAQS: HelpFaqItem[] = [
     id: "observer-identity",
     question: "Will my identity be revealed if I submit a report?",
     answer:
-      "No. Your identity is kept strictly confidential. If you choose to stay anonymous, no personal information will be shared with the public or authorities.",
+      "No. Your identity is protected in public-facing areas. Internally, Citizen Monitor may retain required account and verification details for accountability, audit, and platform safety.",
     videoTitle: "Observer privacy and secure reporting",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80",
@@ -105,7 +102,7 @@ const OBSERVER_FAQS: HelpFaqItem[] = [
     id: "observer-upload",
     question: "My report is not uploading. What should I do?",
     answer:
-      "First confirm your internet connection. If you are offline, your report can remain staged locally and sync later when connection returns. Also confirm media permissions, report completeness, and that your selected file finished processing.",
+      "Check your connection and media permissions first. If you are offline, supported reports can remain staged locally and sync later when the connection returns. Keep the app open long enough for uploads to complete when back online.",
     videoTitle: "Fixing report upload issues",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1516321165247-4aa89a48be28?auto=format&fit=crop&w=1200&q=80",
@@ -115,7 +112,7 @@ const OBSERVER_FAQS: HelpFaqItem[] = [
     id: "observer-issues",
     question: "What type of issues can I report?",
     answer:
-      "You can report result-sheet issues, ballot stuffing, intimidation, underage voting, missing materials, alteration concerns, violence, delayed opening, and other verifiable election irregularities supported by evidence.",
+      "You can report incidents such as violence, intimidation, ballot stuffing, missing materials, result-sheet irregularities, delayed opening, vote buying, and other election-day concerns supported by evidence.",
     videoTitle: "Types of observer reports",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1543286386-713bdd548da4?auto=format&fit=crop&w=1200&q=80",
@@ -125,7 +122,7 @@ const OBSERVER_FAQS: HelpFaqItem[] = [
     id: "observer-rejected",
     question: "Why was my report rejected?",
     answer:
-      "Reports may be rejected when evidence is incomplete, details conflict with the attached media, result figures fail validation, or the submission lacks enough clarity for verification. Review the feedback, correct the issue, and submit again.",
+      "A report may be rejected if the evidence is incomplete, unclear, inconsistent with the description, outside the election context, or does not meet verification standards. Review the issue, correct it where possible, and submit again.",
     videoTitle: "Why a report may be rejected",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1486312338219-ce68d2c6f44d?auto=format&fit=crop&w=1200&q=80",
@@ -138,18 +135,18 @@ const VOLUNTEER_FAQS: HelpFaqItem[] = [
     id: "volunteer-responsibility",
     question: "What are my responsibilities as a volunteer?",
     answer:
-      "Review and verify reports.\nFlag false or misleading content.\nAdd context or supporting information.\nEscalate urgent issues to admins or authorities.",
+      "Volunteers support election transparency by reviewing information, adding context, participating in discussions, and helping surface credible election activity for wider visibility.",
     videoTitle: "Volunteer responsibilities explained",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80",
     videoUrl: FAQ_VIDEO_URL,
   },
   {
-    id: "volunteer-verify",
-    question: "How do I verify a report?",
+    id: "volunteer-upgrade",
+    question: "How do I become an observer?",
     answer:
-      "Open the report evidence, compare the description with the attached image or video, check the time and polling-unit context, and confirm only when the submission is clear, consistent, and credible.",
-    videoTitle: "How volunteers verify reports",
+      "Go to the Me tab and use the Observer Registration or Upgrade User Type option. You may be asked to provide your phone number and upload PVC verification images before your observer access is reviewed.",
+    videoTitle: "How to upgrade to observer",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1200&q=80",
     videoUrl: FAQ_VIDEO_URL,
@@ -158,7 +155,7 @@ const VOLUNTEER_FAQS: HelpFaqItem[] = [
     id: "volunteer-mistake",
     question: "What happens if I approve a false report by mistake?",
     answer:
-      "The platform can still receive flags, corrections, and further moderation actions. Volunteers should act carefully, but the review system is designed to support layered verification rather than relying on one single action forever.",
+      "The platform supports layered review. Other users, moderators, or admins can still flag or correct suspicious activity. Always review evidence carefully before taking action.",
     videoTitle: "Correcting review mistakes",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1450101499163-c8848c66ca85?auto=format&fit=crop&w=1200&q=80",
@@ -168,7 +165,7 @@ const VOLUNTEER_FAQS: HelpFaqItem[] = [
     id: "volunteer-public",
     question: "Will my identity be public as a volunteer?",
     answer:
-      "Volunteer identity is not exposed publicly by default. Only required internal workflow details are retained for trust, accountability, and platform safety.",
+      "Volunteer identity is not public by default. Citizen Monitor only uses necessary internal account details for trust, workflow integrity, and platform safety.",
     videoTitle: "Volunteer privacy and visibility",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1516321497487-e288fb19713f?auto=format&fit=crop&w=1200&q=80",
@@ -176,38 +173,70 @@ const VOLUNTEER_FAQS: HelpFaqItem[] = [
   },
 ];
 
+function normalizeRole(role?: string | null): UserType {
+  if (role === "observer") return "observer";
+  if (role === "public-viewer") return "public-viewer";
+  return "volunteer";
+}
+
+function getFaqsForTab(tab: HelpScopeKey): HelpFaqItem[] {
+  if (tab === "observer") return OBSERVER_FAQS;
+  if (tab === "volunteer") return VOLUNTEER_FAQS;
+
+  return GENERAL_FAQS;
+}
+
+function getAvailableTabs(role: UserType): HelpScopeKey[] {
+  if (role === "observer") return ["general", "observer"];
+  if (role === "volunteer") return ["general", "volunteer"];
+
+  return ["general"];
+}
+
+function getDefaultTab(role: UserType): HelpScopeKey {
+  if (role === "observer") return "observer";
+  if (role === "volunteer") return "volunteer";
+
+  return "general";
+}
+
 export default function HelpSupportScreen() {
-  const resolvedRole = DEV_HELP_ROLE_OVERRIDE ?? mockMeUser.userType;
+  const { profile } = useMyProfileQuery();
 
-  const availableTabs = useMemo(() => {
-    const base: HelpScopeKey[] = ["general"];
+  const resolvedRole = useMemo<UserType>(
+    () => normalizeRole(profile?.role),
+    [profile?.role]
+  );
 
-    if (resolvedRole === "observer") {
-      base.push("observer");
-    }
+  const availableTabs = useMemo(
+    () => getAvailableTabs(resolvedRole),
+    [resolvedRole]
+  );
 
-    if (resolvedRole === "volunteer") {
-      base.push("volunteer");
-    }
-
-    return base;
-  }, [resolvedRole]);
-
-  const defaultTab = useMemo<HelpScopeKey>(() => {
-    if (DEV_HELP_TAB_OVERRIDE && availableTabs.includes(DEV_HELP_TAB_OVERRIDE)) {
-      return DEV_HELP_TAB_OVERRIDE;
-    }
-
-    if (resolvedRole === "observer") return "observer";
-    if (resolvedRole === "volunteer") return "volunteer";
-    return "general";
-  }, [availableTabs, resolvedRole]);
+  const defaultTab = useMemo(
+    () => getDefaultTab(resolvedRole),
+    [resolvedRole]
+  );
 
   const [activeTab, setActiveTab] = useState<HelpScopeKey>(defaultTab);
   const [expandedId, setExpandedId] = useState<string | null>(
     getFaqsForTab(defaultTab)[0]?.id ?? null
   );
   const [playerItem, setPlayerItem] = useState<HelpFaqItem | null>(null);
+
+  useEffect(() => {
+    if (!availableTabs.includes(activeTab)) {
+      const nextTab = defaultTab;
+      setActiveTab(nextTab);
+      setExpandedId(getFaqsForTab(nextTab)[0]?.id ?? null);
+      return;
+    }
+
+    if (activeTab === "general" && defaultTab !== "general") {
+      setActiveTab(defaultTab);
+      setExpandedId(getFaqsForTab(defaultTab)[0]?.id ?? null);
+    }
+  }, [activeTab, availableTabs, defaultTab]);
 
   const faqs = useMemo(() => getFaqsForTab(activeTab), [activeTab]);
 
@@ -235,7 +264,7 @@ export default function HelpSupportScreen() {
           <View style={styles.headerBlock}>
             <AppText style={styles.screenTitle}>Help & Support</AppText>
             <AppText style={styles.screenSubtitle}>
-              Get the help you need to proceed.
+              Get quick answers and guides based on your account type.
             </AppText>
           </View>
 
@@ -264,7 +293,7 @@ export default function HelpSupportScreen() {
           </View>
 
           <AppText style={styles.helperText}>
-            Here are quick guides to help you use Citizen Monitor app better.
+            Here are quick guides to help you use Citizen Monitor better.
           </AppText>
 
           <View style={styles.faqList}>
@@ -289,12 +318,6 @@ export default function HelpSupportScreen() {
       />
     </>
   );
-}
-
-function getFaqsForTab(tab: HelpScopeKey): HelpFaqItem[] {
-  if (tab === "observer") return OBSERVER_FAQS;
-  if (tab === "volunteer") return VOLUNTEER_FAQS;
-  return GENERAL_FAQS;
 }
 
 function ScopeTab({
@@ -333,7 +356,7 @@ function FaqAccordionCard({
 }) {
   const rotate = useRef(new Animated.Value(expanded ? 1 : 0)).current;
 
-  useMemo(() => {
+  useEffect(() => {
     Animated.timing(rotate, {
       toValue: expanded ? 1 : 0,
       duration: 180,
@@ -457,7 +480,10 @@ function FaqVideoPlayerModal({
 
   const player = useVideoPlayer(item?.videoUrl ?? null, (videoPlayer) => {
     videoPlayer.loop = false;
-    videoPlayer.play();
+
+    if (item) {
+      videoPlayer.play();
+    }
   });
 
   return (

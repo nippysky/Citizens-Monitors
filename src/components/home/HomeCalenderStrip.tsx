@@ -1,15 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React, { useEffect, useMemo, useRef } from "react";
-import {
-  Animated,
-  Easing,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
@@ -23,78 +14,33 @@ type Props = {
   onSelect: (item: CalendarDayItem) => void;
 };
 
-const CARD_SIZE = 74;
-const CARD_GAP = 14;
-const ITEM_SIZE = CARD_SIZE + CARD_GAP;
-
-type DayChipProps = {
+function DayCircle({
+  item,
+  active,
+  onPress,
+}: {
   item: CalendarDayItem;
-  selected: boolean;
+  active: boolean;
   onPress: () => void;
-};
-
-function DayChip({ item, selected, onPress }: DayChipProps) {
-  const scale = useRef(new Animated.Value(selected ? 1 : 0.96)).current;
-  const dotOpacity = useRef(new Animated.Value(selected ? 1 : 0)).current;
-  const dotScale = useRef(new Animated.Value(selected ? 1 : 0.82)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(scale, {
-        toValue: selected ? 1 : 0.96,
-        duration: 180,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(dotOpacity, {
-        toValue: selected ? 1 : 0,
-        duration: 180,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(dotScale, {
-        toValue: selected ? 1 : 0.82,
-        duration: 180,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [dotOpacity, dotScale, scale, selected]);
-
+}) {
   return (
-    <Pressable onPress={onPress} hitSlop={8} style={styles.dayPressable}>
-      {({ pressed }) => (
-        <Animated.View
-          style={[
-            styles.dayWrap,
-            selected ? styles.dayWrapSelected : styles.dayWrapIdle,
-            {
-              transform: [{ scale: pressed ? 0.985 : scale }],
-            },
-          ]}
-        >
-          <AppText style={[styles.weekday, selected && styles.weekdaySelected]}>
-            {item.weekdayShort}
-          </AppText>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.dayCircle,
+        active && styles.dayCircleActive,
+        pressed && styles.pressed,
+      ]}
+    >
+      <AppText style={[styles.weekday, active && styles.weekdayActive]}>
+        {item.weekdayShort}
+      </AppText>
 
-          <AppText
-            style={[styles.dayNumber, selected && styles.dayNumberSelected]}
-          >
-            {item.dayNumber}
-          </AppText>
+      <AppText style={[styles.dayNumber, active && styles.dayNumberActive]}>
+        {item.dayNumber}
+      </AppText>
 
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.activeDot,
-              {
-                opacity: dotOpacity,
-                transform: [{ scale: dotScale }],
-              },
-            ]}
-          />
-        </Animated.View>
-      )}
+      {active ? <View style={styles.activeDot} /> : null}
     </Pressable>
   );
 }
@@ -105,206 +51,128 @@ export default function HomeCalendarStrip({
   monthLabel,
   onSelect,
 }: Props) {
-  const listRef = useRef<FlatList<CalendarDayItem>>(null);
-  const hasInitialCenteredRef = useRef(false);
-  const { width } = useWindowDimensions();
-
-  const sidePadding = useMemo(
-    () => Math.max(16, width / 2 - CARD_SIZE / 2 - 6),
-    [width]
-  );
-
-  const selectedIndex = useMemo(
-    () => items.findIndex((item) => item.key === selectedKey),
-    [items, selectedKey]
-  );
-
-  useEffect(() => {
-    if (selectedIndex < 0) return;
-    if (hasInitialCenteredRef.current) return;
-
-    const timer = setTimeout(() => {
-      listRef.current?.scrollToIndex({
-        index: selectedIndex,
-        animated: false,
-        viewPosition: 0.5,
-      });
-      hasInitialCenteredRef.current = true;
-    }, 40);
-
-    return () => clearTimeout(timer);
-  }, [selectedIndex]);
-
   return (
     <View style={styles.wrap}>
       <View style={styles.headerRow}>
         <Pressable
-          style={({ pressed }) => [
-            styles.calendarLink,
-            pressed && styles.calendarLinkPressed,
-          ]}
           onPress={() => router.push(Paths.appElectionCalendar)}
           hitSlop={8}
+          style={styles.calendarLink}
         >
           <AppText style={styles.calendarLinkText}>Election Calendar</AppText>
           <Ionicons
             name="chevron-forward"
-            size={18}
+            size={17}
             color={Theme.colors.primary}
           />
         </Pressable>
 
-        <AppText style={styles.monthLabel}>{monthLabel}</AppText>
+        <AppText style={styles.monthText}>{monthLabel}</AppText>
       </View>
 
-      <View style={styles.rowWrap}>
-        <FlatList
-          ref={listRef}
-          data={items}
-          keyExtractor={(item) => item.key}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          bounces
-          overScrollMode="never"
-          decelerationRate="fast"
-          snapToInterval={ITEM_SIZE}
-          disableIntervalMomentum
-          contentContainerStyle={[
-            styles.rowContent,
-            { paddingHorizontal: sidePadding },
-          ]}
-          getItemLayout={(_, index) => ({
-            length: ITEM_SIZE,
-            offset: ITEM_SIZE * index,
-            index,
-          })}
-          initialScrollIndex={selectedIndex >= 0 ? selectedIndex : undefined}
-          onScrollToIndexFailed={(info) => {
-            setTimeout(() => {
-              listRef.current?.scrollToOffset({
-                offset: info.averageItemLength * info.index,
-                animated: false,
-              });
-            }, 60);
-          }}
-          renderItem={({ item }) => {
-            const selected = item.key === selectedKey;
-
-            return (
-              <DayChip
-                item={item}
-                selected={selected}
-                onPress={() => onSelect(item)}
-              />
-            );
-          }}
-        />
-      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.daysContent}
+      >
+        {items.map((item) => (
+          <DayCircle
+            key={item.key}
+            item={item}
+            active={item.key === selectedKey}
+            onPress={() => onSelect(item)}
+          />
+        ))}
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {
-    gap: 14,
+    gap: 12,
   },
 
   headerRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    gap: 12,
+    justifyContent: "space-between",
   },
 
   calendarLink: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-  },
-
-  calendarLinkPressed: {
-    opacity: 0.74,
+    gap: 3,
   },
 
   calendarLinkText: {
-    fontSize: 15.5,
-    lineHeight: 20,
-    fontFamily: Theme.fonts.body.semibold,
+    fontSize: 16,
+    lineHeight: 22,
     color: Theme.colors.primary,
-    letterSpacing: -0.15,
+    fontFamily: Theme.fonts.body.semibold,
   },
 
-  monthLabel: {
-    fontSize: 14,
+  monthText: {
+    fontSize: 15,
     lineHeight: 20,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
-    letterSpacing: -0.1,
   },
 
-  rowWrap: {
-    marginHorizontal: -16,
+  daysContent: {
+    gap: 14,
+    paddingRight: 16,
   },
 
-  rowContent: {
-    gap: CARD_GAP,
-  },
-
-  dayPressable: {
-    width: CARD_SIZE,
-  },
-
-  dayWrap: {
-    width: CARD_SIZE,
-    height: CARD_SIZE,
-    borderRadius: CARD_SIZE / 2,
+  dayCircle: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     borderWidth: 1.5,
+    borderColor: "#DDE4EC",
+    backgroundColor: "rgba(255,255,255,0.24)",
     alignItems: "center",
     justifyContent: "center",
-    gap: 2,
+    gap: 1,
   },
 
-  dayWrapIdle: {
-    borderColor: "#D9DEE8",
-    backgroundColor: "rgba(255,255,255,0.32)",
-  },
-
-  dayWrapSelected: {
+  dayCircleActive: {
     borderColor: Theme.colors.primary,
-    backgroundColor: "rgba(25,183,176,0.06)",
+    borderWidth: 1.8,
+    backgroundColor: "rgba(5,163,156,0.04)",
   },
 
   weekday: {
-    fontSize: 10.5,
-    lineHeight: 13,
-    fontFamily: Theme.fonts.body.semibold,
-    textTransform: "uppercase",
-    letterSpacing: 0.25,
+    fontSize: 9,
+    lineHeight: 12,
     color: Theme.colors.textMuted,
+    fontFamily: Theme.fonts.body.bold,
   },
 
-  weekdaySelected: {
+  weekdayActive: {
     color: Theme.colors.primary,
   },
 
   dayNumber: {
-    fontSize: 20,
-    lineHeight: 24,
-    fontFamily: Theme.fonts.heading.bold,
-    letterSpacing: -0.25,
+    fontSize: 16,
+    lineHeight: 20,
     color: Theme.colors.text,
+    fontFamily: Theme.fonts.heading.bold,
   },
 
-  dayNumberSelected: {
+  dayNumberActive: {
     color: Theme.colors.primary,
   },
 
   activeDot: {
-    position: "absolute",
-    bottom: 9,
-    width: 8,
-    height: 8,
+    width: 6,
+    height: 6,
     borderRadius: 999,
     backgroundColor: Theme.colors.primary,
+    marginTop: 1,
+  },
+
+  pressed: {
+    opacity: 0.72,
   },
 });

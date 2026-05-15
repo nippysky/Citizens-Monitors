@@ -1,8 +1,4 @@
 // ─── src/components/me/MeHeader.tsx ───────────────────────────────────────────
-// Matches Figma exactly: large avatar + name + role + username.
-// No CitizenIcon, no notification bell — those live in the tab bar area.
-// Uses ProfileAvatar.png from assets/images as fallback when no user photo.
-// ─────────────────────────────────────────────────────────────────────────────
 
 import { Image, StyleSheet, View } from "react-native";
 

@@ -10,10 +10,15 @@ export type CalendarDayItem = {
 
 export type ElectionType =
   | "presidential"
+  | "national"
+  | "senatorial"
   | "senate"
   | "house-of-reps"
+  | "house-of-representatives"
+  | "house-of-assembly"
   | "gubernatorial"
-  | "local-government";
+  | "local-government"
+  | "other";
 
 export type ElectionCardItem = {
   id: string;
@@ -26,6 +31,9 @@ export type ElectionCardItem = {
   electionType: ElectionType;
   pollingUnitsRecorded: number;
   totalPollingUnits: number;
+  partiesCount?: number;
+  status?: string;
+  activeElectionId?: string;
 };
 
 export type NotificationItem = {
@@ -59,16 +67,21 @@ export type ElectionUpdateItem = {
   collationId: string;
   tag: "RESULT" | "INCIDENT";
   title: string;
+  info?: string;
   timeAgo: string;
 };
 
 export type DiscussionItem = {
   id: string;
+  source?: string;
+  collationId?: string;
   timeAgo: string;
   title: string;
   author: string;
   pollingUnit: string;
   imageUrl?: string;
+  likesCount?: number;
+  commentsCount?: number;
 };
 
 export type NewsItem = {

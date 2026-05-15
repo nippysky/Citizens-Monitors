@@ -17,7 +17,6 @@ function NewsCard({ item }: { item: NewsItem }) {
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
       onPress={() => router.push(Paths.newsDetails(item.id))}
     >
-      {/* Thumbnail: real image when available, newspaper icon fallback when not. */}
       <View style={styles.thumbWrap}>
         {item.imageUrl ? (
           <Image
@@ -38,12 +37,15 @@ function NewsCard({ item }: { item: NewsItem }) {
         <AppText style={styles.title} numberOfLines={2} ellipsizeMode="tail">
           {item.title}
         </AppText>
-        <View style={styles.dateRow}>
-          <View style={styles.dateDot} />
-          <AppText style={styles.dateText} numberOfLines={1}>
-            {item.date}
-          </AppText>
-        </View>
+
+        {item.date ? (
+          <View style={styles.dateRow}>
+            <View style={styles.dateDot} />
+            <AppText style={styles.dateText} numberOfLines={1}>
+              {item.date}
+            </AppText>
+          </View>
+        ) : null}
       </View>
 
       <Ionicons
@@ -56,6 +58,8 @@ function NewsCard({ item }: { item: NewsItem }) {
 }
 
 export default function LatestNewsSection({ items }: Props) {
+  if (!items.length) return null;
+
   return (
     <View style={styles.wrap}>
       <View style={styles.headerRow}>
@@ -69,7 +73,7 @@ export default function LatestNewsSection({ items }: Props) {
       </View>
 
       <View style={styles.list}>
-        {items.map((item) => (
+        {items.slice(0, 3).map((item) => (
           <NewsCard key={item.id} item={item} />
         ))}
       </View>
@@ -119,7 +123,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(17, 24, 39, 0.04)",
     alignItems: "center",
     justifyContent: "center",
-    // overflow: "hidden" is what makes the Image respect the borderRadius.
     overflow: "hidden",
   },
   thumb: {
@@ -129,7 +132,6 @@ const styles = StyleSheet.create({
   textBlock: {
     flex: 1,
     gap: 4,
-    // minWidth:0 lets long titles truncate cleanly in the flex row.
     minWidth: 0,
   },
   title: {
