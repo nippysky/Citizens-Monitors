@@ -459,6 +459,31 @@ function normalizePartyList(draft: ElectionResultDraft): ElectionResultDraft {
   };
 }
 
+/**
+ * Returns true when an existing stored draft belongs to the same election the
+ * user just navigated in for. We use this to decide whether to resume the
+ * stored draft (same election → user is continuing) or discard it (different
+ * election → stored draft is stale and would render wrong data on screen).
+ *
+ * The bug this guards against: the result draft is single-slot in storage,
+ * so without this check, tapping Submit on Senatorial after previously
+ * starting Presidential would render the Presidential title/data because the
+ * stored Presidential draft would short-circuit fresh hydration.
+ */
+function draftMatchesContext(
+  stored: ElectionResultDraft | null,
+  ctx: CommencementContext
+): boolean {
+  if (!stored) return false;
+
+  const storedElectionId = stored.electionId?.trim() ?? "";
+  const ctxElectionId = ctx.electionId?.trim() ?? "";
+
+  if (!storedElectionId || !ctxElectionId) return false;
+
+  return storedElectionId === ctxElectionId;
+}
+
 export default function SubmitElectionReportScreen() {
   const params = useLocalSearchParams<{
     electionId?: string;
@@ -501,27 +526,34 @@ export default function SubmitElectionReportScreen() {
         state: params.state,
       });
 
+      const freshDraft = () =>
+        buildInitialResultDraft(ctx, params.votingStartTime?.trim() || "");
+
       try {
         const stored = await getResultDraft();
         if (!mounted) return;
 
-        const base =
-          stored ??
-          buildInitialResultDraft(ctx, params.votingStartTime?.trim() || "");
+        // Resume the stored draft ONLY if it belongs to the election the
+        // user just tapped. Otherwise discard it and build a fresh draft
+        // from the new election's params — this is the fix that prevents
+        // stale election data from leaking across submit attempts.
+        const canResumeStored = draftMatchesContext(stored, ctx);
+
+        const base = canResumeStored && stored ? stored : freshDraft();
 
         const normalized = normalizePartyList(base);
         setDraft(normalized);
 
-        if (normalized !== base || !stored) {
+        // Persist whenever:
+        //  - we just built a fresh draft (replacing stale storage), or
+        //  - normalization changed the resumed draft's shape.
+        if (!canResumeStored || normalized !== base) {
           await saveResultDraft(normalized);
         }
       } catch {
         if (!mounted) return;
 
-        const fallback = normalizePartyList(
-          buildInitialResultDraft(ctx, params.votingStartTime?.trim() || "")
-        );
-
+        const fallback = normalizePartyList(freshDraft());
         setDraft(fallback);
       }
     };

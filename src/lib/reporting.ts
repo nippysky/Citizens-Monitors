@@ -74,7 +74,7 @@ const LIVE_VIDEO_KEY = "@cm_reporting_live_video";
 
 export const REPORTING_DEV_CONFIG = {
   autoShowDemoLiveNotice: true,
-  enableGlobalLiveNoticeDevTrigger: true,
+  enableGlobalLiveNoticeDevTrigger: false,
   forceInvalidResultSubmission: false,
   forceIncidentSuccess: true,
   forceResultSuccess: true,

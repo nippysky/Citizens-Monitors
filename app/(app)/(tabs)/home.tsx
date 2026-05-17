@@ -32,6 +32,7 @@ import {
   DashboardNewsItem,
   DashboardSocialUpdate,
 } from "@/lib/api/dashboard.api";
+import type { MyProfileResponse } from "@/lib/api/profile.api";
 import { Theme } from "@/theme";
 import {
   CalendarDayItem,
@@ -125,10 +126,33 @@ function getElectionLocation(election: DashboardLiveElection): string {
   return election.electionLocation?.trim() || "Nationwide";
 }
 
+/**
+ * Maps a live election from the dashboard API into a card item, merging:
+ *   1. Election context from the API (id, title, type, location, start/end dates)
+ *   2. The submitter's polling-unit context from their profile (state, lga, ward, pollingUnit)
+ *
+ * The polling-unit context is what flows into the Submit Election Report screen.
+ * Without it, the submit screen falls back to DEV_COMMENCEMENT_CONTEXT (dev fixture).
+ *
+ * Notes:
+ *  - The dashboard API doesn't expose `votingStartTime`, so we leave it `undefined`.
+ *    `LiveElectionCard.handleSubmitResult` falls back to `item.startDate` in that case.
+ *  - The profile carries only `pollingUnit` (the name) — there is no separate code field.
+ *    `submitElectionResult` accepts `pollingUnitCode` as optional, so we leave it `undefined`.
+ *    If a code is added to onboarding/profile later, wire it here.
+ */
 function mapLiveElectionToCard(
   election: DashboardLiveElection,
-  role: UserRole
+  role: UserRole,
+  profile?: MyProfileResponse | null
 ): ElectionCardItem {
+  const apiElectionLocation = election.electionLocation?.trim() || "";
+
+  const pollingUnitName = profile?.pollingUnit?.trim() || "";
+  const ward = profile?.ward?.trim() || "";
+  const lga = profile?.lga?.trim() || "";
+  const state = profile?.state?.trim() || "";
+
   return {
     id: election.id,
     activeElectionId: election.id,
@@ -143,6 +167,19 @@ function mapLiveElectionToCard(
     totalPollingUnits: 0,
     partiesCount: election.partiesCount,
     status: election.status,
+
+    // Election routing context (carried into Submit Election Report screen).
+    electionLocation: apiElectionLocation || undefined,
+    startDate: election.startDate,
+    endDate: election.endDate,
+    votingStartTime: undefined,
+
+    // Submitter polling-unit context from the user's profile.
+    pollingUnitName: pollingUnitName || undefined,
+    pollingUnitCode: undefined,
+    ward: ward || undefined,
+    lga: lga || undefined,
+    state: state || undefined,
   };
 }
 
@@ -363,9 +400,9 @@ export default function HomeScreen() {
     if (!dashboard || !isTodaySelected) return [];
 
     return dashboard.liveElections.map((election) =>
-      mapLiveElectionToCard(election, viewerRole)
+      mapLiveElectionToCard(election, viewerRole, profile)
     );
-  }, [dashboard, isTodaySelected, viewerRole]);
+  }, [dashboard, isTodaySelected, viewerRole, profile]);
 
   const fallbackElectionId = liveElectionCards[0]?.activeElectionId;
 

@@ -34,6 +34,21 @@ export type ElectionCardItem = {
   partiesCount?: number;
   status?: string;
   activeElectionId?: string;
+
+  /**
+   * Optional route context carried into the result submission screen.
+   * Existing card UI still uses `title`, `location`, and `time`; these fields
+   * only prevent stale/incorrect drafts when opening Submit from a live card.
+   */
+  electionLocation?: string;
+  startDate?: string;
+  endDate?: string;
+  votingStartTime?: string;
+  pollingUnitName?: string;
+  pollingUnitCode?: string;
+  ward?: string;
+  lga?: string;
+  state?: string;
 };
 
 export type NotificationItem = {

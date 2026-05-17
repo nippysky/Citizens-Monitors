@@ -60,6 +60,15 @@ function getProgress(item: ElectionCardItem): number {
   );
 }
 
+function getSpecificLocation(value?: string): string {
+  const clean = value?.trim();
+
+  if (!clean) return "";
+  if (clean.toLowerCase() === "nationwide") return "";
+
+  return clean;
+}
+
 export default function LiveElectionCard({ item, width, viewerRole }: Props) {
   const ElectionIcon = getElectionIcon(item.electionType);
   const activeElectionId = item.activeElectionId ?? item.id;
@@ -84,12 +93,26 @@ export default function LiveElectionCard({ item, width, viewerRole }: Props) {
       return;
     }
 
+    const electionLocation = item.electionLocation?.trim() || item.location;
+    const state = item.state?.trim() || getSpecificLocation(electionLocation);
+    const votingStartTime = item.votingStartTime?.trim() || item.startDate || "";
+
     router.push({
       pathname: Paths.submitElectionReport as never,
       params: {
         electionId: activeElectionId,
         activeElectionId,
         electionTitle: item.title,
+        electionType: item.electionType,
+        electionLocation,
+        electionStartDate: item.startDate ?? "",
+        electionEndDate: item.endDate ?? "",
+        votingStartTime,
+        pollingUnitName: item.pollingUnitName ?? "",
+        pollingUnitCode: item.pollingUnitCode ?? "",
+        ward: item.ward ?? "",
+        lga: item.lga ?? "",
+        state,
       },
     });
   };
