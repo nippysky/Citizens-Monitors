@@ -13,6 +13,13 @@ import {
 } from "react";
 
 import { pulseQueryKeys } from "@/hooks/api/usePulseQueries";
+import { reportingQueryKeys } from "@/hooks/api/useReportingMutations";
+import {
+  mapDraftToElectionResultPayload,
+  mapDraftToIncidentReportPayload,
+  submitElectionResult,
+  submitIncidentReport,
+} from "@/lib/api/reporting.api";
 import {
   createPulseComment,
   createPulsePost,
@@ -20,6 +27,7 @@ import {
   likePulsePost,
   PulseVisibilityScope,
 } from "@/lib/api/pulse.api";
+import { ElectionResultDraft, IncidentDraft } from "@/lib/reporting";
 
 export type QueuedActionType =
   | "flag-report"
@@ -45,11 +53,15 @@ export type QueuedAction = {
 
 type OfflineSyncContextValue = {
   queue: QueuedAction[];
-  enqueue: (
-    action: Omit<QueuedAction, "id" | "createdAt" | "synced">
-  ) => void;
+  enqueue: (action: Omit<QueuedAction, "id" | "createdAt" | "synced">) => void;
   isOnline: boolean;
   pendingCount: number;
+};
+
+type SyncResult = {
+  ok: boolean;
+  invalidatePulse?: boolean;
+  invalidateReportingElectionId?: string;
 };
 
 const STORAGE_KEY = "@citizen_monitors/offline_queue";
@@ -71,7 +83,7 @@ function getString(payload: Record<string, unknown>, key: string): string {
 
 function getNullableString(
   payload: Record<string, unknown>,
-  key: string
+  key: string,
 ): string | null {
   const value = payload[key];
 
@@ -88,19 +100,34 @@ function getBoolean(payload: Record<string, unknown>, key: string): boolean {
 }
 
 function getVisibilityScope(
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
 ): PulseVisibilityScope {
   return payload.visibilityScope === "lga" ? "lga" : "ward";
 }
 
-async function syncQueuedAction(item: QueuedAction): Promise<boolean> {
+function getElectionId(payload: Record<string, unknown>): string {
+  return getString(payload, "electionId") || getString(payload, "election");
+}
+
+function getElectionFeedback(payload: Record<string, unknown>) {
+  return {
+    rating: getString(payload, "rating") as "good" | "manageable" | "poor" | "",
+    intimidationToday: getString(payload, "intimidationToday") as
+      | "yes"
+      | "no"
+      | "",
+    voteBuyingToday: getString(payload, "voteBuyingToday") as "yes" | "no" | "",
+  };
+}
+
+async function syncQueuedAction(item: QueuedAction): Promise<SyncResult> {
   try {
     switch (item.type) {
       case "pulse-create-post": {
         const body = getString(item.payload, "body");
 
         if (!body) {
-          return true;
+          return { ok: true };
         }
 
         await createPulsePost({
@@ -110,19 +137,19 @@ async function syncQueuedAction(item: QueuedAction): Promise<boolean> {
           imageUri: getNullableString(item.payload, "imageUri"),
         });
 
-        return true;
+        return { ok: true, invalidatePulse: true };
       }
 
       case "pulse-like-post": {
         const postId = getString(item.payload, "postId");
 
         if (!postId) {
-          return true;
+          return { ok: true };
         }
 
         await likePulsePost(postId);
 
-        return true;
+        return { ok: true, invalidatePulse: true };
       }
 
       case "pulse-create-comment": {
@@ -130,7 +157,7 @@ async function syncQueuedAction(item: QueuedAction): Promise<boolean> {
         const body = getString(item.payload, "body");
 
         if (!postId || !body) {
-          return true;
+          return { ok: true };
         }
 
         await createPulseComment({
@@ -139,12 +166,12 @@ async function syncQueuedAction(item: QueuedAction): Promise<boolean> {
             body,
             useAnonymousDisplay: getBoolean(
               item.payload,
-              "useAnonymousDisplay"
+              "useAnonymousDisplay",
             ),
           },
         });
 
-        return true;
+        return { ok: true, invalidatePulse: true };
       }
 
       case "pulse-like-comment": {
@@ -152,7 +179,7 @@ async function syncQueuedAction(item: QueuedAction): Promise<boolean> {
         const commentId = getString(item.payload, "commentId");
 
         if (!postId || !commentId) {
-          return true;
+          return { ok: true };
         }
 
         await likePulseComment({
@@ -160,25 +187,56 @@ async function syncQueuedAction(item: QueuedAction): Promise<boolean> {
           commentId,
         });
 
-        return true;
+        return { ok: true, invalidatePulse: true };
       }
 
-      case "submit-election-report":
-      case "submit-incident-report":
+      case "submit-election-report": {
+        const electionId = getElectionId(item.payload);
+
+        if (!electionId) {
+          return { ok: true };
+        }
+
+        await submitElectionResult(
+          mapDraftToElectionResultPayload({
+            draft: item.payload as unknown as ElectionResultDraft,
+            feedback: getElectionFeedback(item.payload),
+          }),
+        );
+
+        return { ok: true, invalidateReportingElectionId: electionId };
+      }
+
+      case "submit-incident-report": {
+        const electionId = getElectionId(item.payload);
+
+        if (!electionId) {
+          return { ok: true };
+        }
+
+        await submitIncidentReport(
+          mapDraftToIncidentReportPayload(
+            item.payload as unknown as IncidentDraft,
+          ),
+        );
+
+        return { ok: true, invalidateReportingElectionId: electionId };
+      }
+
       case "submit-incident-feedback":
       case "flag-report":
       case "comment":
       case "opinion":
       case "like":
       case "confirm-report":
-        return false;
+        return { ok: false };
 
       default:
-        return false;
+        return { ok: false };
     }
   } catch (error) {
     console.log("Sync failed:", error);
-    return false;
+    return { ok: false };
   }
 }
 
@@ -206,7 +264,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {
       setIsOnline(
-        Boolean(state.isConnected) && state.isInternetReachable !== false
+        Boolean(state.isConnected) && state.isInternetReachable !== false,
       );
     });
 
@@ -230,7 +288,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
         });
       });
     },
-    []
+    [],
   );
 
   useEffect(() => {
@@ -243,21 +301,26 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
 
     const run = async () => {
       let currentQueue = [...queue];
-      let didSyncPulse = false;
+      let shouldInvalidatePulse = false;
+      const reportingElectionIds = new Set<string>();
 
       for (const item of pending) {
-        const ok = await syncQueuedAction(item);
+        const result = await syncQueuedAction(item);
 
-        if (!ok) {
+        if (!result.ok) {
           continue;
         }
 
-        if (item.type.startsWith("pulse-")) {
-          didSyncPulse = true;
+        if (result.invalidatePulse) {
+          shouldInvalidatePulse = true;
+        }
+
+        if (result.invalidateReportingElectionId) {
+          reportingElectionIds.add(result.invalidateReportingElectionId);
         }
 
         currentQueue = currentQueue.map((entry) =>
-          entry.id === item.id ? { ...entry, synced: true } : entry
+          entry.id === item.id ? { ...entry, synced: true } : entry,
         );
 
         setQueue(currentQueue);
@@ -269,9 +332,27 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       setQueue(compacted);
       await persistQueue(compacted);
 
-      if (didSyncPulse) {
+      if (shouldInvalidatePulse) {
         void queryClient.invalidateQueries({
           queryKey: pulseQueryKeys.posts,
+        });
+      }
+
+      if (reportingElectionIds.size > 0) {
+        void queryClient.invalidateQueries({
+          queryKey: reportingQueryKeys.dashboard,
+        });
+        void queryClient.invalidateQueries({
+          queryKey: reportingQueryKeys.electionVault,
+        });
+        void queryClient.invalidateQueries({
+          queryKey: reportingQueryKeys.collation,
+        });
+
+        reportingElectionIds.forEach((electionId) => {
+          void queryClient.invalidateQueries({
+            queryKey: reportingQueryKeys.electionCollation(electionId),
+          });
         });
       }
 
@@ -292,7 +373,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       isOnline,
       pendingCount,
     }),
-    [queue, enqueue, isOnline, pendingCount]
+    [queue, enqueue, isOnline, pendingCount],
   );
 
   return (

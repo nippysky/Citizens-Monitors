@@ -1,21 +1,20 @@
 import { Pressable, StyleSheet } from "react-native";
 
 import AppText from "@/components/ui/AppText";
-import type { ElectionStatus } from "@/data/elections";
+import type { ElectionStatusFilter } from "@/data/elections";
 import { Theme } from "@/theme";
 
-type PillValue = ElectionStatus | "all";
-
 type Props = {
-  value: PillValue;
+  value: ElectionStatusFilter;
   selected: boolean;
   onPress: () => void;
 };
 
-function labelForValue(value: PillValue): string {
+function labelForValue(value: ElectionStatusFilter): string {
   if (value === "all") return "ALL";
   if (value === "live") return "LIVE";
   if (value === "upcoming") return "UPCOMING";
+
   return "CONCLUDED";
 }
 
@@ -27,7 +26,11 @@ export default function ElectionStatusPill({
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.pill, selected && styles.pillActive]}
+      style={({ pressed }) => [
+        styles.pill,
+        selected && styles.pillActive,
+        pressed && styles.pressed,
+      ]}
     >
       <AppText style={[styles.text, selected && styles.textActive]}>
         {labelForValue(value)}
@@ -51,6 +54,10 @@ const styles = StyleSheet.create({
   pillActive: {
     borderColor: "rgba(25,183,176,0.18)",
     backgroundColor: "rgba(25,183,176,0.12)",
+  },
+
+  pressed: {
+    opacity: 0.72,
   },
 
   text: {

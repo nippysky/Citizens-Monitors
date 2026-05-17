@@ -16,17 +16,22 @@ import Animated, {
   FadeOutUp,
   LinearTransition,
 } from "react-native-reanimated";
+import { useQueryClient } from "@tanstack/react-query";
 
 import AppGradientScreen from "@/components/app/AppGradientScreen";
 import ReportingOutcomeState from "@/components/reporting/ReportingOutcomeState";
-import PostReportFeedbackCard from "@/components/reporting/PostReportFeedbackCard";
 import AppButton from "@/components/ui/AppButton";
 import AppText from "@/components/ui/AppText";
-import BackButton from "@/components/ui/BackButton";
+import SelectPickerSheet from "@/components/ui/sheets/SelectPickerSheet";
 import { Paths } from "@/constants/paths";
 import { useNetwork } from "@/context/NetworkContext";
 import { useOfflineSync } from "@/context/OfflineSyncContext";
 import { useAppToast } from "@/hooks/useAppToast";
+import { reportingQueryKeys } from "@/hooks/api/useReportingMutations";
+import {
+  mapDraftToElectionResultPayload,
+  submitElectionResult,
+} from "@/lib/api/reporting.api";
 import {
   buildInitialResultDraft,
   clearResultDraft,
@@ -56,9 +61,6 @@ import LP from "@/svgs/app/collation/LP";
 import NNPP from "@/svgs/app/collation/NNPP";
 import OtherParties from "@/svgs/app/collation/OtherParties";
 import PDP from "@/svgs/app/collation/PDP";
-import SelectPickerSheet from "@/components/ui/sheets/SelectPickerSheet";
-
-/* ─── Local types ──────────────────────────────────────────────────────────── */
 
 type ViewState = "form" | "success" | "invalid";
 
@@ -68,9 +70,9 @@ type FeedbackState = {
   voteBuyingToday: "yes" | "no" | "";
 };
 
-// ElectionResultDraft's votesPerParty element shape — derived so we stay in
-// sync with whatever lib/reporting declares without re-declaring here.
 type PartyVoteEntry = ElectionResultDraft["votesPerParty"][number];
+type PartyCatalogEntry = (typeof PARTY_CATALOG)[number];
+type IoniconsName = keyof typeof Ionicons.glyphMap;
 
 const initialFeedbackState: FeedbackState = {
   rating: "",
@@ -78,14 +80,57 @@ const initialFeedbackState: FeedbackState = {
   voteBuyingToday: "",
 };
 
-/* ─── Small building blocks ────────────────────────────────────────────────── */
+function getCatalogEntryCode(entry: PartyCatalogEntry): string {
+  if (typeof entry === "string") return (entry as string).trim();
+
+  if (entry && typeof entry === "object" && "code" in entry) {
+    const code = entry.code;
+    return typeof code === "string" ? code.trim() : "";
+  }
+
+  return "";
+}
+
+function formatCatalogEntryForPicker(entry: PartyCatalogEntry): string {
+  const fallbackCode = getCatalogEntryCode(entry);
+
+  try {
+    const formatter = formatPartyPickerLabel as unknown as (
+      value: PartyCatalogEntry
+    ) => string;
+
+    const label = formatter(entry);
+    if (label?.trim()) return label;
+  } catch {
+    // Fallback below keeps the picker resilient if the catalog shape changes.
+  }
+
+  const fallbackName = getPartyInfo(fallbackCode)?.fullName;
+  return fallbackName ? `${fallbackCode} — ${fallbackName}` : fallbackCode;
+}
+
+function parseSelectedPartyCode(label: string): string {
+  const parsed = parsePartyPickerLabel(label) as unknown;
+
+  if (typeof parsed === "string") {
+    return parsed.trim().toUpperCase();
+  }
+
+  if (parsed && typeof parsed === "object" && "code" in parsed) {
+    const code = parsed.code;
+    if (typeof code === "string") return code.trim().toUpperCase();
+  }
+
+  return label.split(/[—-]/)[0]?.trim().toUpperCase() ?? "";
+}
 
 function OfflineBanner() {
   return (
     <View style={styles.offlineBanner}>
       <View style={styles.offlineIconWrap}>
-        <Ionicons name="cloud-offline-outline" size={16} color="#FFFFFF" />
+        <Ionicons name="cloud-offline-outline" size={17} color="#FFFFFF" />
       </View>
+
       <AppText style={styles.offlineBannerText}>
         You are offline. Reports will auto-submit when connected.
       </AppText>
@@ -93,45 +138,70 @@ function OfflineBanner() {
   );
 }
 
+function Header() {
+  return (
+    <View style={styles.headerRow}>
+      <Pressable
+        onPress={() => router.back()}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+        style={styles.backButton}
+      >
+        <Ionicons name="chevron-back" size={25} color="#111827" />
+      </Pressable>
+    </View>
+  );
+}
+
 function PartyLogo({ party }: { party: string }) {
   const normalized = party.trim().toUpperCase();
 
-  if (normalized === "APC") return <APC width={30} height={22} />;
-  if (normalized === "PDP") return <PDP width={30} height={22} />;
-  if (normalized === "LP") return <LP width={30} height={22} />;
-  if (normalized === "NNPP") return <NNPP width={30} height={22} />;
+  if (normalized === "APC") return <APC width={30} height={23} />;
+  if (normalized === "PDP") return <PDP width={30} height={23} />;
+  if (normalized === "LP") return <LP width={30} height={23} />;
+  if (normalized === "NNPP") return <NNPP width={30} height={23} />;
 
-  // Fallback for any party not in the popular 4. When brand SVGs for the
-  // smaller parties are delivered by design, add more cases above this line.
-  return <OtherParties width={30} height={22} />;
+  return <OtherParties width={30} height={23} />;
 }
 
 function SmallActionButton({
   title,
+  iconName,
   variant = "primary",
   onPress,
 }: {
   title: string;
+  iconName?: IoniconsName;
   variant?: "primary" | "secondary";
   onPress: () => void;
 }) {
+  const isPrimary = variant === "primary";
+
   return (
     <Pressable
       onPress={onPress}
       style={[
         styles.smallActionBtn,
-        variant === "primary"
-          ? styles.smallActionBtnPrimary
-          : styles.smallActionBtnSecondary,
+        isPrimary ? styles.smallActionBtnPrimary : styles.smallActionBtnSecondary,
       ]}
     >
+      {iconName ? (
+        <Ionicons
+          name={iconName}
+          size={14}
+          color={isPrimary ? "#FFFFFF" : Theme.colors.primary}
+        />
+      ) : null}
+
       <AppText
         style={[
           styles.smallActionBtnText,
-          variant === "primary"
+          isPrimary
             ? styles.smallActionBtnTextPrimary
             : styles.smallActionBtnTextSecondary,
         ]}
+        numberOfLines={1}
       >
         {title}
       </AppText>
@@ -143,6 +213,7 @@ function EvidenceCard({
   title,
   description,
   primaryActionLabel,
+  primaryIconName,
   secondaryActionLabel,
   onPrimaryAction,
   onSecondaryAction,
@@ -153,6 +224,7 @@ function EvidenceCard({
   title: string;
   description: string;
   primaryActionLabel: string;
+  primaryIconName: IoniconsName;
   secondaryActionLabel: string;
   onPrimaryAction: () => void;
   onSecondaryAction: () => void;
@@ -172,9 +244,10 @@ function EvidenceCard({
             <Image source={{ uri: selectedUri }} style={styles.previewImage} />
           ) : (
             <View style={styles.videoPreviewWrap}>
-              <View style={styles.previewIconBadge}>
-                <Ionicons name="videocam-outline" size={18} color="#111827" />
+              <View style={styles.uploadIconHalo}>
+                <Ionicons name="document-text-outline" size={19} color="#101828" />
               </View>
+
               <AppText style={styles.previewLead}>Video attached</AppText>
               <AppText style={styles.previewSub}>
                 Your selected evidence is ready.
@@ -185,22 +258,17 @@ function EvidenceCard({
           <Pressable
             style={styles.previewRemoveBtn}
             onPress={onSecondaryAction}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Remove selected evidence"
           >
             <Ionicons name="close" size={16} color="#FFFFFF" />
           </Pressable>
         </View>
       ) : (
         <View style={styles.uploadCard}>
-          <View style={styles.previewIconBadge}>
-            <Ionicons
-              name={
-                selectedType === "image"
-                  ? "document-text-outline"
-                  : "videocam-outline"
-              }
-              size={18}
-              color="#111827"
-            />
+          <View style={styles.uploadIconHalo}>
+            <Ionicons name="document-text-outline" size={19} color="#101828" />
           </View>
 
           <AppText style={styles.uploadLead}>{description}</AppText>
@@ -208,8 +276,10 @@ function EvidenceCard({
           <View style={styles.uploadActionRow}>
             <SmallActionButton
               title={primaryActionLabel}
+              iconName={primaryIconName}
               onPress={onPrimaryAction}
             />
+
             <SmallActionButton
               title={secondaryActionLabel}
               variant="secondary"
@@ -236,18 +306,18 @@ function CompactField({
   return (
     <View style={styles.compactFieldWrap}>
       <AppText style={styles.compactFieldLabel}>{label}</AppText>
+
       <TextInput
         value={value}
         onChangeText={onChangeText}
-        keyboardType="numeric"
+        keyboardType="number-pad"
         placeholderTextColor="#9CA3AF"
+        selectionColor={Theme.colors.primary}
         style={styles.compactFieldInput}
       />
     </View>
   );
 }
-
-/* ─── Party row (animated) ─────────────────────────────────────────────────── */
 
 type PartyRowProps = {
   item: PartyVoteEntry;
@@ -257,7 +327,10 @@ type PartyRowProps = {
 };
 
 function PartyRow({ item, removable, onChangeVotes, onRemove }: PartyRowProps) {
-  const fullName = getPartyInfo(item.party)?.fullName ?? "";
+  const candidateName =
+    typeof item.candidate === "string" && item.candidate.trim()
+      ? item.candidate.trim()
+      : getPartyInfo(item.party)?.fullName ?? "";
 
   return (
     <Animated.View
@@ -273,13 +346,14 @@ function PartyRow({ item, removable, onChangeVotes, onRemove }: PartyRowProps) {
           <AppText style={styles.partyName} numberOfLines={1}>
             {item.party}
           </AppText>
-          {fullName ? (
+
+          {candidateName ? (
             <AppText
-              style={styles.partyFullName}
+              style={styles.partySubName}
               numberOfLines={1}
               ellipsizeMode="tail"
             >
-              {fullName}
+              {candidateName}
             </AppText>
           ) : null}
         </View>
@@ -289,9 +363,10 @@ function PartyRow({ item, removable, onChangeVotes, onRemove }: PartyRowProps) {
         <TextInput
           value={String(item.votes ?? "")}
           onChangeText={onChangeVotes}
-          keyboardType="numeric"
+          keyboardType="number-pad"
           placeholder="0"
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor="#5B6770"
+          selectionColor={Theme.colors.primary}
           style={styles.voteInput}
         />
       </View>
@@ -311,7 +386,39 @@ function PartyRow({ item, removable, onChangeVotes, onRemove }: PartyRowProps) {
   );
 }
 
-/* ─── Utility: commencement context resolver ──────────────────────────────── */
+function AddMorePartyRow({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.partyRow,
+        styles.partyRowBorder,
+        styles.addMorePartyRow,
+        pressed && styles.addMorePartyRowPressed,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel="Add more party"
+    >
+      <View style={styles.partyInfoWrap}>
+        <OtherParties width={30} height={23} />
+
+        <View style={styles.addMoreLabelWrap}>
+          <AppText style={styles.addMoreText}>Add More Party</AppText>
+          <Ionicons name="chevron-down" size={15} color="#111827" />
+        </View>
+      </View>
+
+      <View style={styles.partyActionWrap}>
+        <TextInput
+          value="0"
+          editable={false}
+          pointerEvents="none"
+          style={styles.voteInput}
+        />
+      </View>
+    </Pressable>
+  );
+}
 
 function resolveCommencementContext(input: {
   electionId?: string;
@@ -335,24 +442,22 @@ function resolveCommencementContext(input: {
     ward: input.ward?.trim() || DEV_COMMENCEMENT_CONTEXT.ward,
     lga: input.lga?.trim() || DEV_COMMENCEMENT_CONTEXT.lga,
     state: input.state?.trim() || DEV_COMMENCEMENT_CONTEXT.state,
+    uploadLocation: DEV_COMMENCEMENT_CONTEXT.uploadLocation ?? null,
   };
 }
 
-/**
- * Strips any legacy "Other Parties" catch-all entries. Called on hydrate so
- * the new picker flow becomes the only way to add beyond the popular 4.
- * Returns the SAME reference when nothing changed → lets us skip a needless
- * disk write.
- */
 function normalizePartyList(draft: ElectionResultDraft): ElectionResultDraft {
   const filtered = draft.votesPerParty.filter(
-    (p) => !isGenericOthersEntry(p.party)
+    (party) => !isGenericOthersEntry(party.party)
   );
-  if (filtered.length === draft.votesPerParty.length) return draft;
-  return { ...draft, votesPerParty: filtered };
-}
 
-/* ─── Screen ──────────────────────────────────────────────────────────────── */
+  if (filtered.length === draft.votesPerParty.length) return draft;
+
+  return {
+    ...draft,
+    votesPerParty: filtered,
+  };
+}
 
 export default function SubmitElectionReportScreen() {
   const params = useLocalSearchParams<{
@@ -366,6 +471,7 @@ export default function SubmitElectionReportScreen() {
     votingStartTime?: string;
   }>();
 
+  const queryClient = useQueryClient();
   const { isConnected, isInternetReachable } = useNetwork();
   const { enqueue } = useOfflineSync();
   const { showToast } = useAppToast();
@@ -374,15 +480,12 @@ export default function SubmitElectionReportScreen() {
   const [loading, setLoading] = useState(false);
   const [viewState, setViewState] = useState<ViewState>("form");
   const [invalidReason, setInvalidReason] = useState("");
-  const [feedback, setFeedback] = useState<FeedbackState>(initialFeedbackState);
+  const [feedback] = useState<FeedbackState>(initialFeedbackState);
 
-  // Party picker state — sheet ref + search query (parent-controlled).
   const partyPickerRef = useRef<BottomSheetModal>(null);
   const [partyPickerQuery, setPartyPickerQuery] = useState("");
 
-  const isOffline = !isConnected || !isInternetReachable;
-
-  /* ── Hydrate draft from storage (or build a fresh one) ── */
+  const isOffline = !isConnected || isInternetReachable === false;
 
   useEffect(() => {
     let mounted = true;
@@ -409,16 +512,16 @@ export default function SubmitElectionReportScreen() {
         const normalized = normalizePartyList(base);
         setDraft(normalized);
 
-        // Persist only if we actually changed something OR this is a brand
-        // new draft. Avoids redundant writes on every screen open.
         if (normalized !== base || !stored) {
           await saveResultDraft(normalized);
         }
       } catch {
         if (!mounted) return;
+
         const fallback = normalizePartyList(
           buildInitialResultDraft(ctx, params.votingStartTime?.trim() || "")
         );
+
         setDraft(fallback);
       }
     };
@@ -439,74 +542,68 @@ export default function SubmitElectionReportScreen() {
     params.votingStartTime,
   ]);
 
-  /* ── Derived state ── */
-
-  // Rows actually shown in the table. Filters out any legacy "Other Parties"
-  // row that might have slipped past normalize (defensive).
   const renderableParties = useMemo(
     () => draft?.votesPerParty.filter((p) => !isGenericOthersEntry(p.party)) ?? [],
     [draft]
   );
 
-  // Picker options — PARTY_CATALOG minus already-added parties, then filtered
-  // by the sheet's search query. We filter here rather than relying on the
-  // sheet's internal filter because SelectPickerSheet currently ignores its
-  // own `query` prop when `options` is provided.
-  const availablePartyOptions = useMemo(() => {
-    if (!draft) return [];
-    const used = new Set(
-      draft.votesPerParty.map((v) => v.party.trim().toUpperCase())
-    );
-    const available = PARTY_CATALOG.filter(
-      (p) => !used.has(p.code.toUpperCase())
-    );
-    const labels = available.map(formatPartyPickerLabel);
-
-    const q = partyPickerQuery.trim().toLowerCase();
-    if (!q) return labels;
-    return labels.filter((l) => l.toLowerCase().includes(q));
-  }, [draft, partyPickerQuery]);
-
-  // Total valid votes computed locally from renderable rows (not from the
-  // full draft) so any hidden "Other Parties" entry can't skew the number.
   const totalValidVotes = useMemo(
     () =>
       renderableParties.reduce(
-        (sum, p) => sum + (parseInt(String(p.votes), 10) || 0),
+        (sum, party) => sum + (Number.parseInt(String(party.votes || "0"), 10) || 0),
         0
       ),
     [renderableParties]
   );
 
-  /* ── Draft mutations ── */
+  const availablePartyOptions = useMemo(() => {
+    if (!draft) return [];
+
+    const used = new Set(
+      draft.votesPerParty.map((entry) => entry.party.trim().toUpperCase())
+    );
+
+    const labels = PARTY_CATALOG.filter((entry) => {
+      const code = getCatalogEntryCode(entry);
+      return code && !used.has(code.toUpperCase());
+    }).map(formatCatalogEntryForPicker);
+
+    const query = partyPickerQuery.trim().toLowerCase();
+
+    if (!query) return labels;
+
+    return labels.filter((label) => label.toLowerCase().includes(query));
+  }, [draft, partyPickerQuery]);
 
   const updateDraft = async (next: ElectionResultDraft) => {
-    setDraft(next);
-    await saveResultDraft(next);
+    const normalized = normalizePartyList(next);
+    setDraft(normalized);
+    await saveResultDraft(normalized);
   };
 
-  const handleChangeVotes = async (id: string, rawVotes: string) => {
+  const updatePartyVotes = async (partyId: string, votes: string) => {
     if (!draft) return;
-    const cleaned = rawVotes.replace(/[^\d]/g, "");
+
     await updateDraft({
       ...draft,
-      votesPerParty: draft.votesPerParty.map((p) =>
-        p.id === id ? { ...p, votes: cleaned } : p
+      votesPerParty: draft.votesPerParty.map((item) =>
+        item.id === partyId
+          ? { ...item, votes: votes.replace(/[^\d]/g, "") }
+          : item
       ),
     });
   };
 
-  const handleRemoveParty = async (id: string) => {
+  const removeParty = async (partyId: string) => {
     if (!draft) return;
+
     await updateDraft({
       ...draft,
-      votesPerParty: draft.votesPerParty.filter((p) => p.id !== id),
+      votesPerParty: draft.votesPerParty.filter((item) => item.id !== partyId),
     });
   };
 
-  /* ── Party picker ── */
-
-  const handleOpenPartyPicker = () => {
+  const openPartyPicker = () => {
     setPartyPickerQuery("");
     partyPickerRef.current?.present();
   };
@@ -514,155 +611,252 @@ export default function SubmitElectionReportScreen() {
   const handleSelectParty = async (label: string) => {
     if (!draft) return;
 
-    const code = parsePartyPickerLabel(label);
+    const code = parseSelectedPartyCode(label);
+
     if (!code) return;
 
-    // Safety: race condition between render and tap could theoretically show
-    // an already-added party. Double-check before mutating.
-    const alreadyAdded = draft.votesPerParty.some(
-      (p) => p.party.trim().toUpperCase() === code.toUpperCase()
+    const exists = draft.votesPerParty.some(
+      (item) => item.party.trim().toUpperCase() === code
     );
-    if (alreadyAdded) return;
 
-    const newEntry = {
-      id: `party-${code}-${Date.now()}`,
+    if (exists) {
+      partyPickerRef.current?.dismiss();
+      setPartyPickerQuery("");
+      return;
+    }
+
+    const partyInfo = getPartyInfo(code);
+
+    const nextEntry: PartyVoteEntry = {
+      id: `${code.toLowerCase()}-${Date.now()}`,
       party: code,
-      candidate: "",
-      votes: "0",
-    } as PartyVoteEntry;
+      candidate: partyInfo?.fullName ?? code,
+      votes: "",
+    };
 
     await updateDraft({
       ...draft,
-      votesPerParty: [...draft.votesPerParty, newEntry],
+      votesPerParty: [...draft.votesPerParty, nextEntry],
     });
+
+    partyPickerRef.current?.dismiss();
+    setPartyPickerQuery("");
   };
 
-  /* ── Media capture/pick (unchanged from before) ── */
-
-  const pickImage = async () => {
+  const openImageCamera = async () => {
     if (!draft) return;
-    const allowed = await ensureMediaLibraryPermission();
-    if (!allowed) return;
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      quality: 0.9,
-      allowsEditing: false,
-      selectionLimit: 1,
-    });
-    if (result.canceled || !result.assets?.length) return;
-
-    const staged = await stageMediaFile({
-      sourceUri: result.assets[0].uri,
-      kind: "image",
-      mimeType: result.assets[0].mimeType ?? "image/jpeg",
-    });
-
-    await updateDraft({ ...draft, signedResultImageUri: staged.localUri });
-  };
-
-  const takePhoto = async () => {
-    if (!draft) return;
     const allowed = await ensureCameraPermission();
     if (!allowed) return;
 
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ["images"],
-      quality: 0.9,
-      allowsEditing: false,
-    });
-    if (result.canceled || !result.assets?.length) return;
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["images"],
+        allowsEditing: false,
+        quality: 0.9,
+      });
 
-    const staged = await stageMediaFile({
-      sourceUri: result.assets[0].uri,
-      kind: "image",
-      mimeType: result.assets[0].mimeType ?? "image/jpeg",
-    });
+      if (result.canceled || !result.assets?.length) return;
 
-    await updateDraft({ ...draft, signedResultImageUri: staged.localUri });
+      const asset = result.assets[0];
+
+      const staged = await stageMediaFile({
+        sourceUri: asset.uri,
+        kind: "image",
+        mimeType: asset.mimeType,
+      });
+
+      await updateDraft({
+        ...draft,
+        signedResultImageUri: staged.localUri,
+      });
+    } catch {
+      showToast({ type: "error", message: "Could not open camera." });
+    }
   };
 
-  const pickVideo = async () => {
+  const openImageGallery = async () => {
     if (!draft) return;
+
     const allowed = await ensureMediaLibraryPermission();
     if (!allowed) return;
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["videos"],
-      quality: 0.8,
-      videoMaxDuration: 180,
-      allowsEditing: false,
-      selectionLimit: 1,
-    });
-    if (result.canceled || !result.assets?.length) return;
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: false,
+        quality: 0.9,
+      });
 
-    const staged = await stageMediaFile({
-      sourceUri: result.assets[0].uri,
-      kind: "video",
-      mimeType: result.assets[0].mimeType ?? "video/mp4",
-    });
+      if (result.canceled || !result.assets?.length) return;
 
-    await updateDraft({ ...draft, resultAnnouncementVideoUri: staged.localUri });
+      const asset = result.assets[0];
+
+      const staged = await stageMediaFile({
+        sourceUri: asset.uri,
+        kind: "image",
+        mimeType: asset.mimeType,
+      });
+
+      await updateDraft({
+        ...draft,
+        signedResultImageUri: staged.localUri,
+      });
+    } catch {
+      showToast({ type: "error", message: "Could not open gallery." });
+    }
   };
 
-  const recordVideo = async () => {
+  const openVideoCamera = async () => {
     if (!draft) return;
+
     const allowed = await ensureCameraPermission();
     if (!allowed) return;
 
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ["videos"],
-      quality: 0.8,
-      videoMaxDuration: 180,
-      allowsEditing: false,
-    });
-    if (result.canceled || !result.assets?.length) return;
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["videos"],
+        allowsEditing: false,
+        videoMaxDuration: 180,
+        quality: 0.85,
+      });
 
-    const staged = await stageMediaFile({
-      sourceUri: result.assets[0].uri,
-      kind: "video",
-      mimeType: result.assets[0].mimeType ?? "video/mp4",
-    });
+      if (result.canceled || !result.assets?.length) return;
 
-    await updateDraft({ ...draft, resultAnnouncementVideoUri: staged.localUri });
+      const asset = result.assets[0];
+
+      const staged = await stageMediaFile({
+        sourceUri: asset.uri,
+        kind: "video",
+        mimeType: asset.mimeType,
+      });
+
+      await updateDraft({
+        ...draft,
+        resultAnnouncementVideoUri: staged.localUri,
+      });
+    } catch {
+      showToast({ type: "error", message: "Could not open camera." });
+    }
   };
 
-  /* ── Submit ── */
+  const openVideoGallery = async () => {
+    if (!draft) return;
+
+    const allowed = await ensureMediaLibraryPermission();
+    if (!allowed) return;
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["videos"],
+        allowsEditing: false,
+        videoMaxDuration: 180,
+        quality: 0.85,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+
+      const asset = result.assets[0];
+
+      const staged = await stageMediaFile({
+        sourceUri: asset.uri,
+        kind: "video",
+        mimeType: asset.mimeType,
+      });
+
+      await updateDraft({
+        ...draft,
+        resultAnnouncementVideoUri: staged.localUri,
+      });
+    } catch {
+      showToast({ type: "error", message: "Could not open gallery." });
+    }
+  };
+
+  const invalidateReportingData = (electionId: string) => {
+    void queryClient.invalidateQueries({ queryKey: reportingQueryKeys.dashboard });
+    void queryClient.invalidateQueries({ queryKey: reportingQueryKeys.electionVault });
+    void queryClient.invalidateQueries({ queryKey: reportingQueryKeys.collation });
+    void queryClient.invalidateQueries({
+      queryKey: reportingQueryKeys.electionCollation(electionId),
+    });
+  };
 
   const handleSubmit = async () => {
     if (!draft) return;
-    setLoading(true);
 
     const validation = validateElectionResult(draft);
 
     if (!validation.valid) {
       setInvalidReason(validation.reason ?? "");
-      setLoading(false);
       setViewState("invalid");
       return;
     }
 
-    enqueue({
-      type: "submit-election-report",
-      payload: {
-        ...draft,
-        totalValidVotes: validation.totalValidVotes,
-      } as unknown as Record<string, unknown>,
-    });
+    const queuePayload = {
+      ...(draft as unknown as Record<string, unknown>),
+      totalValidVotes: validation.totalValidVotes,
+      rating: feedback.rating,
+      intimidationToday: feedback.intimidationToday,
+      voteBuyingToday: feedback.voteBuyingToday,
+    };
 
-    await clearResultDraft();
-    setLoading(false);
-    setViewState("success");
+    setLoading(true);
 
-    showToast({
-      type: "success",
-      message: isOffline
-        ? "Report saved offline. It will sync automatically when you're back online."
-        : "Report submitted successfully.",
-    });
+    if (isOffline) {
+      enqueue({
+        type: "submit-election-report",
+        payload: queuePayload,
+      });
+
+      await clearResultDraft();
+      setLoading(false);
+      setViewState("success");
+
+      showToast({
+        type: "success",
+        message:
+          "Report saved offline. It will sync automatically when you're back online.",
+      });
+
+      return;
+    }
+
+    try {
+      await submitElectionResult(
+        mapDraftToElectionResultPayload({
+          draft,
+          feedback,
+        })
+      );
+
+      await clearResultDraft();
+      invalidateReportingData(draft.electionId);
+      setViewState("success");
+
+      showToast({
+        type: "success",
+        message: "Report submitted successfully.",
+      });
+    } catch (error) {
+      enqueue({
+        type: "submit-election-report",
+        payload: queuePayload,
+      });
+
+      setViewState("success");
+
+      showToast({
+        type: "success",
+        message:
+          "Report saved offline. It will sync automatically when connection is stable.",
+      });
+
+      console.log("Election result queued:", error);
+    } finally {
+      setLoading(false);
+    }
   };
-
-  /* ── Outcome states ── */
 
   if (viewState === "success") {
     return (
@@ -671,24 +865,9 @@ export default function SubmitElectionReportScreen() {
         showConfetti
         title="Report Submitted"
         subtitle="Your participation today makes a difference. Thank You. Nigerians are seeing it now."
-        primaryActionLabel="Submit Feedback"
+        primaryActionLabel="Go To Collation"
         onPrimaryAction={() => router.replace(Paths.appCollation)}
-      >
-        <PostReportFeedbackCard
-          rating={feedback.rating}
-          intimidationToday={feedback.intimidationToday}
-          voteBuyingToday={feedback.voteBuyingToday}
-          onChangeRating={(rating) =>
-            setFeedback((prev) => ({ ...prev, rating }))
-          }
-          onChangeIntimidationToday={(value) =>
-            setFeedback((prev) => ({ ...prev, intimidationToday: value }))
-          }
-          onChangeVoteBuyingToday={(value) =>
-            setFeedback((prev) => ({ ...prev, voteBuyingToday: value }))
-          }
-        />
-      </ReportingOutcomeState>
+      />
     );
   }
 
@@ -696,13 +875,10 @@ export default function SubmitElectionReportScreen() {
     return (
       <ReportingOutcomeState
         variant="error"
-        title="Report Submitted Not Valid"
+        title="Result Mismatch"
         subtitle={invalidReason}
-        infoCardText="Ensure that the number of ballots issued equals the number of votes cast, rejected ballots, and unused ballots. A discrepancy in these totals constitutes an irregularity and must be documented."
-        primaryActionLabel="Submit As Incident"
-        onPrimaryAction={() => router.replace(Paths.reportIncident)}
-        secondaryActionLabel="Re-enter Result"
-        onSecondaryAction={() => setViewState("form")}
+        primaryActionLabel="Review Report"
+        onPrimaryAction={() => setViewState("form")}
       />
     );
   }
@@ -717,8 +893,6 @@ export default function SubmitElectionReportScreen() {
     );
   }
 
-  /* ── Main form ── */
-
   return (
     <AppGradientScreen>
       <ScrollView
@@ -726,9 +900,7 @@ export default function SubmitElectionReportScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.headerRow}>
-          <BackButton label="" />
-        </View>
+        <Header />
 
         <AppText style={styles.pageTitle}>{draft.electionTitle}</AppText>
 
@@ -746,15 +918,15 @@ export default function SubmitElectionReportScreen() {
           title="Image of the Signed Result Sheet"
           description="Capture all the four corners of the signed EC8A result sheet in good lighting."
           primaryActionLabel="Take Photo"
+          primaryIconName="camera-outline"
           secondaryActionLabel={
             draft.signedResultImageUri ? "Remove" : "Upload from Gallery"
           }
-          onPrimaryAction={takePhoto}
+          onPrimaryAction={openImageCamera}
           onSecondaryAction={
             draft.signedResultImageUri
-              ? () =>
-                  void updateDraft({ ...draft, signedResultImageUri: null })
-              : pickImage
+              ? () => void updateDraft({ ...draft, signedResultImageUri: null })
+              : openImageGallery
           }
           selectedUri={draft.signedResultImageUri}
           selectedType="image"
@@ -765,10 +937,11 @@ export default function SubmitElectionReportScreen() {
           title="Video of Cumulative Result Announcement"
           description="Capture video of when the INEC official announced the result in good lighting."
           primaryActionLabel="Record Live"
+          primaryIconName="videocam-outline"
           secondaryActionLabel={
             draft.resultAnnouncementVideoUri ? "Remove" : "Upload from Gallery"
           }
-          onPrimaryAction={recordVideo}
+          onPrimaryAction={openVideoCamera}
           onSecondaryAction={
             draft.resultAnnouncementVideoUri
               ? () =>
@@ -776,7 +949,7 @@ export default function SubmitElectionReportScreen() {
                     ...draft,
                     resultAnnouncementVideoUri: null,
                   })
-              : pickVideo
+              : openVideoGallery
           }
           selectedUri={draft.resultAnnouncementVideoUri}
           selectedType="video"
@@ -791,62 +964,39 @@ export default function SubmitElectionReportScreen() {
           </AppText>
         </View>
 
-        <AppText style={styles.fieldLabel}>Enter Votes Per Party</AppText>
+        <AppText style={styles.tableIntroLabel}>Enter Votes Per Party</AppText>
 
-        {/* ── Votes table ── */}
         <View style={styles.tableCard}>
           <View style={styles.tableHeader}>
             <AppText style={styles.tableHeaderText}>Party</AppText>
             <AppText style={styles.tableHeaderText}>Votes</AppText>
           </View>
 
-          {renderableParties.map((item) => {
-            const removable = !isPopularParty(item.party);
-            return (
+          <Animated.View>
+            {renderableParties.map((item) => (
               <PartyRow
                 key={item.id}
                 item={item}
-                removable={removable}
-                onChangeVotes={(value) => void handleChangeVotes(item.id, value)}
-                onRemove={() => void handleRemoveParty(item.id)}
+                removable={!isPopularParty(item.party)}
+                onChangeVotes={(value) => void updatePartyVotes(item.id, value)}
+                onRemove={() => void removeParty(item.id)}
               />
-            );
-          })}
-
-          {/* Add More Party trigger — opens the SelectPickerSheet */}
-          <Animated.View layout={LinearTransition.duration(220)}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.partyRow,
-                styles.addPartyRow,
-                pressed && styles.addPartyRowPressed,
-              ]}
-              onPress={handleOpenPartyPicker}
-              accessibilityRole="button"
-              accessibilityLabel="Add more parties to the results"
-            >
-              <View style={styles.partyInfoWrap}>
-                <OtherParties width={30} height={22} />
-                <AppText style={styles.addPartyText}>Add More Party</AppText>
-              </View>
-              <Ionicons
-                name="chevron-down"
-                size={18}
-                color={Theme.colors.textMuted}
-              />
-            </Pressable>
+            ))}
           </Animated.View>
+
+          <AddMorePartyRow onPress={openPartyPicker} />
 
           <View style={styles.totalRow}>
             <AppText style={styles.totalLabel}>Total Valid Votes</AppText>
-            <AppText style={styles.totalValue}>{totalValidVotes}</AppText>
+            <AppText style={styles.totalValue}>
+              {totalValidVotes.toLocaleString()}
+            </AppText>
           </View>
         </View>
 
-        {/* ── Administrative figures ── */}
         <View style={styles.section}>
-          <AppText style={styles.sectionTitle}>
-            Administrative Figures on the Result sheet (EC8A)
+          <AppText style={styles.adminTitle}>
+            Administrative Figures on the Result sheet{"\n"}(EC8A)
           </AppText>
         </View>
 
@@ -862,6 +1012,7 @@ export default function SubmitElectionReportScreen() {
                 })
               }
             />
+
             <CompactField
               label="Rejected Voters"
               value={draft.rejectedVoters}
@@ -885,6 +1036,7 @@ export default function SubmitElectionReportScreen() {
                 })
               }
             />
+
             <CompactField
               label="Rejected Ballots"
               value={draft.rejectedBallots}
@@ -910,11 +1062,11 @@ export default function SubmitElectionReportScreen() {
                 }
               />
             </View>
+
             <View style={styles.halfFieldPlaceholder} />
           </View>
         </View>
 
-        {/* ── Truthfulness + submit ── */}
         <Pressable
           style={styles.truthRow}
           onPress={() =>
@@ -923,6 +1075,8 @@ export default function SubmitElectionReportScreen() {
               confirmTruthfulness: !draft.confirmTruthfulness,
             })
           }
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: draft.confirmTruthfulness }}
         >
           <View
             style={[
@@ -931,14 +1085,14 @@ export default function SubmitElectionReportScreen() {
             ]}
           >
             {draft.confirmTruthfulness ? (
-              <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+              <Ionicons name="checkmark" size={15} color="#FFFFFF" />
             ) : null}
           </View>
 
           <AppText style={styles.truthText}>
             I confirm this data matches the signed EC8A result sheet I have
             photographed. I understand that false reporting is an offence under
-            Section 117 of the Electoral Act 2026.
+            Section 117 of the Electoral Act 2022.
           </AppText>
         </Pressable>
 
@@ -946,12 +1100,11 @@ export default function SubmitElectionReportScreen() {
           title={loading ? "Submitting..." : "Submit Report"}
           onPress={handleSubmit}
           loading={loading}
-          disabled={!draft.confirmTruthfulness || loading}
+          disabled={loading}
           style={styles.submitBtn}
         />
       </ScrollView>
 
-      {/* ── Party picker (mounted at screen level, not the ScrollView) ── */}
       <SelectPickerSheet
         ref={partyPickerRef}
         title="Select Party"
@@ -965,14 +1118,12 @@ export default function SubmitElectionReportScreen() {
   );
 }
 
-/* ─── Styles ──────────────────────────────────────────────────────────────── */
-
 const styles = StyleSheet.create({
   content: {
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 32,
-    gap: 14,
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    paddingBottom: 24,
+    gap: 13,
   },
 
   centerLoadingWrap: {
@@ -981,7 +1132,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 24,
   },
-
   loadingText: {
     fontSize: 14,
     lineHeight: 20,
@@ -989,37 +1139,42 @@ const styles = StyleSheet.create({
   },
 
   headerRow: {
-    minHeight: 30,
+    minHeight: 24,
     justifyContent: "center",
   },
-
+  backButton: {
+    width: 28,
+    height: 28,
+    alignItems: "flex-start",
+    justifyContent: "center",
+  },
   pageTitle: {
-    fontSize: 18,
-    lineHeight: 24,
+    fontSize: 20,
+    lineHeight: 26,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.heading.semibold,
-    marginBottom: 2,
+    marginTop: -2,
+    marginBottom: 1,
   },
-
-  /* Offline banner */
 
   offlineBanner: {
-    minHeight: 52,
+    minHeight: 50,
     backgroundColor: "#F24E1E",
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 9,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginHorizontal: -16,
-    marginBottom: 6,
+    gap: 9,
+    marginHorizontal: -18,
+    marginTop: 1,
+    marginBottom: 1,
   },
   offlineIconWrap: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.7)",
+    borderColor: "rgba(255,255,255,0.86)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1027,28 +1182,24 @@ const styles = StyleSheet.create({
     flex: 1,
     color: "#FFFFFF",
     fontSize: 12,
-    lineHeight: 16,
+    lineHeight: 15,
     fontFamily: Theme.fonts.body.semibold,
   },
 
-  /* Section headings */
-
   section: {
-    gap: 4,
+    gap: 3,
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: 15,
     lineHeight: 20,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
   },
   sectionSubtitle: {
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 13,
+    lineHeight: 17,
     color: Theme.colors.textMuted,
   },
-
-  /* Evidence (upload) cards */
 
   evidenceBlock: {
     gap: 6,
@@ -1057,51 +1208,58 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     color: Theme.colors.text,
-    fontFamily: Theme.fonts.body.semibold,
+    fontFamily: Theme.fonts.body.medium,
   },
   uploadCard: {
-    borderRadius: 16,
+    minHeight: 154,
+    borderRadius: 13,
     borderWidth: 1.2,
-    borderColor: "#22B8B0",
+    borderColor: "#1EC6C3",
     borderStyle: "dashed",
-    backgroundColor: "#EAF7F6",
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    backgroundColor: "#E9F7F6",
+    paddingHorizontal: 13,
+    paddingTop: 14,
+    paddingBottom: 12,
     alignItems: "center",
+    justifyContent: "space-between",
     gap: 10,
   },
-  previewIconBadge: {
+  uploadIconHalo: {
     width: 36,
     height: 36,
-    borderRadius: 10,
-    backgroundColor: "#DFF1EE",
+    borderRadius: 18,
+    backgroundColor: "#D7F0ED",
     alignItems: "center",
     justifyContent: "center",
   },
   uploadLead: {
     fontSize: 13,
-    lineHeight: 18,
-    color: Theme.colors.textMuted,
+    lineHeight: 17,
+    color: "#4A5961",
     textAlign: "center",
-    maxWidth: 280,
+    maxWidth: 288,
   },
   uploadActionRow: {
+    width: "100%",
     flexDirection: "row",
     gap: 10,
-    width: "100%",
+    justifyContent: "center",
   },
   smallActionBtn: {
-    flex: 1,
     minHeight: 36,
-    borderRadius: 12,
+    borderRadius: 10,
+    paddingHorizontal: 11,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 12,
+    gap: 5,
   },
   smallActionBtnPrimary: {
+    flex: 1,
     backgroundColor: Theme.colors.primary,
   },
   smallActionBtnSecondary: {
+    flex: 1.06,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: Theme.colors.primary,
@@ -1118,22 +1276,23 @@ const styles = StyleSheet.create({
     color: Theme.colors.primary,
   },
   previewCard: {
-    height: 160,
-    borderRadius: 16,
+    height: 154,
+    borderRadius: 13,
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "#22B8B0",
-    backgroundColor: "#EAF7F6",
+    borderWidth: 1.2,
+    borderColor: "#1EC6C3",
+    backgroundColor: "#E9F7F6",
   },
   previewImage: {
     width: "100%",
     height: "100%",
+    resizeMode: "cover",
   },
   videoPreviewWrap: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: 7,
     paddingHorizontal: 16,
   },
   previewLead: {
@@ -1152,32 +1311,37 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 8,
     right: 8,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: "#F15A24",
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#F24E1E",
     alignItems: "center",
     justifyContent: "center",
   },
   warningText: {
     fontSize: 11,
     lineHeight: 15,
-    color: "#F15A24",
+    color: "#F24E1E",
   },
 
-  /* Votes table */
-
+  tableIntroLabel: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.semibold,
+    marginTop: 1,
+  },
   tableCard: {
-    borderRadius: 16,
+    borderRadius: 12,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#DDE6E9",
+    borderColor: "#DDE8E8",
     backgroundColor: "#FFFFFF",
   },
   tableHeader: {
-    minHeight: 40,
+    minHeight: 30,
     backgroundColor: Theme.colors.primary,
-    paddingHorizontal: 14,
+    paddingHorizontal: 11,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1190,123 +1354,125 @@ const styles = StyleSheet.create({
   },
 
   partyRow: {
-    minHeight: 74,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-    backgroundColor: "#FFFFFF",
-  },
-  partyRowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: "#EEF2F5",
-  },
-  partyInfoWrap: {
-    flex: 1,
+    minHeight: 53,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    backgroundColor: "#FFFFFF",
+    position: "relative",
+  },
+  partyRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#EEF2F3",
+  },
+  partyInfoWrap: {
+    flex: 1,
     minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
   },
   partyTextWrap: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
+    gap: 1,
   },
   partyName: {
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 13,
+    lineHeight: 17,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
   },
-  // Previously this slot held the candidate name; now it holds the party's
-  // full official name. Style tweaked for a slightly smaller muted read.
-  partyFullName: {
+  partySubName: {
     fontSize: 12,
     lineHeight: 16,
     color: Theme.colors.textMuted,
   },
   partyActionWrap: {
+    width: 122,
     alignItems: "flex-end",
     justifyContent: "center",
   },
   voteInput: {
-    width: 120,
-    height: 42,
-    borderRadius: 12,
+    width: "100%",
+    height: 30,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#CBD5E1",
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 14,
+    borderColor: "#C8D2D6",
+    backgroundColor: "#FAFAFA",
+    paddingHorizontal: 10,
     paddingVertical: 0,
-    color: Theme.colors.text,
-    fontSize: 15,
+    color: "#4B5563",
+    fontSize: 14,
     lineHeight: 18,
     fontFamily: Theme.fonts.body.semibold,
     textAlign: "right",
   },
-  // Tiny circular remove button in the top-right corner of user-added rows.
-  // Absolute so it can't shift the row layout; sized small + red so it's a
-  // clear destructive affordance without being shouty.
   removePartyBtn: {
     position: "absolute",
-    top: 6,
-    right: 6,
+    top: 5,
+    right: 5,
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: "#F15A24",
+    backgroundColor: "#F24E1E",
     alignItems: "center",
     justifyContent: "center",
   },
 
-  /* Add More Party trigger */
-
-  addPartyRow: {
-    backgroundColor: "#FFFFFF",
+  addMorePartyRow: {
+    minHeight: 51,
   },
-  addPartyRowPressed: {
-    backgroundColor: "#F7F9FA",
+  addMorePartyRowPressed: {
+    backgroundColor: "#F8FAFA",
   },
-  addPartyText: {
-    fontSize: 14,
-    lineHeight: 18,
+  addMoreLabelWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  addMoreText: {
+    fontSize: 13,
+    lineHeight: 17,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
   },
 
-  /* Total row */
-
   totalRow: {
     minHeight: 42,
-    backgroundColor: "#D6EBEA",
-    paddingHorizontal: 14,
+    backgroundColor: "#D5EFED",
+    paddingHorizontal: 11,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
   totalLabel: {
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 17,
     color: Theme.colors.text,
-    fontFamily: Theme.fonts.body.medium,
+    fontFamily: Theme.fonts.body.semibold,
   },
   totalValue: {
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 17,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
   },
 
-  /* Admin grid */
-
+  adminTitle: {
+    fontSize: 15,
+    lineHeight: 20,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.semibold,
+  },
   adminGrid: {
     gap: 12,
   },
   adminGridRow: {
     flexDirection: "row",
-    gap: 12,
+    gap: 17,
   },
   halfField: {
     flex: 1,
@@ -1316,21 +1482,21 @@ const styles = StyleSheet.create({
   },
   compactFieldWrap: {
     flex: 1,
-    gap: 6,
+    gap: 7,
   },
   compactFieldLabel: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 16,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.medium,
   },
   compactFieldInput: {
-    minHeight: 40,
-    borderRadius: 10,
+    minHeight: 35,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#C9D3DB",
+    borderColor: "#C8D2D6",
     backgroundColor: "#FFFFFF",
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 0,
     color: Theme.colors.text,
     fontSize: 14,
@@ -1338,20 +1504,18 @@ const styles = StyleSheet.create({
     fontFamily: Theme.fonts.body.medium,
   },
 
-  /* Truthfulness + submit */
-
   truthRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 10,
+    gap: 9,
     marginTop: 2,
   },
   checkWrap: {
-    width: 22,
-    height: 22,
-    borderRadius: 5,
+    width: 23,
+    height: 23,
+    borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#D1D5DB",
+    borderColor: "#E5E7EB",
     backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
@@ -1364,11 +1528,14 @@ const styles = StyleSheet.create({
   truthText: {
     flex: 1,
     fontSize: 12,
-    lineHeight: 17,
+    lineHeight: 16,
     color: Theme.colors.textMuted,
   },
+
   submitBtn: {
-    marginTop: 20,
-    marginBottom: 100,
+    marginTop: 5,
+    marginBottom: 0,
+    minHeight: 45,
+    borderRadius: 12,
   },
 });

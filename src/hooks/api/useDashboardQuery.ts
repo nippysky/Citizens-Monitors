@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 
 import {
   cacheDashboard,
-  DashboardResponse,
+  type DashboardResponse,
   getDashboard,
   readCachedDashboard,
 } from "@/lib/api/dashboard.api";

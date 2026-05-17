@@ -42,14 +42,27 @@ export type DashboardSocialUpdate = {
 
 export type DashboardNewsItem = {
   id: string;
+  slug?: string;
   title?: string;
   headline?: string;
   body?: string;
+  summary?: string;
+  excerpt?: string;
+
   imageUrl?: string | null;
+  imageURL?: string | null;
+
   thumbnailUrl?: string | null;
+  thumbnailURL?: string | null;
+  thumbnailURLUrl?: string | null;
+
+  heroImageUrl?: string | null;
+  heroImageURL?: string | null;
+
   date?: string;
   createdAt?: string;
   publishedAt?: string;
+  updatedAt?: string;
 };
 
 export type DashboardResponse = {
@@ -63,26 +76,81 @@ export type DashboardResponse = {
 
 const DASHBOARD_CACHE_KEY = "@citizen_monitors/dashboard_cache/v1";
 
-function normalizeDashboardResponse(response: Partial<DashboardResponse>): DashboardResponse {
+function normalizeDashboardResponse(
+  response?: Partial<DashboardResponse> | null
+): DashboardResponse {
   return {
-    liveElections: Array.isArray(response.liveElections)
-      ? response.liveElections
-      : [],
-    electionUpdates: Array.isArray(response.electionUpdates)
-      ? response.electionUpdates
-      : [],
-    collationUpdates: Array.isArray(response.collationUpdates)
-      ? response.collationUpdates
-      : [],
-    pulseAndDiscourse: Array.isArray(response.pulseAndDiscourse)
-      ? response.pulseAndDiscourse
-      : [],
-    reportThreadUpdates: Array.isArray(response.reportThreadUpdates)
-      ? response.reportThreadUpdates
-      : [],
-    latestNewsAndInsights: Array.isArray(response.latestNewsAndInsights)
-      ? response.latestNewsAndInsights
-      : [],
+    liveElections: asArray<DashboardLiveElection>(response?.liveElections),
+    electionUpdates: asArray<DashboardElectionUpdate>(response?.electionUpdates),
+    collationUpdates: asArray<DashboardSocialUpdate>(response?.collationUpdates),
+    pulseAndDiscourse: asArray<DashboardSocialUpdate>(
+      response?.pulseAndDiscourse
+    ),
+    reportThreadUpdates: asArray<DashboardSocialUpdate>(
+      response?.reportThreadUpdates
+    ),
+    latestNewsAndInsights: asArray<unknown>(
+      response?.latestNewsAndInsights
+    ).map(normalizeDashboardNewsItem),
+  };
+}
+
+function normalizeDashboardNewsItem(
+  rawValue: unknown,
+  index: number
+): DashboardNewsItem {
+  const raw = isObject(rawValue)
+    ? (rawValue as Partial<DashboardNewsItem> & Record<string, unknown>)
+    : {};
+
+  const id = firstNonEmptyString(
+    raw.id,
+    raw._id,
+    raw.slug,
+    `dashboard-news-${index + 1}`
+  );
+
+  const slug = firstNonEmptyString(raw.slug, id);
+
+  const title = firstNonEmptyString(
+    raw.title,
+    raw.headline,
+    raw.summary,
+    raw.excerpt,
+    raw.body,
+    "News update"
+  );
+
+  const imageUrl = firstNullableString(
+    raw.imageUrl,
+    raw.imageURL,
+    raw.thumbnailUrl,
+    raw.thumbnailURLUrl,
+    raw.thumbnailURL,
+    raw.heroImageUrl,
+    raw.heroImageURL
+  );
+
+  const publishedAt = firstNonEmptyString(
+    raw.publishedAt,
+    raw.date,
+    raw.createdAt,
+    raw.updatedAt
+  );
+
+  return {
+    ...raw,
+    id,
+    slug,
+    title,
+    imageUrl,
+    thumbnailUrl: firstNullableString(raw.thumbnailUrl, imageUrl),
+    thumbnailURLUrl: firstNullableString(raw.thumbnailURLUrl, imageUrl),
+    heroImageUrl: firstNullableString(raw.heroImageUrl, raw.heroImageURL),
+    date: firstNonEmptyString(raw.date, publishedAt),
+    publishedAt,
+    createdAt: firstNonEmptyString(raw.createdAt, publishedAt),
+    updatedAt: firstNonEmptyString(raw.updatedAt),
   };
 }
 
@@ -100,7 +168,7 @@ export async function cacheDashboard(data: DashboardResponse): Promise<void> {
       DASHBOARD_CACHE_KEY,
       JSON.stringify({
         cachedAt: Date.now(),
-        data,
+        data: normalizeDashboardResponse(data),
       })
     );
   } catch {
@@ -124,4 +192,35 @@ export async function readCachedDashboard(): Promise<DashboardResponse | null> {
   } catch {
     return null;
   }
+}
+
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function firstNonEmptyString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+
+  return "";
+}
+
+function firstNullableString(...values: unknown[]): string | null {
+  const value = firstNonEmptyString(...values);
+  return value || null;
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

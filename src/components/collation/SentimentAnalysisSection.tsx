@@ -66,56 +66,6 @@ type MonitoringCardItem = {
     | "avg-submission-time";
 };
 
-const INCIDENTS_ALL_STATE: IncidentAnalyticsItem[] = [
-  {
-    id: "thuggery",
-    label: "Thuggery & Violence",
-    count: 10,
-    percent: 57,
-    color: "#DF3F38",
-    iconKey: "thuggery",
-  },
-  {
-    id: "ballot-stuffing",
-    label: "Ballot Stuffing",
-    count: 18,
-    percent: 81,
-    color: "#BF39B6",
-    iconKey: "ballot-stuffing",
-  },
-  {
-    id: "underage-voting",
-    label: "Underage Voting",
-    count: 67,
-    percent: 65,
-    color: "#3F63DD",
-    iconKey: "underage-voting",
-  },
-  {
-    id: "inec-misconduct",
-    label: "INEC Misconduct",
-    count: 19,
-    percent: 21,
-    color: "#EB9446",
-    iconKey: "inec-misconduct",
-  },
-  {
-    id: "result-alteration",
-    label: "Result Alteration",
-    count: 21,
-    percent: 39,
-    color: "#B685F5",
-    iconKey: "result-alteration",
-  },
-  {
-    id: "voter-intimidation",
-    label: "Voter Intimidation",
-    count: 59,
-    percent: 63,
-    color: "#DD4137",
-    iconKey: "voter-intimidation",
-  },
-];
 
 function isPresidentialElection(collation: CollationItem) {
   const source = collation as CollationItem & {
@@ -141,80 +91,43 @@ function isPresidentialElection(collation: CollationItem) {
 }
 
 function buildMyUnitIncidentAnalytics(
-  items: IncidentAnalyticsItem[]
+  items: IncidentAnalyticsItem[],
 ): IncidentAnalyticsItem[] {
-  return items.map((item, index) => ({
-    ...item,
-    count: Math.max(1, Math.round(item.count * 0.22)),
-    percent: Math.max(9, Math.min(92, item.percent - (index % 3) * 8)),
-  }));
+  return items;
 }
 
 function buildMonitoringCards(
   collation: CollationItem,
-  scope: ScopeFilter
+  _scope: ScopeFilter,
 ): MonitoringCardItem[] {
   const base = collation.monitoringActivity;
-
-  if (scope === "my-unit") {
-    return [
-      {
-        id: "active-volunteer",
-        label: "Active Volunteer",
-        value: "4/6",
-        color: "#111827",
-        iconKey: "active-volunteer",
-      },
-      {
-        id: "pvc-verified",
-        label: "PVC Verified",
-        value: "100%",
-        color: Theme.colors.primary,
-        iconKey: "pvc-verified",
-      },
-      {
-        id: "active-observers",
-        label: "Active Observers",
-        value: "1/1",
-        color: "#111827",
-        iconKey: "active-observers",
-      },
-      {
-        id: "avg-submission-time",
-        label: "Avg, submission time",
-        value: "9 min",
-        color: "#111827",
-        iconKey: "avg-submission-time",
-      },
-    ];
-  }
 
   return [
     {
       id: "active-volunteer",
       label: "Active Volunteer",
-      value: base[0]?.value ?? "56/79",
+      value: base[0]?.value ?? "0",
       color: "#111827",
       iconKey: "active-volunteer",
     },
     {
       id: "pvc-verified",
       label: "PVC Verified",
-      value: base[1]?.value ?? "89%",
+      value: base[1]?.value ?? "—",
       color: Theme.colors.primary,
       iconKey: "pvc-verified",
     },
     {
       id: "active-observers",
       label: "Active Observers",
-      value: base[2]?.value ?? "15/19",
+      value: base[2]?.value ?? "0",
       color: "#111827",
       iconKey: "active-observers",
     },
     {
       id: "avg-submission-time",
       label: "Avg, submission time",
-      value: base[3]?.value ?? "14 min",
+      value: base[3]?.value ?? "—",
       color: "#111827",
       iconKey: "avg-submission-time",
     },
@@ -223,16 +136,8 @@ function buildMonitoringCards(
 
 function buildHealthLegend(
   collation: CollationItem,
-  scope: ScopeFilter
+  _scope: ScopeFilter,
 ): { label: string; value: number; color: string }[] {
-  if (scope === "my-unit") {
-    return [
-      { label: "Good", value: 72, color: "#58B8AB" },
-      { label: "Manageable", value: 19, color: "#4B7BE7" },
-      { label: "Poor", value: 9, color: "#E45125" },
-    ];
-  }
-
   return collation.sentiment.legend.map((item) => ({
     label: item.label,
     value: item.value,
@@ -240,18 +145,7 @@ function buildHealthLegend(
   }));
 }
 
-function buildVerificationStats(
-  collation: CollationItem,
-  scope: ScopeFilter
-) {
-  if (scope === "my-unit") {
-    return {
-      totalReports: 8,
-      confirmedReports: 6,
-      flaggedReports: 2,
-    };
-  }
-
+function buildVerificationStats(collation: CollationItem, _scope: ScopeFilter) {
   return {
     totalReports: collation.resultsUploaded + collation.incidentsReported,
     confirmedReports: collation.resultsUploaded,
@@ -263,7 +157,9 @@ export default function SentimentAnalysisSection({ collation }: Props) {
   const empty = !collation.isAssignedToPollingUnit;
   const shouldShowStateScope = isPresidentialElection(collation);
 
-  const defaultScope: ScopeFilter = shouldShowStateScope ? "all-state" : "my-unit";
+  const defaultScope: ScopeFilter = shouldShowStateScope
+    ? "all-state"
+    : "my-unit";
 
   const [healthScope, setHealthScope] = useState<ScopeFilter>(defaultScope);
   const [verificationScope, setVerificationScope] =
@@ -272,7 +168,9 @@ export default function SentimentAnalysisSection({ collation }: Props) {
   const [activityScope, setActivityScope] = useState<ScopeFilter>(defaultScope);
 
   useEffect(() => {
-    const nextScope: ScopeFilter = shouldShowStateScope ? "all-state" : "my-unit";
+    const nextScope: ScopeFilter = shouldShowStateScope
+      ? "all-state"
+      : "my-unit";
     setHealthScope(nextScope);
     setVerificationScope(nextScope);
     setIncidentScope(nextScope);
@@ -298,21 +196,22 @@ export default function SentimentAnalysisSection({ collation }: Props) {
 
   const verificationStats = buildVerificationStats(
     collation,
-    verificationScope
+    verificationScope,
   );
 
   const verificationPercent =
     verificationStats.totalReports > 0
       ? Math.round(
-          (verificationStats.confirmedReports / verificationStats.totalReports) *
-            100
+          (verificationStats.confirmedReports /
+            verificationStats.totalReports) *
+            100,
         )
       : 0;
 
   const incidentItems =
     incidentScope === "all-state"
-      ? INCIDENTS_ALL_STATE
-      : buildMyUnitIncidentAnalytics(INCIDENTS_ALL_STATE);
+      ? collation.incidentAnalytics
+      : buildMyUnitIncidentAnalytics(collation.incidentAnalytics);
 
   const monitoringCards = buildMonitoringCards(collation, activityScope);
 
@@ -321,10 +220,11 @@ export default function SentimentAnalysisSection({ collation }: Props) {
       <View style={styles.section}>
         <AppText style={styles.title}>Sentiment Analysis</AppText>
         <AppText style={styles.subtitle}>
-          Captured from real reports of this election from {collation.resultsUploaded}{" "}
-          results and {collation.incidentsReported} incidents reported from{" "}
-          {collation.coveredUnits}/{collation.totalUnits} polling units in
-          Alimosho.
+          Captured from real reports of this election from{" "}
+          {collation.resultsUploaded} results and {collation.incidentsReported}{" "}
+          incidents reported from {collation.coveredUnits}/
+          {collation.totalUnits} polling units in
+          {collation.location}.
         </AppText>
       </View>
 
@@ -371,7 +271,9 @@ export default function SentimentAnalysisSection({ collation }: Props) {
       {/* Report verification analysis */}
       <View style={styles.card}>
         <View style={styles.cardHeaderRow}>
-          <AppText style={styles.cardTitle}>Report Verification Analysis</AppText>
+          <AppText style={styles.cardTitle}>
+            Report Verification Analysis
+          </AppText>
           <ScopeFilterControl
             value={verificationScope}
             onChange={setVerificationScope}
@@ -380,7 +282,8 @@ export default function SentimentAnalysisSection({ collation }: Props) {
         </View>
 
         <AppText style={styles.smallMuted}>
-          Community confirmation & flagging activity across all submitted reports
+          Community confirmation & flagging activity across all submitted
+          reports
         </AppText>
 
         <View style={styles.statMiniGrid}>
@@ -501,7 +404,9 @@ export default function SentimentAnalysisSection({ collation }: Props) {
             <View key={item.id} style={styles.monitoringCard}>
               <View style={styles.monitoringTopRow}>
                 <MonitoringMetricIcon iconKey={item.iconKey} />
-                <AppText style={[styles.monitoringValue, { color: item.color }]}>
+                <AppText
+                  style={[styles.monitoringValue, { color: item.color }]}
+                >
                   {item.value}
                 </AppText>
               </View>

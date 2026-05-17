@@ -12,6 +12,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { useQueryClient } from "@tanstack/react-query";
 
 import AppGradientScreen from "@/components/app/AppGradientScreen";
 import { useLiveNotice } from "@/components/feedback/LiveNoticeProvider";
@@ -26,6 +27,11 @@ import { Paths } from "@/constants/paths";
 import { useNetwork } from "@/context/NetworkContext";
 import { useOfflineSync } from "@/context/OfflineSyncContext";
 import { useAppToast } from "@/hooks/useAppToast";
+import { reportingQueryKeys } from "@/hooks/api/useReportingMutations";
+import {
+  mapDraftToIncidentReportPayload,
+  submitIncidentReport,
+} from "@/lib/api/reporting.api";
 import {
   clearIncidentDraft,
   getIncidentDraft,
@@ -334,6 +340,7 @@ function EvidenceSection({
 }
 
 export default function ReportIncidentScreen() {
+  const queryClient = useQueryClient();
   const { isConnected, isInternetReachable } = useNetwork();
   const { enqueue } = useOfflineSync();
   const { requestLocationForAction } = useLiveNotice();
@@ -349,7 +356,7 @@ export default function ReportIncidentScreen() {
   const [timePickerVisible, setTimePickerVisible] = useState(false);
   const [pickerBusy, setPickerBusy] = useState(false);
 
-  const isOffline = !isConnected || !isInternetReachable;
+  const isOffline = !isConnected || isInternetReachable === false;
 
   const gridMetrics = useMemo(() => {
     const sidePadding = 16;
@@ -588,6 +595,15 @@ export default function ReportIncidentScreen() {
     });
   };
 
+  const invalidateReportingData = (electionId: string) => {
+    void queryClient.invalidateQueries({ queryKey: reportingQueryKeys.dashboard });
+    void queryClient.invalidateQueries({ queryKey: reportingQueryKeys.electionVault });
+    void queryClient.invalidateQueries({ queryKey: reportingQueryKeys.collation });
+    void queryClient.invalidateQueries({
+      queryKey: reportingQueryKeys.electionCollation(electionId),
+    });
+  };
+
   const handleSubmit = async () => {
     if (!draft) return;
 
@@ -607,23 +623,59 @@ export default function ReportIncidentScreen() {
       return;
     }
 
+    const queuePayload = draft as unknown as Record<string, unknown>;
+
     setLoading(true);
 
-    enqueue({
-      type: "submit-incident-report",
-      payload: draft as unknown as Record<string, unknown>,
-    });
+    if (isOffline) {
+      enqueue({
+        type: "submit-incident-report",
+        payload: queuePayload,
+      });
 
-    await clearIncidentDraft();
-    setLoading(false);
-    setViewState("success");
+      await clearIncidentDraft();
+      setLoading(false);
+      setViewState("success");
 
-    showToast({
-      type: "success",
-      message: isOffline
-        ? "Incident saved offline. It will sync automatically when you're back online."
-        : "Incident report submitted successfully.",
-    });
+      showToast({
+        type: "success",
+        message:
+          "Incident saved offline. It will sync automatically when you're back online.",
+      });
+
+      return;
+    }
+
+    try {
+      await submitIncidentReport(mapDraftToIncidentReportPayload(draft));
+
+      await clearIncidentDraft();
+      invalidateReportingData(draft.electionId);
+      setViewState("success");
+
+      showToast({
+        type: "success",
+        message: "Incident report submitted successfully.",
+      });
+    } catch (error) {
+      enqueue({
+        type: "submit-incident-report",
+        payload: queuePayload,
+      });
+
+      await clearIncidentDraft();
+      setViewState("success");
+
+      showToast({
+        type: "success",
+        message:
+          "Incident saved offline. It will sync automatically when connection is stable.",
+      });
+
+      console.log("Incident report queued:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (viewState === "success") {

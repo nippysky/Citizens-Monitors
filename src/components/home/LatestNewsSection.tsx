@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import { useMemo, useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
@@ -12,17 +13,44 @@ type Props = {
 };
 
 function NewsCard({ item }: { item: NewsItem }) {
+  const [imageFailed, setImageFailed] = useState(false);
+
+  const articleRouteKey = useMemo(() => {
+    const slug = item.slug?.trim();
+    if (slug) return slug;
+
+    const id = item.id?.trim();
+    return id || "";
+  }, [item.id, item.slug]);
+
+  const imageUri = useMemo(() => {
+    const clean = item.imageUrl?.trim();
+    if (!clean || imageFailed) return null;
+
+    return clean;
+  }, [imageFailed, item.imageUrl]);
+
+  const handlePress = () => {
+    if (!articleRouteKey) {
+      router.push(Paths.voterNewsAndInsights);
+      return;
+    }
+
+    router.push(Paths.newsDetails(articleRouteKey));
+  };
+
   return (
     <Pressable
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-      onPress={() => router.push(Paths.newsDetails(item.id))}
+      onPress={handlePress}
     >
       <View style={styles.thumbWrap}>
-        {item.imageUrl ? (
+        {imageUri ? (
           <Image
-            source={{ uri: item.imageUrl }}
+            source={{ uri: imageUri }}
             style={styles.thumb}
             resizeMode="cover"
+            onError={() => setImageFailed(true)}
           />
         ) : (
           <Ionicons
@@ -58,12 +86,17 @@ function NewsCard({ item }: { item: NewsItem }) {
 }
 
 export default function LatestNewsSection({ items }: Props) {
-  if (!items.length) return null;
+  const visibleItems = items
+    .filter((item) => item.title?.trim())
+    .slice(0, 3);
+
+  if (!visibleItems.length) return null;
 
   return (
     <View style={styles.wrap}>
       <View style={styles.headerRow}>
         <AppText style={styles.sectionTitle}>Latest News & Insights</AppText>
+
         <Pressable
           onPress={() => router.push(Paths.voterNewsAndInsights)}
           hitSlop={8}
@@ -73,8 +106,8 @@ export default function LatestNewsSection({ items }: Props) {
       </View>
 
       <View style={styles.list}>
-        {items.slice(0, 3).map((item) => (
-          <NewsCard key={item.id} item={item} />
+        {visibleItems.map((item) => (
+          <NewsCard key={`${item.id}-${item.slug ?? "news"}`} item={item} />
         ))}
       </View>
     </View>
@@ -128,6 +161,7 @@ const styles = StyleSheet.create({
   thumb: {
     width: "100%",
     height: "100%",
+    backgroundColor: "rgba(17, 24, 39, 0.04)",
   },
   textBlock: {
     flex: 1,

@@ -1,22 +1,33 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { Platform, Pressable, StyleSheet, View } from "react-native";
+import {
+  Platform,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 
 import AppGradientScreen from "@/components/app/AppGradientScreen";
-import BackButton from "@/components/ui/BackButton";
-import AppText from "@/components/ui/AppText";
 import CollationDiscussionsTab from "@/components/collation/CollationDiscussionTab";
 import CollationOverviewTab from "@/components/collation/CollationOverviewTab";
 import CollationReviewReportsTab from "@/components/collation/CollationReviewReportsTab";
+import AppText from "@/components/ui/AppText";
+import BackButton from "@/components/ui/BackButton";
 import {
-  CollationItem,
-  collationDummyData,
+  buildCollationItem,
+  type CollationElectionSource,
+  type CollationItem,
 } from "@/data/collation";
-import { Theme } from "@/theme";
+import { useElectionCollationQuery } from "@/hooks/api/useCollationQueries";
+import { useActiveElectionsQuery } from "@/hooks/api/useElectionQueries";
+import HouseOfRepsElection from "@/svgs/app/HouseOfRepsElection";
+import NoElection from "@/svgs/app/NoElection";
 import PresidentialElection from "@/svgs/app/PresidentialElection";
 import SenatorElection from "@/svgs/app/SenatorElection";
-import HouseOfRepsElection from "@/svgs/app/HouseOfRepsElection";
+import { Theme } from "@/theme";
 
 type ElectionDetailsTabKey = "overview" | "review-collation" | "discussions";
 type ViewerMode = "observer" | "volunteer" | "public";
@@ -39,83 +50,78 @@ type ResolvedScenario = {
   electionTypeLabel: string;
 };
 
+type RuntimeElectionLike = Partial<CollationItem> & {
+  title?: string;
+  name?: string;
+  electionName?: string;
+  electionType?: string;
+};
+
+type RouteParams = {
+  id?: string;
+  tab?: string;
+  viewer?: string;
+  scope?: string;
+};
+
 const TAB_VALUES: ElectionDetailsTabKey[] = [
   "overview",
   "review-collation",
   "discussions",
 ];
 
-/**
- * DEV QA SWITCHER
- * ----------------------------------------------------------
- * enabled: false  -> production behavior (reads route params / API later)
- * enabled: true   -> forced local test mode for this screen only
- *
- * QUICK EXAMPLES:
- * - public viewer:
- *   viewerMode: "public", accessScope: "general"
- *
- * - observer assigned:
- *   viewerMode: "observer", accessScope: "assigned"
- *
- * - volunteer assigned:
- *   viewerMode: "volunteer", accessScope: "assigned"
- *
- * - observer not tied to polling unit:
- *   viewerMode: "observer", accessScope: "general"
- */
-const DEV_ELECTION_DETAILS_OVERRIDE: {
-  enabled: boolean;
-  electionId?: string;
-  viewerMode: ViewerMode;
-  accessScope: AccessScope;
-  defaultTab?: ElectionDetailsTabKey;
-} = {
-  enabled: false,
-  electionId: "alimosho-lg-2026",
-  viewerMode: "observer",
-  accessScope: "general",
-  defaultTab: "overview",
-};
-
 export default function ElectionDetailsScreen() {
-  const params = useLocalSearchParams<{
-    id?: string;
-    tab?: string;
-    viewer?: string;
-    scope?: string;
-  }>();
+  const params = useLocalSearchParams<RouteParams>();
+  const routeElectionId = normalizeRouteParam(params.id);
 
-  const [activeTab, setActiveTab] = useState<ElectionDetailsTabKey>("overview");
+  const [activeTab, setActiveTab] =
+    useState<ElectionDetailsTabKey>("overview");
 
-  const resolvedInput = useMemo(() => {
-    if (DEV_ELECTION_DETAILS_OVERRIDE.enabled) {
-      return {
-        id: DEV_ELECTION_DETAILS_OVERRIDE.electionId ?? params.id,
-        viewer: DEV_ELECTION_DETAILS_OVERRIDE.viewerMode,
-        scope: DEV_ELECTION_DETAILS_OVERRIDE.accessScope,
-      };
-    }
+  const collationQuery = useElectionCollationQuery(routeElectionId);
+  const electionsQuery = useActiveElectionsQuery("all");
+
+  const electionSource = useMemo(() => {
+    if (!routeElectionId) return undefined;
+
+    const election = electionsQuery.data?.elections.find(
+      (item) => item.id === routeElectionId
+    );
+
+    return election ? normalizeElectionSource(election) : undefined;
+  }, [electionsQuery.data, routeElectionId]);
+
+  const apiElection = useMemo<CollationItem | null>(() => {
+    if (!collationQuery.data) return null;
+
+    const item = buildCollationItem(collationQuery.data, electionSource);
 
     return {
-      id: params.id,
-      viewer: params.viewer,
-      scope: params.scope,
+      ...item,
+      status: "ended",
+      fullTitle: getElectionDisplayTitle(item),
+      electionTitle: getElectionShortTitle(item),
+      parties: item.parties ?? [],
+      reviewReports: item.reviewReports ?? [],
+      discussions: item.discussions ?? [],
+      geoBreakdown: item.geoBreakdown ?? [],
     };
-  }, [params.id, params.viewer, params.scope]);
+  }, [collationQuery.data, electionSource]);
 
-  const scenario = useMemo(
-    () => resolveElectionDetailsScenario(resolvedInput),
-    [resolvedInput]
-  );
+  const scenario = useMemo(() => {
+    if (!apiElection) return null;
+
+    return resolveElectionDetailsScenario({
+      election: apiElection,
+      viewer: normalizeRouteParam(params.viewer),
+      scope: normalizeRouteParam(params.scope),
+    });
+  }, [apiElection, params.scope, params.viewer]);
 
   useEffect(() => {
-    if (DEV_ELECTION_DETAILS_OVERRIDE.enabled) {
-      setActiveTab(DEV_ELECTION_DETAILS_OVERRIDE.defaultTab ?? "overview");
-      return;
-    }
+    const incoming = normalizeRouteParam(
+      params.tab
+    ) as ElectionDetailsTabKey | undefined;
 
-    const incoming = params.tab as ElectionDetailsTabKey | undefined;
     if (incoming && TAB_VALUES.includes(incoming)) {
       setActiveTab(incoming);
       return;
@@ -124,17 +130,58 @@ export default function ElectionDetailsScreen() {
     setActiveTab("overview");
   }, [params.tab, params.id, params.viewer, params.scope]);
 
-  const heroDateLabel = useMemo(
-    () => getHeroDateLabel(scenario.election),
-    [scenario.election]
-  );
+  const heroDateLabel = useMemo(() => {
+    if (!scenario) return "Election Day";
+
+    return getHeroDateLabel(scenario.election);
+  }, [scenario]);
 
   const partyCount = useMemo(() => {
-    const withVotes = scenario.election.parties.filter(
+    if (!scenario) return 0;
+
+    return scenario.election.parties.filter(
       (party) => party.shortName.toLowerCase() !== "others"
+    ).length;
+  }, [scenario]);
+
+  if (!routeElectionId) {
+    return (
+      <ElectionDetailsShell>
+        <EmptyState
+          title="Election not found"
+          message="This election is no longer available or the link is invalid."
+          onRetry={() => router.back()}
+          actionLabel="Go Back"
+        />
+      </ElectionDetailsShell>
     );
-    return withVotes.length;
-  }, [scenario.election.parties]);
+  }
+
+  if (collationQuery.isLoading && !scenario) {
+    return <ElectionDetailsSkeleton />;
+  }
+
+  if (collationQuery.isError || !scenario) {
+    return (
+      <ElectionDetailsShell
+        refreshing={collationQuery.isRefetching}
+        onRefresh={() => {
+          void collationQuery.refetch();
+        }}
+      >
+        <EmptyState
+          title="Could not load election report"
+          message="Check your connection and try again."
+          onRetry={() => {
+            void collationQuery.refetch();
+          }}
+          actionLabel="Retry"
+        />
+      </ElectionDetailsShell>
+    );
+  }
+
+  const heroTitle = getElectionDisplayTitle(scenario.election);
 
   return (
     <AppGradientScreen scroll={false}>
@@ -157,9 +204,7 @@ export default function ElectionDetailsScreen() {
                   {scenario.electionTypeLabel}
                 </AppText>
 
-                <AppText style={styles.heroTitle}>
-                  {scenario.election.fullTitle}
-                </AppText>
+                <AppText style={styles.heroTitle}>{heroTitle}</AppText>
               </View>
             </View>
 
@@ -189,13 +234,37 @@ export default function ElectionDetailsScreen() {
 
         <View style={styles.body}>
           {!scenario.showScopedTabs ? (
-            <CollationOverviewTab collation={scenario.election} />
+            <CollationOverviewTab
+              collation={scenario.election}
+              refreshing={collationQuery.isRefetching}
+              onRefresh={() => {
+                void collationQuery.refetch();
+              }}
+            />
           ) : activeTab === "overview" ? (
-            <CollationOverviewTab collation={scenario.election} />
+            <CollationOverviewTab
+              collation={scenario.election}
+              refreshing={collationQuery.isRefetching}
+              onRefresh={() => {
+                void collationQuery.refetch();
+              }}
+            />
           ) : activeTab === "review-collation" ? (
-            <CollationReviewReportsTab collation={scenario.election} />
+            <CollationReviewReportsTab
+              collation={scenario.election}
+              refreshing={collationQuery.isRefetching}
+              onRefresh={() => {
+                void collationQuery.refetch();
+              }}
+            />
           ) : (
-            <CollationDiscussionsTab collation={scenario.election} />
+            <CollationDiscussionsTab
+              collation={scenario.election}
+              refreshing={collationQuery.isRefetching}
+              onRefresh={() => {
+                void collationQuery.refetch();
+              }}
+            />
           )}
         </View>
       </View>
@@ -203,34 +272,179 @@ export default function ElectionDetailsScreen() {
   );
 }
 
-/* ────────────────────────────────────────────────────────────────────────── */
-/* Scenario resolution                                                       */
-/* ────────────────────────────────────────────────────────────────────────── */
+function ElectionDetailsSkeleton() {
+  return (
+    <AppGradientScreen scroll={false}>
+      <View style={styles.container}>
+        <View style={styles.topSection}>
+          <View style={styles.topNavRow}>
+            <View style={styles.skeletonBackButton} />
+            <View style={styles.skeletonTopTitle} />
+            <View style={styles.topNavSpacer} />
+          </View>
+
+          <View style={styles.heroBlock}>
+            <View style={styles.heroRow}>
+              <View style={styles.heroIconCol}>
+                <View style={styles.skeletonHeroIcon} />
+              </View>
+
+              <View style={styles.heroTextCol}>
+                <View style={styles.skeletonTypeLabel} />
+                <View style={styles.skeletonHeroTitle} />
+                <View style={styles.skeletonHeroTitleShort} />
+              </View>
+            </View>
+
+            <View style={styles.metaRow}>
+              <View style={styles.skeletonMetaPill} />
+              <View style={styles.skeletonMetaPill} />
+              <View style={styles.skeletonMetaPill} />
+            </View>
+          </View>
+
+          <View style={styles.skeletonTabsRow}>
+            <View style={styles.skeletonTab} />
+            <View style={styles.skeletonTab} />
+            <View style={styles.skeletonTab} />
+          </View>
+        </View>
+
+        <View style={styles.body}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.skeletonBodyContent}
+          >
+            <View style={styles.skeletonSyncRow}>
+              <View style={styles.skeletonLineMedium} />
+              <View style={styles.skeletonButton} />
+            </View>
+
+            <View style={styles.skeletonLargeTitle} />
+            <View style={styles.skeletonLineLong} />
+            <View style={styles.skeletonLineMedium} />
+
+            <View style={styles.skeletonStatsRow}>
+              <View style={styles.skeletonStatCard} />
+              <View style={styles.skeletonStatCard} />
+              <View style={styles.skeletonStatCard} />
+            </View>
+
+            <View style={styles.skeletonSectionHeader} />
+            <View style={styles.skeletonProgressBar} />
+            <View style={styles.skeletonLineLong} />
+
+            <View style={styles.skeletonReportCard} />
+            <View style={styles.skeletonReportCard} />
+          </ScrollView>
+        </View>
+      </View>
+    </AppGradientScreen>
+  );
+}
+
+function ElectionDetailsShell({
+  children,
+  refreshing = false,
+  onRefresh,
+}: {
+  children: React.ReactNode;
+  refreshing?: boolean;
+  onRefresh?: () => void;
+}) {
+  return (
+    <AppGradientScreen scroll={false}>
+      <View style={styles.container}>
+        <View style={styles.topSection}>
+          <View style={styles.topNavRow}>
+            <BackButton label="" />
+            <AppText style={styles.topNavTitle}>Elections</AppText>
+            <View style={styles.topNavSpacer} />
+          </View>
+        </View>
+
+        <View style={styles.body}>
+          {onRefresh ? (
+            <ScrollView
+              contentContainerStyle={styles.fallbackScrollContent}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  tintColor={Theme.colors.primary}
+                  colors={[Theme.colors.primary]}
+                />
+              }
+            >
+              {children}
+            </ScrollView>
+          ) : (
+            children
+          )}
+        </View>
+      </View>
+    </AppGradientScreen>
+  );
+}
+
+function EmptyState({
+  title,
+  message,
+  actionLabel,
+  onRetry,
+}: {
+  title: string;
+  message: string;
+  actionLabel: string;
+  onRetry: () => void;
+}) {
+  return (
+    <View style={styles.emptyWrap}>
+      <NoElection width={110} height={110} />
+      <AppText style={styles.emptyTitle}>{title}</AppText>
+      <AppText style={styles.emptyText}>{message}</AppText>
+
+      <Pressable onPress={onRetry} style={styles.emptyButton}>
+        <AppText style={styles.emptyButtonText}>{actionLabel}</AppText>
+      </Pressable>
+    </View>
+  );
+}
 
 function resolveElectionDetailsScenario(input: {
-  id?: string;
+  election: CollationItem;
   viewer?: string;
   scope?: string;
 }): ResolvedScenario {
-  const fallbackElection =
-    collationDummyData.find((item) => item.id === "alimosho-lg-2026") ??
-    collationDummyData[0];
-
-  const requested =
-    collationDummyData.find((item) => item.id === input.id) ?? fallbackElection;
-
   const viewerMode = normalizeViewerMode(input.viewer);
   const accessScope = normalizeAccessScope(input.scope);
 
   const normalizedElection: CollationItem = {
-    ...requested,
+    ...input.election,
+    fullTitle: getElectionDisplayTitle(input.election),
+    electionTitle: getElectionShortTitle(input.election),
     status: "ended",
+    parties: input.election.parties ?? [],
+    reviewReports: input.election.reviewReports ?? [],
+    discussions: input.election.discussions ?? [],
+    geoBreakdown: input.election.geoBreakdown ?? [],
   };
 
   const showScopedTabs =
     viewerMode !== "public" && accessScope === "assigned";
 
-  const electionType = inferElectionType(normalizedElection.fullTitle);
+  const titleForInference = [
+    normalizedElection.fullTitle,
+    normalizedElection.electionTitle,
+    (input.election as RuntimeElectionLike).title,
+    (input.election as RuntimeElectionLike).name,
+    (input.election as RuntimeElectionLike).electionName,
+    (input.election as RuntimeElectionLike).electionType,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const electionType = inferElectionType(titleForInference);
   const electionTypeLabel = getElectionTypeDisplayLabel(electionType);
 
   return {
@@ -243,10 +457,64 @@ function resolveElectionDetailsScenario(input: {
   };
 }
 
+function normalizeRouteParam(value?: string | string[]): string | undefined {
+  if (Array.isArray(value)) return value[0];
+
+  return value;
+}
+
+function normalizeElectionSource(
+  value: unknown
+): CollationElectionSource | undefined {
+  if (!value || typeof value !== "object") return undefined;
+
+  const item = value as Partial<CollationElectionSource>;
+
+  if (!item.id || !item.electionName || !item.startDate || !item.endDate) {
+    return undefined;
+  }
+
+  return {
+    id: String(item.id),
+    electionName: String(item.electionName),
+    electionType: String(item.electionType ?? "election"),
+    electionLocation:
+      typeof item.electionLocation === "string" ? item.electionLocation : null,
+    startDate: String(item.startDate),
+    endDate: String(item.endDate),
+    mockElection: Boolean(item.mockElection),
+    partiesCount: typeof item.partiesCount === "number" ? item.partiesCount : 0,
+    status: String(item.status ?? "concluded"),
+  };
+}
+
+function getElectionDisplayTitle(election?: RuntimeElectionLike): string {
+  const title =
+    election?.fullTitle?.trim() ||
+    election?.electionTitle?.trim() ||
+    election?.electionName?.trim() ||
+    election?.title?.trim() ||
+    election?.name?.trim();
+
+  return title || "Election";
+}
+
+function getElectionShortTitle(election?: RuntimeElectionLike): string {
+  const title =
+    election?.electionTitle?.trim() ||
+    election?.electionName?.trim() ||
+    election?.fullTitle?.trim() ||
+    election?.title?.trim() ||
+    election?.name?.trim();
+
+  return title || "Election";
+}
+
 function normalizeViewerMode(value?: string): ViewerMode {
   if (value === "observer" || value === "volunteer" || value === "public") {
     return value;
   }
+
   return "observer";
 }
 
@@ -254,23 +522,41 @@ function normalizeAccessScope(value?: string): AccessScope {
   if (value === "assigned" || value === "general") {
     return value;
   }
+
   return "assigned";
 }
 
-function inferElectionType(title: string): ElectionTypeKey {
-  const value = title.toLowerCase();
+function inferElectionType(title?: string | null): ElectionTypeKey {
+  const value = String(title ?? "").trim().toLowerCase();
 
-  if (value.includes("presidential")) return "presidential";
+  if (!value) return "generic";
+
+  if (value.includes("presidential") || value.includes("national")) {
+    return "presidential";
+  }
+
   if (value.includes("governorship") || value.includes("gubernatorial")) {
     return "gubernatorial";
   }
-  if (value.includes("local government")) return "local-government";
+
+  if (
+    value.includes("local government") ||
+    value.includes("lga") ||
+    value.includes("local-government")
+  ) {
+    return "local-government";
+  }
+
   if (
     value.includes("house of reps") ||
-    value.includes("house of representatives")
+    value.includes("house of representatives") ||
+    value.includes("house-of-representatives") ||
+    value.includes("house-of-assembly") ||
+    value.includes("state house")
   ) {
     return "house-of-reps";
   }
+
   if (value.includes("senate") || value.includes("senatorial")) {
     return "senate";
   }
@@ -297,11 +583,13 @@ function getElectionTypeDisplayLabel(type: ElectionTypeKey): string {
 
 function getHeroDateLabel(election: CollationItem): string {
   const source = election.dateRange?.trim();
+
   if (!source) {
-    return election.lastSyncLabel.split("·")[0]?.trim() || "Election Day";
+    return election.lastSyncLabel?.split("·")[0]?.trim() || "Election Day";
   }
 
   const parts = source.split("–").map((part) => part.trim());
+
   if (parts.length >= 2) {
     const leftClean = parts[0]
       .replace(/\.$/, "")
@@ -321,31 +609,23 @@ function getHeroDateLabel(election: CollationItem): string {
   return source;
 }
 
-/* ────────────────────────────────────────────────────────────────────────── */
-/* Top hero icon provision                                                   */
-/* ────────────────────────────────────────────────────────────────────────── */
-
 function ElectionTypeVisual({ type }: { type: ElectionTypeKey }) {
   let IconComponent = PresidentialElection;
 
   switch (type) {
-    case "presidential":
-      IconComponent = PresidentialElection;
-      break;
-    case "gubernatorial":
-      IconComponent = PresidentialElection;
-      break;
-    case "local-government":
-      IconComponent = PresidentialElection;
-      break;
     case "senate":
       IconComponent = SenatorElection;
       break;
     case "house-of-reps":
       IconComponent = HouseOfRepsElection;
       break;
+    case "presidential":
+    case "gubernatorial":
+    case "local-government":
+    case "generic":
     default:
       IconComponent = PresidentialElection;
+      break;
   }
 
   return (
@@ -354,10 +634,6 @@ function ElectionTypeVisual({ type }: { type: ElectionTypeKey }) {
     </View>
   );
 }
-
-/* ────────────────────────────────────────────────────────────────────────── */
-/* Local tabs                                                                */
-/* ────────────────────────────────────────────────────────────────────────── */
 
 function ElectionDetailTabs({
   value,
@@ -410,10 +686,6 @@ function ElectionDetailTabButton({
   );
 }
 
-/* ────────────────────────────────────────────────────────────────────────── */
-/* Meta pills                                                                */
-/* ────────────────────────────────────────────────────────────────────────── */
-
 function MetaPill({
   icon,
   label,
@@ -440,6 +712,9 @@ function MetaPill({
     </View>
   );
 }
+
+const skeletonColor = "rgba(17, 26, 50, 0.08)";
+const skeletonColorStrong = "rgba(17, 26, 50, 0.12)";
 
 const styles = StyleSheet.create({
   container: {
@@ -597,5 +872,200 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     overflow: "hidden",
+  },
+
+  fallbackScrollContent: {
+    flexGrow: 1,
+  },
+
+  emptyWrap: {
+    flex: 1,
+    minHeight: 360,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 26,
+    gap: 10,
+  },
+
+  emptyTitle: {
+    fontSize: 20,
+    lineHeight: 25,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.heading.bold,
+    textAlign: "center",
+  },
+
+  emptyText: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: Theme.colors.textMuted,
+    textAlign: "center",
+    maxWidth: 300,
+  },
+
+  emptyButton: {
+    minHeight: 42,
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    backgroundColor: Theme.colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8,
+  },
+
+  emptyButtonText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+
+  skeletonBackButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: skeletonColor,
+  },
+
+  skeletonTopTitle: {
+    width: 72,
+    height: 14,
+    borderRadius: 999,
+    backgroundColor: skeletonColor,
+  },
+
+  skeletonHeroIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 16,
+    backgroundColor: skeletonColor,
+  },
+
+  skeletonTypeLabel: {
+    width: 150,
+    height: 12,
+    borderRadius: 999,
+    backgroundColor: "rgba(25,183,176,0.16)",
+  },
+
+  skeletonHeroTitle: {
+    width: "82%",
+    height: 28,
+    borderRadius: 999,
+    backgroundColor: skeletonColorStrong,
+  },
+
+  skeletonHeroTitleShort: {
+    width: "58%",
+    height: 28,
+    borderRadius: 999,
+    backgroundColor: skeletonColor,
+  },
+
+  skeletonMetaPill: {
+    flex: 1,
+    height: 18,
+    borderRadius: 999,
+    backgroundColor: skeletonColor,
+  },
+
+  skeletonTabsRow: {
+    height: 38,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.colors.border,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 10,
+  },
+
+  skeletonTab: {
+    flex: 1,
+    height: 18,
+    marginBottom: 10,
+    borderRadius: 999,
+    backgroundColor: skeletonColor,
+  },
+
+  skeletonBodyContent: {
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 40,
+    gap: 16,
+  },
+
+  skeletonSyncRow: {
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  skeletonLineMedium: {
+    width: "42%",
+    height: 16,
+    borderRadius: 999,
+    backgroundColor: skeletonColor,
+  },
+
+  skeletonButton: {
+    width: 126,
+    height: 42,
+    borderRadius: 999,
+    backgroundColor: "rgba(25,183,176,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(25,183,176,0.18)",
+  },
+
+  skeletonLargeTitle: {
+    width: "68%",
+    height: 32,
+    borderRadius: 999,
+    backgroundColor: skeletonColorStrong,
+  },
+
+  skeletonLineLong: {
+    width: "86%",
+    height: 16,
+    borderRadius: 999,
+    backgroundColor: skeletonColor,
+  },
+
+  skeletonStatsRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 4,
+  },
+
+  skeletonStatCard: {
+    flex: 1,
+    height: 92,
+    borderRadius: 16,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+  },
+
+  skeletonSectionHeader: {
+    width: "54%",
+    height: 18,
+    borderRadius: 999,
+    backgroundColor: "rgba(25,183,176,0.14)",
+    marginTop: 4,
+  },
+
+  skeletonProgressBar: {
+    width: "100%",
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: skeletonColor,
+  },
+
+  skeletonReportCard: {
+    width: "100%",
+    height: 142,
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
   },
 });

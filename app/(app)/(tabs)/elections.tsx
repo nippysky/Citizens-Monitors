@@ -4,7 +4,10 @@ import { router } from "expo-router";
 import {
   Animated,
   Easing,
+  FlatList,
+  ListRenderItemInfo,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   View,
@@ -16,32 +19,88 @@ import ElectionCard from "@/components/elections/ElectionCard";
 import ElectionFiltersBottomSheet from "@/components/elections/ElectionFiltersBottomSheet";
 import ElectionStatusPill from "@/components/elections/ElectionStatusPill";
 import ScreenHeader from "@/components/elections/ScreenHeader";
-import TabBarSpacer from "@/components/layout/TabBarSpacer";
 import TourTarget from "@/components/tour/TourTarget";
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
 import { useElections } from "@/context/ElectionsContext";
-import { useTourScrollReset } from "@/context/TourContext";
 import {
+  coerceStatusForApi,
   electionStatusPills,
-  electionsDummyData,
+  ElectionItem,
   filterElections,
   formatDisplayDate,
+  getElectionRangeLabel,
+  mapApiElectionToItem,
   parseDateKeyLocal,
+  sortElectionsForDisplay,
   startOfMonth,
 } from "@/data/elections";
+import { useActiveElectionsQuery } from "@/hooks/api/useElectionQueries";
+import NoElection from "@/svgs/app/NoElection";
 import { Theme } from "@/theme";
 
-const ELECTIONS_TOUR_TARGET_IDS = ["elections.first-card"];
-const FIXED_SCOPE = "polling-unit" as const;
 const FIXED_HEADLINE = "Discover your polling unit elections";
-const FIXED_RANGE_LABEL = "Dec 2024 - Nov 2025";
+
+function ElectionListSkeleton() {
+  return (
+    <View style={styles.skeletonWrap}>
+      {Array.from({ length: 4 }).map((_, index) => (
+        <View key={`election-skeleton-${index}`} style={styles.skeletonCard}>
+          <View style={styles.skeletonDateCol}>
+            <View style={styles.skeletonCircle} />
+            <View style={styles.skeletonSmallLine} />
+            <View style={styles.skeletonNumber} />
+          </View>
+
+          <View style={styles.skeletonBody}>
+            <View style={styles.skeletonStatusLine} />
+            <View style={styles.skeletonTitleLine} />
+            <View style={styles.skeletonTitleLineShort} />
+            <View style={styles.skeletonMetaLine} />
+            <View style={styles.skeletonMetaLineSmall} />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function EmptyElectionsState({
+  hasDateFilter,
+  onClearDate,
+  onResetFilters,
+}: {
+  hasDateFilter: boolean;
+  onClearDate: () => void;
+  onResetFilters: () => void;
+}) {
+  return (
+    <View style={styles.emptyWrap}>
+      <NoElection />
+
+      <AppText style={styles.emptyTitle}>No elections found</AppText>
+      <AppText style={styles.emptyText}>
+        There are no elections matching the current filters for your polling
+        unit.
+      </AppText>
+
+      <View style={styles.emptyActions}>
+        {hasDateFilter ? (
+          <Pressable onPress={onClearDate} style={styles.emptyButton}>
+            <AppText style={styles.emptyButtonText}>Clear Date</AppText>
+          </Pressable>
+        ) : null}
+
+        <Pressable onPress={onResetFilters} style={styles.emptyButtonPrimary}>
+          <AppText style={styles.emptyButtonPrimaryText}>Reset Filters</AppText>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
 
 export default function ElectionsScreen() {
   const filterSheetRef = useRef<BottomSheetModal>(null);
-  const cardsScrollRef = useRef<ScrollView>(null);
-
-  useTourScrollReset(cardsScrollRef, ELECTIONS_TOUR_TARGET_IDS);
 
   const badgeOpacity = useRef(new Animated.Value(0)).current;
   const badgeTranslateY = useRef(new Animated.Value(-6)).current;
@@ -57,14 +116,29 @@ export default function ElectionsScreen() {
     setVisibleCalendarMonth,
   } = useElections();
 
+  const electionsQuery = useActiveElectionsQuery(
+    coerceStatusForApi(filters.status)
+  );
+
+  const electionItems = useMemo(() => {
+    const items = electionsQuery.data?.elections.map(mapApiElectionToItem) ?? [];
+
+    return sortElectionsForDisplay(items);
+  }, [electionsQuery.data]);
+
+  const rangeLabel = useMemo(
+    () => getElectionRangeLabel(electionItems),
+    [electionItems]
+  );
+
   const filteredItems = useMemo(() => {
     return filterElections(
-      electionsDummyData,
-      FIXED_SCOPE,
+      electionItems,
+      "polling-unit",
       filters,
       selectedCalendarDateKey
     );
-  }, [filters, selectedCalendarDateKey]);
+  }, [electionItems, filters, selectedCalendarDateKey]);
 
   useEffect(() => {
     Animated.parallel([
@@ -88,157 +162,209 @@ export default function ElectionsScreen() {
     setVisibleCalendarMonth(startOfMonth(parseDateKeyLocal(todayKey)));
   };
 
-  return (
-    <AppGradientScreen>
-      <View style={styles.container}>
-        <View style={styles.topSection}>
-          <ScreenHeader
-            onNotifications={() => router.push(Paths.appNotifications)}
-            onHelp={() => router.push(Paths.appHelpSupport)}
-          />
+  const getCollationElectionId = (item: ElectionItem): string => {
+    return item.activeElectionId || item.id;
+  };
 
-          <View style={styles.discoverWrap}>
-            <View style={styles.discoverTextBlock}>
-              <AppText style={styles.discoverTitle}>{FIXED_HEADLINE}</AppText>
-              <AppText style={styles.discoverSubtitle}>
-                {FIXED_RANGE_LABEL}
+  const handleOpenCollation = (item: ElectionItem) => {
+    const activeElectionId = getCollationElectionId(item);
+
+    router.push({
+      pathname: Paths.appCollation as never,
+      params: {
+        tab: "overview",
+        collationId: activeElectionId,
+        activeElectionId,
+        electionId: activeElectionId,
+      },
+    });
+  };
+
+  const handleOpenDetails = (item: ElectionItem) => {
+    router.push(Paths.electionDetails(item.id));
+  };
+
+  const renderHeader = () => (
+    <View style={styles.topSection}>
+      <ScreenHeader
+        title="Elections"
+        onNotifications={() => router.push(Paths.appNotifications)}
+        onHelp={() => router.push(Paths.appHelpSupport)}
+      />
+
+      <View style={styles.discoverWrap}>
+        <View style={styles.discoverTextBlock}>
+          <AppText style={styles.discoverTitle}>{FIXED_HEADLINE}</AppText>
+          <AppText style={styles.discoverSubtitle}>{rangeLabel}</AppText>
+        </View>
+
+        <View style={styles.iconRow}>
+          <Pressable
+            onPress={() => router.push(Paths.appElectionCalendar)}
+            hitSlop={10}
+            style={({ pressed }) => pressed && styles.iconPressed}
+          >
+            <Ionicons
+              name="calendar-outline"
+              size={28}
+              color={Theme.colors.textMuted}
+            />
+          </Pressable>
+
+          <Pressable
+            onPress={() => filterSheetRef.current?.present()}
+            hitSlop={10}
+            style={({ pressed }) => pressed && styles.iconPressed}
+          >
+            <Ionicons
+              name="options-outline"
+              size={28}
+              color={Theme.colors.textMuted}
+            />
+          </Pressable>
+        </View>
+      </View>
+
+      <Animated.View
+        pointerEvents={selectedCalendarDateKey ? "auto" : "none"}
+        style={[
+          styles.activeDateWrap,
+          {
+            opacity: badgeOpacity,
+            transform: [{ translateY: badgeTranslateY }],
+            height: selectedCalendarDateKey ? undefined : 0,
+          },
+        ]}
+      >
+        {selectedCalendarDateKey ? (
+          <View style={styles.activeDateRow}>
+            <View style={styles.activeDatePill}>
+              <Ionicons
+                name="calendar-outline"
+                size={15}
+                color={Theme.colors.primary}
+              />
+              <AppText style={styles.activeDateText}>
+                {formatDisplayDate(selectedCalendarDateKey)}
               </AppText>
             </View>
 
-            <View style={styles.iconRow}>
-              <Pressable
-                onPress={() => router.push(Paths.appElectionCalendar)}
-                hitSlop={10}
-                style={({ pressed }) => pressed && styles.iconPressed}
-              >
-                <Ionicons
-                  name="calendar-outline"
-                  size={28}
-                  color={Theme.colors.textMuted}
-                />
-              </Pressable>
+            <View style={styles.activeDateActions}>
+              {selectedCalendarDateKey !== todayKey ? (
+                <Pressable onPress={handleJumpToToday}>
+                  <AppText style={styles.actionText}>Today</AppText>
+                </Pressable>
+              ) : null}
 
-              <Pressable
-                onPress={() => filterSheetRef.current?.present()}
-                hitSlop={10}
-                style={({ pressed }) => pressed && styles.iconPressed}
-              >
-                <Ionicons
-                  name="options-outline"
-                  size={28}
-                  color={Theme.colors.textMuted}
-                />
+              <Pressable onPress={clearSelectedCalendarDateKey}>
+                <AppText style={styles.actionText}>Clear</AppText>
               </Pressable>
             </View>
           </View>
+        ) : null}
+      </Animated.View>
 
-          <Animated.View
-            pointerEvents={selectedCalendarDateKey ? "auto" : "none"}
-            style={[
-              styles.activeDateWrap,
-              {
-                opacity: badgeOpacity,
-                transform: [{ translateY: badgeTranslateY }],
-                height: selectedCalendarDateKey ? undefined : 0,
-              },
-            ]}
-          >
-            {selectedCalendarDateKey ? (
-              <View style={styles.activeDateRow}>
-                <View style={styles.activeDatePill}>
-                  <Ionicons
-                    name="calendar-outline"
-                    size={15}
-                    color={Theme.colors.primary}
-                  />
-                  <AppText style={styles.activeDateText}>
-                    {formatDisplayDate(selectedCalendarDateKey)}
-                  </AppText>
-                </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.pillsRow}
+      >
+        {electionStatusPills.map((status) => (
+          <ElectionStatusPill
+            key={status}
+            value={status}
+            selected={filters.status === status}
+            onPress={() => setFilters({ ...filters, status })}
+          />
+        ))}
+      </ScrollView>
+    </View>
+  );
 
-                <View style={styles.activeDateActions}>
-                  {selectedCalendarDateKey !== todayKey ? (
-                    <Pressable onPress={handleJumpToToday}>
-                      <AppText style={styles.actionText}>Today</AppText>
-                    </Pressable>
-                  ) : null}
-
-                  <Pressable onPress={clearSelectedCalendarDateKey}>
-                    <AppText style={styles.actionText}>Clear</AppText>
-                  </Pressable>
-                </View>
-              </View>
-            ) : null}
-          </Animated.View>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.pillsRow}
-          >
-            {electionStatusPills.map((status) => (
-              <ElectionStatusPill
-                key={status}
-                value={status}
-                selected={filters.status === status}
-                onPress={() => setFilters({ ...filters, status })}
-              />
-            ))}
-          </ScrollView>
-        </View>
-
-        <View style={styles.feedSection}>
-          <ScrollView
-            ref={cardsScrollRef}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.cardsWrap}
-          >
-            {filteredItems.length > 0 ? (
-              filteredItems.map((item, index) => {
-                const card = (
-                  <ElectionCard
-                    item={item}
-                    onLivePress={() =>
-                      router.push({
-                        pathname: Paths.appCollation,
-                        params: { collationId: item.id },
-                      })
-                    }
-                    onConcludedPress={() =>
-                      router.push(Paths.electionDetails(item.id))
-                    }
-                  />
-                );
-
-                return index === 0 ? (
-                  <TourTarget key={item.id} id="elections.first-card">
-                    {card}
-                  </TourTarget>
-                ) : (
-                  <View key={item.id}>{card}</View>
-                );
-              })
-            ) : (
-              <View style={styles.emptyWrap}>
-                <AppText style={styles.emptyTitle}>No elections found</AppText>
-                <AppText style={styles.emptySubtitle}>
-                  Try another date or choose a different status.
-                </AppText>
-              </View>
-            )}
-
-            <TabBarSpacer />
-          </ScrollView>
-        </View>
-
-        <ElectionFiltersBottomSheet
-          sheetRef={filterSheetRef}
-          value={filters}
-          onChange={setFilters}
-          onApply={() => filterSheetRef.current?.dismiss()}
-          onReset={resetFilters}
+  const renderItem = ({ item, index }: ListRenderItemInfo<ElectionItem>) => {
+    const card = (
+      <View style={styles.cardOuter}>
+        <ElectionCard
+          item={item}
+          onLivePress={() => handleOpenCollation(item)}
+          onConcludedPress={() => handleOpenDetails(item)}
+          onUpcomingPress={() => handleOpenDetails(item)}
         />
       </View>
+    );
+
+    if (index === 0) {
+      return <TourTarget id="elections.first-card">{card}</TourTarget>;
+    }
+
+    return card;
+  };
+
+  return (
+    <AppGradientScreen scroll={false}>
+      <View style={styles.container}>
+        <FlatList
+          data={filteredItems}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          ListHeaderComponent={renderHeader}
+          ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={electionsQuery.isRefetching}
+              onRefresh={() => {
+                void electionsQuery.refetch();
+              }}
+              tintColor={Theme.colors.primary}
+              colors={[Theme.colors.primary]}
+            />
+          }
+          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={
+            electionsQuery.isLoading ? (
+              <ElectionListSkeleton />
+            ) : electionsQuery.isError ? (
+              <View style={styles.errorWrap}>
+                <Ionicons
+                  name="cloud-offline-outline"
+                  size={42}
+                  color={Theme.colors.textMuted}
+                />
+                <AppText style={styles.errorTitle}>
+                  Could not load elections
+                </AppText>
+                <AppText style={styles.errorText}>
+                  Check your connection and try again.
+                </AppText>
+                <Pressable
+                  onPress={() => {
+                    void electionsQuery.refetch();
+                  }}
+                  style={styles.retryButton}
+                >
+                  <AppText style={styles.retryText}>Retry</AppText>
+                </Pressable>
+              </View>
+            ) : (
+              <EmptyElectionsState
+                hasDateFilter={Boolean(selectedCalendarDateKey)}
+                onClearDate={clearSelectedCalendarDateKey}
+                onResetFilters={resetFilters}
+              />
+            )
+          }
+          ListFooterComponent={<View style={{ height: 120 }} />}
+        />
+      </View>
+
+      <ElectionFiltersBottomSheet
+        sheetRef={filterSheetRef}
+        value={filters}
+        onChange={setFilters}
+        onApply={() => undefined}
+        onReset={resetFilters}
+      />
     </AppGradientScreen>
   );
 }
@@ -248,9 +374,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
+  listContent: {
+    paddingBottom: 8,
+  },
+
   topSection: {
     paddingHorizontal: 16,
     paddingTop: 8,
+    paddingBottom: 16,
     gap: 16,
   },
 
@@ -258,44 +389,48 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
+    gap: 16,
   },
 
   discoverTextBlock: {
     flex: 1,
-    gap: 2,
+    gap: 4,
   },
 
   discoverTitle: {
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: 22,
+    lineHeight: 27,
     color: Theme.colors.text,
-    fontFamily: Theme.fonts.body.semibold,
+    fontFamily: Theme.fonts.heading.bold,
   },
 
   discoverSubtitle: {
     fontSize: 14,
     lineHeight: 20,
     color: Theme.colors.textMuted,
-    fontFamily: Theme.fonts.body.medium,
   },
 
   iconRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: 18,
   },
 
   iconPressed: {
-    opacity: 0.72,
+    opacity: 0.65,
   },
 
   activeDateWrap: {
-    marginTop: -6,
     overflow: "hidden",
   },
 
   activeDateRow: {
+    minHeight: 38,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    backgroundColor: "rgba(255,255,255,0.62)",
+    borderWidth: 1,
+    borderColor: "rgba(25,183,176,0.15)",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -306,10 +441,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    minHeight: 32,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    backgroundColor: "rgba(25,183,176,0.12)",
   },
 
   activeDateText: {
@@ -326,49 +457,211 @@ const styles = StyleSheet.create({
   },
 
   actionText: {
-    fontSize: 13.5,
+    fontSize: 13,
     lineHeight: 18,
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.semibold,
   },
 
   pillsRow: {
-    gap: 12,
-    paddingRight: 8,
+    gap: 10,
+    paddingRight: 16,
   },
 
-  feedSection: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
+  cardOuter: {
     paddingHorizontal: 16,
-    paddingTop: 12,
-    marginTop: 8,
   },
 
-  cardsWrap: {
-    gap: 16,
-    paddingBottom: 16,
+  skeletonWrap: {
+    paddingHorizontal: 16,
+    gap: 14,
   },
 
-  emptyWrap: {
-    paddingTop: 30,
+  skeletonCard: {
+    minHeight: 146,
+    flexDirection: "row",
+    borderRadius: 18,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#E3E6EA",
+    backgroundColor: "#FFFFFF",
+  },
+
+  skeletonDateCol: {
+    width: 62,
+    backgroundColor: "#F3F3EF",
     alignItems: "center",
+    justifyContent: "center",
     gap: 8,
   },
 
-  emptyTitle: {
-    fontSize: 20,
-    lineHeight: 24,
-    color: Theme.colors.text,
-    fontFamily: Theme.fonts.heading.bold,
+  skeletonCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#E1E6EE",
   },
 
-  emptySubtitle: {
-    maxWidth: 280,
+  skeletonSmallLine: {
+    width: 34,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "#E1E6EE",
+  },
+
+  skeletonNumber: {
+    width: 26,
+    height: 20,
+    borderRadius: 8,
+    backgroundColor: "#DCE3EC",
+  },
+
+  skeletonBody: {
+    flex: 1,
+    padding: 14,
+    gap: 10,
+  },
+
+  skeletonStatusLine: {
+    width: 70,
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: "#E8EDF3",
+  },
+
+  skeletonTitleLine: {
+    width: "78%",
+    height: 18,
+    borderRadius: 999,
+    backgroundColor: "#E1E7EE",
+  },
+
+  skeletonTitleLineShort: {
+    width: "54%",
+    height: 18,
+    borderRadius: 999,
+    backgroundColor: "#E8EDF3",
+  },
+
+  skeletonMetaLine: {
+    width: "88%",
+    height: 12,
+    borderRadius: 999,
+    backgroundColor: "#E8EDF3",
+    marginTop: 4,
+  },
+
+  skeletonMetaLineSmall: {
+    width: "62%",
+    height: 12,
+    borderRadius: 999,
+    backgroundColor: "#E8EDF3",
+  },
+
+  emptyWrap: {
+    minHeight: 340,
+    paddingHorizontal: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+
+  emptyTitle: {
+    fontSize: 21,
+    lineHeight: 26,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.heading.bold,
     textAlign: "center",
+  },
+
+  emptyText: {
     fontSize: 14,
     lineHeight: 21,
     color: Theme.colors.textMuted,
-    fontFamily: Theme.fonts.body.medium,
+    textAlign: "center",
+    maxWidth: 300,
+  },
+
+  emptyActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 8,
+    flexWrap: "wrap",
+    justifyContent: "center",
+  },
+
+  emptyButton: {
+    minHeight: 42,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#D8DDE6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  emptyButtonText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+
+  emptyButtonPrimary: {
+    minHeight: 42,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    backgroundColor: Theme.colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  emptyButtonPrimaryText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#FFFFFF",
+    fontFamily: Theme.fonts.body.semibold,
+  },
+
+  errorWrap: {
+    minHeight: 340,
+    paddingHorizontal: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+
+  errorTitle: {
+    fontSize: 20,
+    lineHeight: 25,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.heading.bold,
+    textAlign: "center",
+  },
+
+  errorText: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: Theme.colors.textMuted,
+    textAlign: "center",
+  },
+
+  retryButton: {
+    minHeight: 42,
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    backgroundColor: Theme.colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 6,
+  },
+
+  retryText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: Theme.fonts.body.semibold,
   },
 });

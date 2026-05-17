@@ -14,14 +14,12 @@ export default function GeoBreakdownSection({ collation }: Props) {
 
   return (
     <View style={styles.wrap}>
-      <AppText style={styles.title}>
-        Geo Election Result Breakdown by LGA
-      </AppText>
+      <AppText style={styles.title}>Geo Election Result Breakdown by LGA</AppText>
       <AppText style={styles.subtitle}>
-        Captured from real reports of this election from{" "}
+        Captured from real reports of this election from {" "}
         {collation.resultsUploaded} results and {collation.incidentsReported}{" "}
         incidents reported from {collation.coveredUnits}/{collation.totalUnits}{" "}
-        polling units in Alimosho.
+        polling units in {collation.location}.
       </AppText>
 
       {empty ? (
@@ -46,12 +44,10 @@ export default function GeoBreakdownSection({ collation }: Props) {
                   </AppText>
                 </View>
 
-                {/* coverage */}
                 <AppText style={styles.coverageText}>
                   {item.coveredUnits}/{item.totalUnits} Polling Units
                 </AppText>
 
-                {/* stacked horizontal bar */}
                 <View style={styles.stackedBar}>
                   {item.parties.map((p) => (
                     <View
@@ -65,16 +61,10 @@ export default function GeoBreakdownSection({ collation }: Props) {
                   ))}
                 </View>
 
-                {/* party chips */}
                 <View style={styles.partyChipsRow}>
                   {item.parties.map((p) => (
-                    <View
-                      key={`${item.id}-chip-${p.shortName}`}
-                      style={styles.partyChip}
-                    >
-                      <View
-                        style={[styles.partyDot, { backgroundColor: p.color }]}
-                      />
+                    <View key={`${item.id}-chip-${p.shortName}`} style={styles.partyChip}>
+                      <View style={[styles.partyDot, { backgroundColor: p.color }]} />
                       <AppText style={styles.partyChipText}>
                         {p.shortName} ({p.percent}%)
                       </AppText>
@@ -82,13 +72,12 @@ export default function GeoBreakdownSection({ collation }: Props) {
                   ))}
                 </View>
 
-                {/* bottom */}
                 <View style={styles.bottomRow}>
                   <AppText style={styles.votesText}>
                     {formatCompactNumber(item.totalVotes)} Votes
                   </AppText>
                   <AppText style={styles.percentTotal}>
-                    42.5% of total votes
+                    {item.percentOfTotalVotes}% of total votes
                   </AppText>
                 </View>
               </View>

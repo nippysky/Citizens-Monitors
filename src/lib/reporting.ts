@@ -2,6 +2,14 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export type ReportFlowMode = "submit-result" | "report-incident";
 
+export type ReportingUploadLocation = {
+  latitude: number;
+  longitude: number;
+  address: string;
+  accuracy: number | null;
+  capturedAt: string;
+};
+
 export type CommencementContext = {
   electionId: string;
   electionTitle: string;
@@ -10,6 +18,7 @@ export type CommencementContext = {
   ward: string;
   lga: string;
   state: string;
+  uploadLocation?: ReportingUploadLocation | null;
 };
 
 export type ResultPartyVote = {
@@ -27,6 +36,7 @@ export type ElectionResultDraft = {
   ward: string;
   lga: string;
   state: string;
+  uploadLocation?: ReportingUploadLocation | null;
   votingStartTime: string;
   signedResultImageUri: string | null;
   resultAnnouncementVideoUri: string | null;
@@ -47,9 +57,11 @@ export type IncidentDraft = {
   ward: string;
   lga: string;
   state: string;
+  uploadLocation?: ReportingUploadLocation | null;
   incidentType: string;
   description: string;
   incidentTime: string;
+  electionRating?: "good" | "okay" | "poor" | "manageable" | "";
   imageEvidenceUris: string[];
   videoEvidenceUris: string[];
   liveVideoUri: string | null;
@@ -62,7 +74,7 @@ const LIVE_VIDEO_KEY = "@cm_reporting_live_video";
 
 export const REPORTING_DEV_CONFIG = {
   autoShowDemoLiveNotice: true,
-  enableGlobalLiveNoticeDevTrigger: false,
+  enableGlobalLiveNoticeDevTrigger: true,
   forceInvalidResultSubmission: false,
   forceIncidentSuccess: true,
   forceResultSuccess: true,
@@ -76,6 +88,7 @@ export const DEV_COMMENCEMENT_CONTEXT: CommencementContext = {
   ward: "Ward 01",
   lga: "Alimosho LGA",
   state: "Lagos",
+  uploadLocation: null,
 };
 
 export const DEFAULT_PARTIES: ResultPartyVote[] = [
@@ -98,11 +111,6 @@ export const INCIDENT_OPTIONS = [
   "Other Incidents",
 ] as const;
 
-/**
- * Production-ready helper:
- * lets any screen build a commencement context from partial data
- * while still falling back safely in development.
- */
 export function buildCommencementContext(
   partial?: Partial<CommencementContext>
 ): CommencementContext {
@@ -119,6 +127,8 @@ export function buildCommencementContext(
     ward: partial?.ward?.trim() || DEV_COMMENCEMENT_CONTEXT.ward,
     lga: partial?.lga?.trim() || DEV_COMMENCEMENT_CONTEXT.lga,
     state: partial?.state?.trim() || DEV_COMMENCEMENT_CONTEXT.state,
+    uploadLocation:
+      partial?.uploadLocation ?? DEV_COMMENCEMENT_CONTEXT.uploadLocation ?? null,
   };
 }
 
@@ -134,6 +144,7 @@ export function buildInitialResultDraft(
     ward: ctx.ward,
     lga: ctx.lga,
     state: ctx.state,
+    uploadLocation: ctx.uploadLocation ?? null,
     votingStartTime,
     signedResultImageUri: null,
     resultAnnouncementVideoUri: null,
@@ -158,9 +169,11 @@ export function buildInitialIncidentDraft(
     ward: ctx.ward,
     lga: ctx.lga,
     state: ctx.state,
+    uploadLocation: ctx.uploadLocation ?? null,
     incidentType: "",
     description: "",
     incidentTime: "",
+    electionRating: "",
     imageEvidenceUris: [],
     videoEvidenceUris: [],
     liveVideoUri: null,
@@ -220,6 +233,7 @@ export async function clearLiveVideoUri() {
 
 export function parseNumeric(value: string | number): number {
   if (typeof value === "number") return value;
+
   const parsed = Number(String(value).replace(/[^\d]/g, ""));
   return Number.isFinite(parsed) ? parsed : 0;
 }

@@ -30,9 +30,17 @@ import NoElection from "@/svgs/app/NoElection";
 import Incident from "@/svgs/app/collation/Incident";
 import { getPartyLogo } from "@/svgs/app/collation/parties";
 
-type Props = { collation: CollationItem };
+type Props = {
+  collation: CollationItem;
+  refreshing?: boolean;
+  onRefresh?: () => void;
+};
 
-export default function CollationReviewReportsTab({ collation }: Props) {
+export default function CollationReviewReportsTab({
+  collation,
+  refreshing: externalRefreshing,
+  onRefresh: externalRefresh,
+}: Props) {
   const { showToast } = useAppToast();
   const { enqueue } = useOfflineSync();
   const evidenceRef = useRef<BottomSheetModal>(null);
@@ -40,7 +48,8 @@ export default function CollationReviewReportsTab({ collation }: Props) {
   const [selectedEvidence, setSelectedEvidence] =
     useState<EvidencePayload | null>(null);
   const [flagTargetId, setFlagTargetId] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const [localRefreshing, setLocalRefreshing] = useState(false);
+  const refreshing = externalRefreshing ?? localRefreshing;
 
   // Seed confirmed/flagged from data
   const [confirmedIds, setConfirmedIds] = useState<Set<string>>(() => {
@@ -60,41 +69,68 @@ export default function CollationReviewReportsTab({ collation }: Props) {
   });
 
   const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1400);
-  }, []);
+    if (externalRefresh) {
+      externalRefresh();
+      return;
+    }
+
+    setLocalRefreshing(true);
+    setTimeout(() => setLocalRefreshing(false), 1400);
+  }, [externalRefresh]);
 
   const buildEvidence = useCallback(
     (report: (typeof collation.reviewReports)[number]): EvidencePayload => {
       const isResult = report.type === "result";
+      const evidence = report.evidence;
+
       return {
         title: report.title,
-        note: isResult
-          ? "Signed result sheet was captured immediately after polling unit collation."
-          : "Incident evidence was captured live at the polling unit.",
-        locationMeta: "No 20 Ao, Alimosho, Lagos State, Nigeria",
-        pollingUnitName: "Ikotun Primary School",
-        pollingUnitCode: "PU LA/12/35",
-        observerHandle: report.author,
-        submittedAt: isResult
-          ? "15 Mar 2027 · 08:42 AM WAT"
-          : report.createdAgo,
-        verificationStatus: isResult ? "verified" : "pending",
-        sourceType: isResult ? "observer-upload" : "community-report",
-        electionName: collation.fullTitle,
-        accreditedVoter: isResult ? "675,435" : "—",
-        rejectedVotes: isResult ? "657" : "—",
-        spoiledBallots: isResult ? "320" : "—",
-        usedBallots: isResult ? "601" : "—",
-        unusedBallots: isResult ? "87" : "—",
-        imageUri:
-          report.type === "incident"
-            ? "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=1200&q=80"
-            : "https://images.unsplash.com/photo-1577563908411-5077b6dc7624?auto=format&fit=crop&w=1200&q=80",
-        videoUri: "https://www.w3schools.com/html/mov_bbb.mp4",
+        note:
+          evidence?.note ??
+          (isResult
+            ? "Signed result sheet was captured immediately after polling unit collation."
+            : "Incident evidence was captured live at the polling unit."),
+        locationMeta: evidence?.locationMeta ?? collation.location,
+        pollingUnitName: evidence?.pollingUnitName ?? collation.location,
+        pollingUnitCode: evidence?.pollingUnitCode ?? collation.location,
+        observerHandle: evidence?.observerHandle ?? report.author,
+        submittedAt: evidence?.submittedAt ?? report.createdAgo,
+        verificationStatus:
+          evidence?.verificationStatus ?? (isResult ? "verified" : "pending"),
+        sourceType:
+          evidence?.sourceType ??
+          (isResult ? "observer-upload" : "community-report"),
+        electionName: evidence?.electionName ?? collation.fullTitle,
+        accreditedVoter:
+          evidence?.accreditedVoter ??
+          (isResult
+            ? formatCompactNumber(collation.officialSummary.accreditedVoters)
+            : "—"),
+        rejectedVotes:
+          evidence?.rejectedVotes ??
+          (isResult
+            ? formatCompactNumber(collation.officialSummary.rejectedVotes)
+            : "—"),
+        spoiledBallots:
+          evidence?.spoiledBallots ??
+          (isResult
+            ? formatCompactNumber(collation.officialSummary.spoiledBallots)
+            : "—"),
+        usedBallots:
+          evidence?.usedBallots ??
+          (isResult
+            ? formatCompactNumber(collation.officialSummary.usedBallots)
+            : "—"),
+        unusedBallots:
+          evidence?.unusedBallots ??
+          (isResult
+            ? formatCompactNumber(collation.officialSummary.unusedBallots)
+            : "—"),
+        imageUri: evidence?.imageUri,
+        videoUri: evidence?.videoUri,
       };
     },
-    [collation]
+    [collation],
   );
 
   const handleOpenEvidence = useCallback(
@@ -102,7 +138,7 @@ export default function CollationReviewReportsTab({ collation }: Props) {
       setSelectedEvidence(buildEvidence(report));
       requestAnimationFrame(() => evidenceRef.current?.present());
     },
-    [buildEvidence, collation]
+    [buildEvidence, collation],
   );
 
   // ── Toggle confirm (undo-able) ──
@@ -136,7 +172,7 @@ export default function CollationReviewReportsTab({ collation }: Props) {
           : "Report confirmed — thank you.",
       });
     },
-    [confirmedIds, enqueue, showToast]
+    [confirmedIds, enqueue, showToast],
   );
 
   // ── Flag (permanent) ──
@@ -166,7 +202,7 @@ export default function CollationReviewReportsTab({ collation }: Props) {
         ? collation.parties
             .map(
               (p) =>
-                `${p.shortName}: ${formatCompactNumber(p.votes)} votes (${p.percent}%)`
+                `${p.shortName}: ${formatCompactNumber(p.votes)} votes (${p.percent}%)`,
             )
             .join("\n")
         : "";
@@ -191,14 +227,14 @@ export default function CollationReviewReportsTab({ collation }: Props) {
         showToast({ type: "error", message: "Unable to share right now." });
       }
     },
-    [collation, showToast]
+    [collation, showToast],
   );
 
   const resultReports = collation.reviewReports.filter(
-    (r) => r.type === "result"
+    (r) => r.type === "result",
   );
   const incidentReports = collation.reviewReports.filter(
-    (r) => r.type === "incident"
+    (r) => r.type === "incident",
   );
 
   /* ── Empty state ── */
@@ -223,16 +259,13 @@ export default function CollationReviewReportsTab({ collation }: Props) {
               Community Verification
             </AppText>
             <AppText style={styles.sectionSubtitle}>
-              Review report submitted by our observer at your Polling Units in
-              Ikotun Primary School, PU LA/12/35. Confirm what&apos;s accurate,
-              and flag what&apos;s false.
+              Review reports submitted by observers for {collation.fullTitle}.
+              Confirm what&apos;s accurate, and flag what&apos;s false.
             </AppText>
           </View>
           <View style={styles.emptyWrap}>
             <NoElection width={110} height={110} />
-            <AppText style={styles.emptyTitle}>
-              No Election Report yet
-            </AppText>
+            <AppText style={styles.emptyTitle}>No Election Report yet</AppText>
             <AppText style={styles.emptySubtitle}>
               Citizen Monitor have not commenced operation yet.
             </AppText>
@@ -263,9 +296,8 @@ export default function CollationReviewReportsTab({ collation }: Props) {
         <View style={styles.section}>
           <AppText style={styles.sectionTitle}>Community Verification</AppText>
           <AppText style={styles.sectionSubtitle}>
-            Review report submitted by our observer at your Polling Units in
-            Ikotun Primary School, PU LA/12/35. Confirm what&apos;s accurate,
-            and flag what&apos;s false.
+            Review reports submitted by observers for {collation.fullTitle}.
+            Confirm what&apos;s accurate, and flag what&apos;s false.
           </AppText>
         </View>
 
@@ -289,15 +321,13 @@ export default function CollationReviewReportsTab({ collation }: Props) {
                     size={12}
                     color={Theme.colors.textMuted}
                   />
-                  <AppText style={styles.timeText}>
-                    {report.createdAgo}
-                  </AppText>
+                  <AppText style={styles.timeText}>{report.createdAgo}</AppText>
                 </View>
               </View>
 
               <View style={styles.resultCard}>
                 <AppText style={styles.resultElectionTitle}>
-                  Lagos State Governorship Election 2026 Result
+                  {collation.fullTitle} Result
                 </AppText>
                 {collation.parties.map((p) => {
                   const Logo = getPartyLogo(p.logoKey);
@@ -356,7 +386,7 @@ export default function CollationReviewReportsTab({ collation }: Props) {
         {incidentReports.length > 0 ? (
           <View style={styles.incidentSectionHeader}>
             <AppText style={styles.incidentSectionTitle}>
-              Incident doing the Lagos State{"\n"}Governorship Election 2026
+              Incidents during {collation.fullTitle}
             </AppText>
           </View>
         ) : null}
@@ -397,9 +427,7 @@ export default function CollationReviewReportsTab({ collation }: Props) {
                   onPress={() => handleOpenEvidence(report)}
                   hitSlop={8}
                 >
-                  <AppText style={styles.linkText}>
-                    See evidence &gt;
-                  </AppText>
+                  <AppText style={styles.linkText}>See evidence &gt;</AppText>
                 </Pressable>
 
                 <View style={styles.thinDivider} />

@@ -4,29 +4,45 @@ import { Image, Pressable, StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
-import { NewsFeedItem } from "@/data/news";
+import type { NewsInsightItem } from "@/lib/api/news.api";
 import { Theme } from "@/theme";
 
 type Props = {
-  item: NewsFeedItem;
+  item: NewsInsightItem;
   isLast?: boolean;
+  onPressIn?: () => void;
 };
 
-export default function NewsFeedCard({ item, isLast = false }: Props) {
+export default function NewsFeedCard({
+  item,
+  isLast = false,
+  onPressIn,
+}: Props) {
   const handlePress = () => {
-    router.push(Paths.newsDetails(item.id));
+    router.push(Paths.newsDetails(item.slug));
   };
 
   return (
     <Pressable
       onPress={handlePress}
+      onPressIn={onPressIn}
       style={({ pressed }) => [
         styles.card,
         !isLast && styles.cardBorder,
         pressed && styles.cardPressed,
       ]}
     >
-      <Image source={{ uri: item.imageUrl }} style={styles.image} />
+      <View style={styles.imageWrap}>
+        {item.thumbnailUrl ? (
+          <Image source={{ uri: item.thumbnailUrl }} style={styles.image} />
+        ) : (
+          <Ionicons
+            name="newspaper-outline"
+            size={24}
+            color={Theme.colors.textMuted}
+          />
+        )}
+      </View>
 
       <View style={styles.content}>
         <View style={styles.textWrap}>
@@ -36,7 +52,9 @@ export default function NewsFeedCard({ item, isLast = false }: Props) {
 
           <View style={styles.dateRow}>
             <View style={styles.dot} />
-            <AppText style={styles.dateText}>{item.date}</AppText>
+            <AppText style={styles.dateText}>
+              {formatNewsDate(item.publishedAt)}
+            </AppText>
           </View>
         </View>
 
@@ -50,6 +68,19 @@ export default function NewsFeedCard({ item, isLast = false }: Props) {
       </View>
     </Pressable>
   );
+}
+
+function formatNewsDate(value?: string): string {
+  if (!value) return "Recently";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Recently";
+
+  return new Intl.DateTimeFormat("en-NG", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
 }
 
 const styles = StyleSheet.create({
@@ -70,11 +101,19 @@ const styles = StyleSheet.create({
     borderBottomColor: "rgba(17, 26, 50, 0.10)",
   },
 
-  image: {
+  imageWrap: {
     width: 84,
     height: 84,
     borderRadius: 12,
     backgroundColor: "#E9ECEF",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+
+  image: {
+    width: "100%",
+    height: "100%",
   },
 
   content: {

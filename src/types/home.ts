@@ -86,9 +86,10 @@ export type DiscussionItem = {
 
 export type NewsItem = {
   id: string;
+  slug?: string;
   title: string;
   date: string;
-  imageUrl?: string;
+  imageUrl?: string | null;
 };
 
 export type VoterEssentialItem = {

@@ -1,154 +1,193 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import {
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  View,
+} from "react-native";
 import { useMemo } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import AppGradientScreen from "@/components/app/AppGradientScreen";
-import CalendarDayCell from "@/components/elections/CalenderDayCell";
 import ElectionCard from "@/components/elections/ElectionCard";
-import EmptyElectionCalendarState from "@/components/elections/EmptyElectionCalenderState";
-import TabBarSpacer from "@/components/layout/TabBarSpacer";
-import BackButton from "@/components/ui/BackButton";
 import AppText from "@/components/ui/AppText";
+import BackButton from "@/components/ui/BackButton";
 import { Paths } from "@/constants/paths";
 import { useElections } from "@/context/ElectionsContext";
 import {
   addMonths,
-  electionsDummyData,
-  formatMonthYear,
-  getCalendarFilteredElections,
-  getEmptyCalendarSubtitle,
-  getHighlightedDateKeysForMonth,
-  isSameDay,
-  isSameMonth,
-  parseDateKeyLocal,
-  startOfMonth,
-  toDateKeyLocal,
+  buildMonthMatrix,
+  ElectionItem,
+  filterElections,
+  formatDisplayDate,
+  isElectionActiveOnDate,
+  mapApiElectionToItem,
+  sortElectionsForDisplay,
+  toMonthTitle,
 } from "@/data/elections";
+import { useActiveElectionsQuery } from "@/hooks/api/useElectionQueries";
+import { ActiveElectionApiItem } from "@/lib/api/elections.api";
+import NoElection from "@/svgs/app/NoElection";
 import { Theme } from "@/theme";
+import CalendarDayCell from "@/components/elections/CalenderDayCell";
 
 const weekDays = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
-const FIXED_SCOPE = "polling-unit" as const;
 
-function buildCalendarMatrix(monthDate: Date): Date[][] {
-  const firstDayOfMonth = startOfMonth(monthDate);
-  const jsDay = firstDayOfMonth.getDay(); // Sunday = 0
-  const mondayOffset = jsDay === 0 ? 6 : jsDay - 1;
+function CalendarSkeleton() {
+  return (
+    <View style={styles.skeletonGrid}>
+      {Array.from({ length: 42 }).map((_, index) => (
+        <View key={`calendar-skeleton-${index}`} style={styles.skeletonCell} />
+      ))}
+    </View>
+  );
+}
 
-  const gridStart = new Date(firstDayOfMonth);
-  gridStart.setDate(firstDayOfMonth.getDate() - mondayOffset);
+function EmptySelectedDay({
+  selectedLabel,
+  onClear,
+}: {
+  selectedLabel: string;
+  onClear: () => void;
+}) {
+  return (
+    <View style={styles.emptyWrap}>
+      <NoElection />
 
-  const allDays = Array.from({ length: 42 }, (_, index) => {
-    const date = new Date(gridStart);
-    date.setDate(gridStart.getDate() + index);
-    return date;
-  });
-
-  return Array.from({ length: 6 }, (_, rowIndex) =>
-    allDays.slice(rowIndex * 7, rowIndex * 7 + 7)
+      <AppText style={styles.emptyTitle}>No election on {selectedLabel}</AppText>
+      <AppText style={styles.emptyText}>
+        Select another highlighted date to see monitored elections.
+      </AppText>
+      <Pressable onPress={onClear} style={styles.clearDateButton}>
+        <AppText style={styles.clearDateText}>Clear selected date</AppText>
+      </Pressable>
+    </View>
   );
 }
 
 export default function ElectionsCalendarScreen() {
   const {
     filters,
-    todayKey,
-    visibleCalendarMonth,
-    setVisibleCalendarMonth,
     selectedCalendarDateKey,
     setSelectedCalendarDateKey,
+    clearSelectedCalendarDateKey,
+    visibleCalendarMonth,
+    setVisibleCalendarMonth,
+    todayKey,
   } = useElections();
 
-  const today = useMemo(() => parseDateKeyLocal(todayKey), [todayKey]);
+  const electionsQuery = useActiveElectionsQuery("all");
 
-  const selectedDate = useMemo(() => {
-    if (selectedCalendarDateKey) {
-      return parseDateKeyLocal(selectedCalendarDateKey);
-    }
-    return today;
-  }, [selectedCalendarDateKey, today]);
+  const elections = useMemo<ElectionItem[]>(() => {
+    const items: ActiveElectionApiItem[] = electionsQuery.data?.elections ?? [];
 
-  const calendarMatrix = useMemo(
-    () => buildCalendarMatrix(visibleCalendarMonth),
+    return sortElectionsForDisplay(items.map(mapApiElectionToItem));
+  }, [electionsQuery.data]);
+
+  const calendarCells = useMemo(
+    () => buildMonthMatrix(visibleCalendarMonth),
     [visibleCalendarMonth]
   );
 
-  const selectedItems = useMemo(
+  const selectedKey = selectedCalendarDateKey ?? todayKey;
+  const selectedLabel = formatDisplayDate(selectedKey);
+
+  const selectedDayElections = useMemo(
     () =>
-      getCalendarFilteredElections(
-        electionsDummyData,
-        FIXED_SCOPE,
-        filters,
-        toDateKeyLocal(selectedDate)
+      filterElections(
+        elections,
+        "polling-unit",
+        { ...filters, status: "all" },
+        selectedKey
       ),
-    [filters, selectedDate]
+    [elections, filters, selectedKey]
   );
 
-  const highlightedDateKeys = useMemo(
-    () =>
-      getHighlightedDateKeysForMonth(
-        electionsDummyData,
-        FIXED_SCOPE,
-        filters,
-        visibleCalendarMonth
-      ),
-    [visibleCalendarMonth, filters]
-  );
+  const highlightedKeys = useMemo(() => {
+    const keys = new Set<string>();
 
-  const hasItems = selectedItems.length > 0;
+    for (const cell of calendarCells) {
+      const hasElection = elections.some((election) =>
+        isElectionActiveOnDate(election, cell.key)
+      );
 
-  const handlePreviousMonth = (): void => {
-    setVisibleCalendarMonth(addMonths(visibleCalendarMonth, -1));
-  };
-
-  const handleNextMonth = (): void => {
-    setVisibleCalendarMonth(addMonths(visibleCalendarMonth, 1));
-  };
-
-  const handleSelectDate = (date: Date): void => {
-    setSelectedCalendarDateKey(toDateKeyLocal(date));
-
-    if (!isSameMonth(date, visibleCalendarMonth)) {
-      setVisibleCalendarMonth(startOfMonth(date));
+      if (hasElection) {
+        keys.add(cell.key);
+      }
     }
+
+    return keys;
+  }, [calendarCells, elections]);
+
+  const handleOpenCollation = (item: ElectionItem) => {
+    router.push({
+      pathname: Paths.appCollation as never,
+      params: {
+        tab: "overview",
+        collationId: item.activeElectionId,
+        activeElectionId: item.activeElectionId,
+        electionId: item.activeElectionId,
+      },
+    });
   };
 
-  const handleJumpToToday = (): void => {
-    setSelectedCalendarDateKey(todayKey);
-    setVisibleCalendarMonth(startOfMonth(today));
+  const handleOpenDetails = (item: ElectionItem) => {
+    router.push(Paths.electionDetails(item.id));
   };
+
+  const renderElection = ({ item }: { item: ElectionItem }) => (
+    <ElectionCard
+      item={item}
+      onLivePress={() => handleOpenCollation(item)}
+      onConcludedPress={() => handleOpenDetails(item)}
+      onUpcomingPress={() => handleOpenDetails(item)}
+    />
+  );
 
   return (
-    <AppGradientScreen>
+    <AppGradientScreen scroll={false}>
       <View style={styles.container}>
         <View style={styles.topSection}>
           <View style={styles.headerRow}>
-            <BackButton label="" />
-            <AppText style={styles.headerTitle}>Filter by calendar</AppText>
-            <View style={styles.headerSpacer} />
+            <View style={styles.backWrap}>
+              <BackButton label="" />
+            </View>
+
+            <View style={styles.titleWrap}>
+              <AppText style={styles.headerTitle}>Election Calendar</AppText>
+            </View>
+
+            <View style={styles.sideSpacer} />
           </View>
 
-          <AppText style={styles.subtext}>
-            See elections held or to be held on a specific date
-          </AppText>
-
-          <View style={styles.monthNav}>
-            <Pressable onPress={handlePreviousMonth} hitSlop={10}>
+          <View style={styles.monthRow}>
+            <Pressable
+              onPress={() =>
+                setVisibleCalendarMonth(addMonths(visibleCalendarMonth, -1))
+              }
+              style={styles.monthButton}
+            >
               <Ionicons
                 name="chevron-back"
-                size={22}
+                size={20}
                 color={Theme.colors.text}
               />
             </Pressable>
 
-            <AppText style={styles.monthText}>
-              {formatMonthYear(visibleCalendarMonth)}
+            <AppText style={styles.monthTitle}>
+              {toMonthTitle(visibleCalendarMonth)}
             </AppText>
 
-            <Pressable onPress={handleNextMonth} hitSlop={10}>
+            <Pressable
+              onPress={() =>
+                setVisibleCalendarMonth(addMonths(visibleCalendarMonth, 1))
+              }
+              style={styles.monthButton}
+            >
               <Ionicons
                 name="chevron-forward"
-                size={22}
+                size={20}
                 color={Theme.colors.text}
               />
             </Pressable>
@@ -162,80 +201,68 @@ export default function ElectionsCalendarScreen() {
             ))}
           </View>
 
-          <View style={styles.calendarWrap}>
-            {calendarMatrix.map((row, rowIndex) => (
-              <View key={`row-${rowIndex}`} style={styles.calendarRow}>
-                {row.map((dateItem) => {
-                  const key = toDateKeyLocal(dateItem);
-                  const label = String(dateItem.getDate()).padStart(2, "0");
-                  const selected = isSameDay(dateItem, selectedDate);
-                  const inVisibleMonth = isSameMonth(
-                    dateItem,
-                    visibleCalendarMonth
-                  );
-                  const highlighted =
-                    inVisibleMonth && highlightedDateKeys.has(key);
-
-                  return (
-                    <CalendarDayCell
-                      key={key}
-                      label={label}
-                      selected={selected}
-                      highlighted={highlighted}
-                      muted={!inVisibleMonth}
-                      onPress={() => handleSelectDate(dateItem)}
-                    />
-                  );
-                })}
-              </View>
-            ))}
-          </View>
-
-          {!isSameDay(selectedDate, today) ? (
-            <Pressable onPress={handleJumpToToday} style={styles.todayPill}>
-              <Ionicons
-                name="time-outline"
-                size={15}
-                color={Theme.colors.primary}
-              />
-              <AppText style={styles.todayPillText}>Jump to today</AppText>
-            </Pressable>
-          ) : null}
-        </View>
-
-        <View style={styles.feedSection}>
-          {hasItems ? (
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.cardsWrap}
-            >
-              {selectedItems.map((item) => (
-                <ElectionCard
-                  key={item.id}
-                  item={item}
-                  onLivePress={() =>
-                    router.push({
-                      pathname: Paths.appCollation,
-                      params: { collationId: item.id },
-                    })
-                  }
-                  onConcludedPress={() =>
-                    router.push(Paths.electionDetails(item.id))
-                  }
+          {electionsQuery.isLoading ? (
+            <CalendarSkeleton />
+          ) : (
+            <View style={styles.calendarGrid}>
+              {calendarCells.map((cell) => (
+                <CalendarDayCell
+                  key={cell.key}
+                  label={cell.label}
+                  muted={cell.muted}
+                  selected={cell.key === selectedKey}
+                  highlighted={highlightedKeys.has(cell.key)}
+                  onPress={() => setSelectedCalendarDateKey(cell.key)}
                 />
               ))}
-
-              <TabBarSpacer />
-            </ScrollView>
-          ) : (
-            <EmptyElectionCalendarState
-              title="No Election Report"
-              subtitle={getEmptyCalendarSubtitle(
-                toDateKeyLocal(selectedDate),
-                todayKey
-              )}
-            />
+            </View>
           )}
+
+          <View style={styles.selectedDateRow}>
+            <View>
+              <AppText style={styles.selectedDateLabel}>Selected date</AppText>
+              <AppText style={styles.selectedDateValue}>{selectedLabel}</AppText>
+            </View>
+
+            <Pressable
+              onPress={() => setSelectedCalendarDateKey(todayKey)}
+              style={styles.todayButton}
+            >
+              <AppText style={styles.todayText}>Today</AppText>
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.body}>
+          <FlatList
+            data={selectedDayElections}
+            keyExtractor={(item) => item.id}
+            renderItem={renderElection}
+            ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={[
+              styles.listContent,
+              selectedDayElections.length === 0 && styles.listContentEmpty,
+            ]}
+            refreshControl={
+              <RefreshControl
+                refreshing={electionsQuery.isRefetching}
+                onRefresh={() => {
+                  void electionsQuery.refetch();
+                }}
+                tintColor={Theme.colors.primary}
+                colors={[Theme.colors.primary]}
+              />
+            }
+            ListEmptyComponent={
+              electionsQuery.isLoading ? null : (
+                <EmptySelectedDay
+                  selectedLabel={selectedLabel}
+                  onClear={clearSelectedCalendarDateKey}
+                />
+              )
+            }
+          />
         </View>
       </View>
     </AppGradientScreen>
@@ -250,13 +277,29 @@ const styles = StyleSheet.create({
   topSection: {
     paddingHorizontal: 16,
     paddingTop: 8,
-    gap: 16,
+    gap: 14,
   },
 
   headerRow: {
+    minHeight: 34,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+  },
+
+  backWrap: {
+    width: 52,
+    alignItems: "flex-start",
+    justifyContent: "center",
+  },
+
+  titleWrap: {
+    flex: 1,
+    alignItems: "center",
+  },
+
+  sideSpacer: {
+    width: 52,
   },
 
   headerTitle: {
@@ -264,86 +307,171 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
+    textAlign: "center",
   },
 
-  headerSpacer: {
-    width: 34,
-  },
-
-  subtext: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: Theme.colors.textMuted,
-    fontFamily: Theme.fonts.body.medium,
-  },
-
-  monthNav: {
+  monthRow: {
+    minHeight: 44,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.56)",
+    borderWidth: 1,
+    borderColor: "rgba(17,26,50,0.08)",
+    paddingHorizontal: 8,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 28,
   },
 
-  monthText: {
+  monthButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  monthTitle: {
     fontSize: 16,
     lineHeight: 22,
     color: Theme.colors.text,
-    fontFamily: Theme.fonts.body.semibold,
+    fontFamily: Theme.fonts.heading.bold,
   },
 
   weekRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingHorizontal: 6,
+    paddingHorizontal: 3,
   },
 
   weekText: {
     width: 40,
     textAlign: "center",
-    fontSize: 13.5,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 16,
+    color: Theme.colors.textMuted,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+
+  calendarGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: 7,
+  },
+
+  skeletonGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: 7,
+  },
+
+  skeletonCell: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "rgba(17,26,50,0.08)",
+  },
+
+  selectedDateRow: {
+    minHeight: 54,
+    borderRadius: 18,
+    backgroundColor: "rgba(25,183,176,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(25,183,176,0.18)",
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  selectedDateLabel: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Theme.colors.textMuted,
+  },
+
+  selectedDateValue: {
+    fontSize: 15,
+    lineHeight: 20,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
   },
 
-  calendarWrap: {
-    gap: 12,
-  },
-
-  calendarRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-
-  todayPill: {
-    alignSelf: "flex-start",
-    marginTop: -4,
+  todayButton: {
     minHeight: 34,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    flexDirection: "row",
+    borderRadius: 12,
+    backgroundColor: Theme.colors.primary,
+    paddingHorizontal: 14,
     alignItems: "center",
-    gap: 6,
-    backgroundColor: "rgba(25,183,176,0.10)",
+    justifyContent: "center",
   },
 
-  todayPillText: {
-    fontSize: 13.5,
+  todayText: {
+    fontSize: 13,
     lineHeight: 18,
-    color: Theme.colors.primary,
+    color: "#FFFFFF",
     fontFamily: Theme.fonts.body.semibold,
   },
 
-  feedSection: {
+  body: {
     flex: 1,
+    marginTop: 16,
     backgroundColor: "#FFFFFF",
-    marginTop: 8,
-    paddingHorizontal: 16,
-    paddingTop: 12,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: "hidden",
   },
 
-  cardsWrap: {
-    gap: 14,
-    paddingBottom: 16,
+  listContent: {
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 34,
+  },
+
+  listContentEmpty: {
+    flexGrow: 1,
+  },
+
+  emptyWrap: {
+    flex: 1,
+    minHeight: 280,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 26,
+    gap: 10,
+  },
+
+  emptyTitle: {
+    fontSize: 19,
+    lineHeight: 24,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.heading.bold,
+    textAlign: "center",
+  },
+
+  emptyText: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: Theme.colors.textMuted,
+    textAlign: "center",
+    maxWidth: 290,
+  },
+
+  clearDateButton: {
+    minHeight: 40,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    backgroundColor: Theme.colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 4,
+  },
+
+  clearDateText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: Theme.fonts.body.semibold,
   },
 });

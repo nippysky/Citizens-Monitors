@@ -11,13 +11,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AppButton from "@/components/ui/AppButton";
 import AppInput from "@/components/ui/AppInput";
 import AppText from "@/components/ui/AppText";
-
 import {
+  electionStatusPills,
   electionTypeOptions,
   ElectionFilterState,
-  electionStatusPills,
-  ElectionStatus,
+  ElectionStatusFilter,
   ElectionType,
+  getElectionTypeLabel,
 } from "@/data/elections";
 import { Theme } from "@/theme";
 
@@ -29,9 +29,9 @@ type Props = {
   onReset: () => void;
 };
 
-function statusLabel(s: ElectionStatus | "all"): string {
-  if (s === "all") return "All";
-  return s.charAt(0).toUpperCase() + s.slice(1);
+function statusLabel(status: ElectionStatusFilter): string {
+  if (status === "all") return "All";
+  return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
 export default function ElectionFiltersBottomSheet({
@@ -42,8 +42,7 @@ export default function ElectionFiltersBottomSheet({
   onReset,
 }: Props) {
   const insets = useSafeAreaInsets();
-
-  const snapPoints = useMemo(() => ["72%"], []);
+  const snapPoints = useMemo(() => ["76%"], []);
 
   const selectedTypeSet = useMemo(
     () => new Set(value.electionTypes),
@@ -52,7 +51,7 @@ export default function ElectionFiltersBottomSheet({
 
   const toggleType = (type: ElectionType) => {
     const next = selectedTypeSet.has(type)
-      ? value.electionTypes.filter((t) => t !== type)
+      ? value.electionTypes.filter((item) => item !== type)
       : [...value.electionTypes, type];
 
     onChange({ ...value, electionTypes: next });
@@ -62,8 +61,17 @@ export default function ElectionFiltersBottomSheet({
     sheetRef.current?.dismiss();
   };
 
+  const handleApply = () => {
+    onApply();
+    closeSheet();
+  };
+
+  const handleReset = () => {
+    onReset();
+  };
+
   const renderBackdrop = useCallback(
-    (props: any) => (
+    (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
       <BottomSheetBackdrop
         {...props}
         appearsOnIndex={0}
@@ -97,7 +105,13 @@ export default function ElectionFiltersBottomSheet({
         ]}
       >
         <View style={styles.header}>
-          <AppText style={styles.headerTitle}>Filter Elections</AppText>
+          <View>
+            <AppText style={styles.headerTitle}>Filter Elections</AppText>
+            <AppText style={styles.headerSubtitle}>
+              Refine election results by date, status, and type.
+            </AppText>
+          </View>
+
           <Pressable onPress={closeSheet} style={styles.closeBtn}>
             <Ionicons name="close" size={20} color={Theme.colors.textMuted} />
           </Pressable>
@@ -107,13 +121,18 @@ export default function ElectionFiltersBottomSheet({
 
         <View style={styles.section}>
           <AppText style={styles.sectionTitle}>Date Range</AppText>
+          <AppText style={styles.sectionHint}>
+            Use DD/MM/YYYY or YYYY-MM-DD.
+          </AppText>
+
           <View style={styles.row}>
             <View style={styles.half}>
               <AppInput
                 label="From"
-                placeholder="dd/mm/yyyy"
+                placeholder="01/05/2026"
                 value={value.fromDate}
                 onChangeText={(fromDate) => onChange({ ...value, fromDate })}
+                autoCapitalize="none"
                 startIcon={
                   <Ionicons
                     name="calendar-outline"
@@ -127,9 +146,10 @@ export default function ElectionFiltersBottomSheet({
             <View style={styles.half}>
               <AppInput
                 label="To"
-                placeholder="dd/mm/yyyy"
+                placeholder="31/05/2026"
                 value={value.toDate}
                 onChangeText={(toDate) => onChange({ ...value, toDate })}
+                autoCapitalize="none"
                 startIcon={
                   <Ionicons
                     name="calendar-outline"
@@ -143,21 +163,22 @@ export default function ElectionFiltersBottomSheet({
         </View>
 
         <View style={styles.section}>
-          <AppText style={styles.sectionTitle}>Election Status</AppText>
-          <View style={styles.pillsWrap}>
+          <AppText style={styles.sectionTitle}>Status</AppText>
+
+          <View style={styles.pillGrid}>
             {electionStatusPills.map((status) => {
-              const selected = value.status === status;
+              const active = value.status === status;
 
               return (
                 <Pressable
                   key={status}
                   onPress={() => onChange({ ...value, status })}
-                  style={[styles.pill, selected && styles.pillActive]}
+                  style={[styles.filterPill, active && styles.filterPillActive]}
                 >
                   <AppText
                     style={[
-                      styles.pillText,
-                      selected && styles.pillTextActive,
+                      styles.filterPillText,
+                      active && styles.filterPillTextActive,
                     ]}
                   >
                     {statusLabel(status)}
@@ -170,23 +191,24 @@ export default function ElectionFiltersBottomSheet({
 
         <View style={styles.section}>
           <AppText style={styles.sectionTitle}>Election Type</AppText>
-          <View style={styles.pillsWrap}>
+
+          <View style={styles.pillGrid}>
             {electionTypeOptions.map((type) => {
-              const selected = selectedTypeSet.has(type);
+              const active = selectedTypeSet.has(type);
 
               return (
                 <Pressable
                   key={type}
                   onPress={() => toggleType(type)}
-                  style={[styles.pill, selected && styles.pillActive]}
+                  style={[styles.filterPill, active && styles.filterPillActive]}
                 >
                   <AppText
                     style={[
-                      styles.pillText,
-                      selected && styles.pillTextActive,
+                      styles.filterPillText,
+                      active && styles.filterPillTextActive,
                     ]}
                   >
-                    {type}
+                    {getElectionTypeLabel(type)}
                   </AppText>
                 </Pressable>
               );
@@ -194,20 +216,18 @@ export default function ElectionFiltersBottomSheet({
           </View>
         </View>
 
-        <View style={styles.footerRow}>
-          <Pressable onPress={onReset} style={styles.resetWrap}>
-            <Ionicons name="refresh" size={18} color="#EA4335" />
+        <View style={styles.actions}>
+          <Pressable onPress={handleReset} style={styles.resetButton}>
             <AppText style={styles.resetText}>Reset</AppText>
           </Pressable>
 
-          <AppButton
-            title="Apply Now"
-            onPress={() => {
-              onApply();
-              closeSheet();
-            }}
-            style={styles.applyButton}
-          />
+          <View style={styles.applyWrap}>
+            <AppButton
+              title="Apply Filters"
+              onPress={handleApply}
+              style={styles.applyButton}
+            />
+          </View>
         </View>
       </BottomSheetScrollView>
     </BottomSheetModal>
@@ -229,27 +249,36 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     paddingTop: 8,
-    gap: 20,
+    gap: 18,
   },
 
   header: {
-    minHeight: 56,
+    minHeight: 62,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
   },
 
   headerTitle: {
     fontSize: 18,
-    fontFamily: Theme.fonts.body.semibold,
+    lineHeight: 24,
     color: Theme.colors.text,
+    fontFamily: Theme.fonts.heading.semibold,
+  },
+
+  headerSubtitle: {
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: Theme.colors.textMuted,
+    marginTop: 2,
   },
 
   closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#F1F5F9",
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(255,255,255,0.74)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -266,72 +295,90 @@ const styles = StyleSheet.create({
 
   sectionTitle: {
     fontSize: 15,
-    fontFamily: Theme.fonts.body.semibold,
+    lineHeight: 20,
     color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+
+  sectionHint: {
+    marginTop: -5,
+    fontSize: 12,
+    lineHeight: 17,
+    color: Theme.colors.textMuted,
   },
 
   row: {
     flexDirection: "row",
-    gap: 10,
+    gap: 12,
   },
 
   half: {
     flex: 1,
   },
 
-  pillsWrap: {
+  pillGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
   },
 
-  pill: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 14,
+  filterPill: {
+    minHeight: 38,
+    borderRadius: 999,
+    paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: "#D8DDE6",
-    backgroundColor: "rgba(255,255,255,0.6)",
+    backgroundColor: "rgba(255,255,255,0.58)",
+    alignItems: "center",
+    justifyContent: "center",
   },
 
-  pillActive: {
+  filterPillActive: {
     borderColor: Theme.colors.primary,
     backgroundColor: "rgba(25,183,176,0.12)",
   },
 
-  pillText: {
-    fontSize: 14,
-    lineHeight: 18,
+  filterPillText: {
+    fontSize: 12.5,
+    lineHeight: 17,
     color: Theme.colors.textMuted,
-    fontFamily: Theme.fonts.body.medium,
-  },
-
-  pillTextActive: {
-    color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.semibold,
   },
 
-  footerRow: {
-    marginTop: 8,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  filterPillTextActive: {
+    color: Theme.colors.primary,
   },
 
-  resetWrap: {
+  actions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 12,
+    paddingTop: 4,
+  },
+
+  resetButton: {
+    minHeight: 48,
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    borderWidth: 1,
+    borderColor: "#D8DDE6",
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   resetText: {
-    fontSize: 15,
-    color: "#EA4335",
+    fontSize: 14,
+    lineHeight: 20,
+    color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
   },
 
+  applyWrap: {
+    flex: 1,
+  },
+
   applyButton: {
-    minHeight: 54,
-    paddingHorizontal: 24,
+    marginVertical: 0,
   },
 });

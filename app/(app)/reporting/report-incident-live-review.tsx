@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useVideoPlayer, VideoView } from "expo-video";
+import { useQueryClient } from "@tanstack/react-query";
 
 import AppGradientScreen from "@/components/app/AppGradientScreen";
 import AppScreenLoader from "@/components/feedback/AppScreenLoader";
@@ -20,6 +21,11 @@ import { Paths } from "@/constants/paths";
 import { useNetwork } from "@/context/NetworkContext";
 import { useOfflineSync } from "@/context/OfflineSyncContext";
 import { useAppToast } from "@/hooks/useAppToast";
+import { reportingQueryKeys } from "@/hooks/api/useReportingMutations";
+import {
+  mapDraftToIncidentReportPayload,
+  submitIncidentReport,
+} from "@/lib/api/reporting.api";
 import {
   clearIncidentDraft,
   getIncidentDraft,
@@ -29,6 +35,18 @@ import {
 import { Theme } from "@/theme";
 
 type ViewState = "form" | "success";
+
+function buildCollationRoute(electionId: string) {
+  return {
+    pathname: Paths.appCollation as never,
+    params: {
+      tab: "overview",
+      collationId: electionId,
+      activeElectionId: electionId,
+      electionId,
+    },
+  };
+}
 
 function OfflineBanner() {
   return (
@@ -45,6 +63,7 @@ function OfflineBanner() {
 
 export default function ReportIncidentLiveReviewScreen() {
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const { isConnected, isInternetReachable } = useNetwork();
   const { enqueue } = useOfflineSync();
   const { showToast } = useAppToast();
@@ -54,7 +73,7 @@ export default function ReportIncidentLiveReviewScreen() {
   const [viewState, setViewState] = useState<ViewState>("form");
   const [previewPlaying, setPreviewPlaying] = useState(false);
 
-  const isOffline = !isConnected || !isInternetReachable;
+  const isOffline = !isConnected || isInternetReachable === false;
 
   useEffect(() => {
     void getIncidentDraft().then((data) => {
@@ -70,7 +89,7 @@ export default function ReportIncidentLiveReviewScreen() {
       instance.loop = true;
       instance.muted = true;
       instance.pause();
-    }
+    },
   );
 
   const pageTitle = useMemo(() => {
@@ -105,6 +124,21 @@ export default function ReportIncidentLiveReviewScreen() {
     setPreviewPlaying(true);
   };
 
+  const invalidateReportingData = (electionId: string) => {
+    void queryClient.invalidateQueries({
+      queryKey: reportingQueryKeys.dashboard,
+    });
+    void queryClient.invalidateQueries({
+      queryKey: reportingQueryKeys.electionVault,
+    });
+    void queryClient.invalidateQueries({
+      queryKey: reportingQueryKeys.collation,
+    });
+    void queryClient.invalidateQueries({
+      queryKey: reportingQueryKeys.electionCollation(electionId),
+    });
+  };
+
   const handleSubmit = async () => {
     if (!draft) return;
 
@@ -132,27 +166,59 @@ export default function ReportIncidentLiveReviewScreen() {
       return;
     }
 
+    const queuePayload = {
+      ...(draft as unknown as Record<string, unknown>),
+      source: "live-recording",
+    };
+
     setSubmitting(true);
 
-    try {
+    if (isOffline) {
       enqueue({
         type: "submit-incident-report",
-        payload: {
-          ...(draft as unknown as Record<string, unknown>),
-          source: "live-recording",
-        },
+        payload: queuePayload,
       });
 
       await clearIncidentDraft();
 
       showToast({
         type: "success",
-        message: isOffline
-          ? "Live incident saved offline. It will sync automatically when you're back online."
-          : "Live incident report submitted successfully.",
+        message:
+          "Live incident saved offline. It will sync automatically when you're back online.",
+      });
+
+      setSubmitting(false);
+      setViewState("success");
+
+      return;
+    }
+
+    try {
+      await submitIncidentReport(mapDraftToIncidentReportPayload(draft));
+
+      await clearIncidentDraft();
+      invalidateReportingData(draft.electionId);
+
+      showToast({
+        type: "success",
+        message: "Live incident report submitted successfully.",
       });
 
       setViewState("success");
+    } catch (error) {
+      enqueue({
+        type: "submit-incident-report",
+        payload: queuePayload,
+      });
+
+      showToast({
+        type: "success",
+        message:
+          "Live incident saved offline. It will sync automatically when connection is stable.",
+      });
+
+      setViewState("success");
+      console.log("Live incident queued:", error);
     } finally {
       setSubmitting(false);
     }
@@ -166,7 +232,11 @@ export default function ReportIncidentLiveReviewScreen() {
         title="Report Submitted"
         subtitle="Your participation today makes a difference. Thank You. Nigerians are seeing it now."
         primaryActionLabel="Go To Collation"
-        onPrimaryAction={() => router.replace(Paths.appCollation)}
+        onPrimaryAction={() => {
+          if (draft) {
+            router.replace(buildCollationRoute(draft.electionId));
+          }
+        }}
       />
     );
   }
@@ -223,7 +293,8 @@ export default function ReportIncidentLiveReviewScreen() {
                 Report Incident happening
               </AppText>
               <AppText style={styles.sectionSubtitle}>
-                Let the world know whats happening at your polling unit right now.
+                Let the world know whats happening at your polling unit right
+                now.
               </AppText>
             </View>
 
@@ -253,11 +324,7 @@ export default function ReportIncidentLiveReviewScreen() {
                 </>
               ) : (
                 <View style={styles.videoFallback}>
-                  <Ionicons
-                    name="videocam-outline"
-                    size={26}
-                    color="#94A3B8"
-                  />
+                  <Ionicons name="videocam-outline" size={26} color="#94A3B8" />
                   <AppText style={styles.videoFallbackText}>
                     Recorded video preview unavailable
                   </AppText>
@@ -307,21 +374,17 @@ export default function ReportIncidentLiveReviewScreen() {
           style={[
             styles.footerWrap,
             {
-              paddingBottom: Math.max(insets.bottom, 14),
+              paddingBottom: Math.max(insets.bottom + 12, 20),
             },
           ]}
         >
-          <View style={styles.footerDivider} />
-
-          <View style={styles.footerInner}>
-            <AppButton
-              title={submitting ? "Submitting..." : "Submit Incident"}
-              onPress={handleSubmit}
-              disabled={submitting}
-              loading={submitting}
-              style={styles.submitBtn}
-            />
-          </View>
+          <AppButton
+            title={submitting ? "Submitting..." : "Submit Live Report"}
+            onPress={handleSubmit}
+            loading={submitting}
+            disabled={submitting}
+            style={styles.submitButton}
+          />
         </View>
       </View>
     </AppGradientScreen>
@@ -331,224 +394,175 @@ export default function ReportIncidentLiveReviewScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
   },
-
-  loadingWrap: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-  },
-
-  loadingText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: Theme.colors.textMuted,
-    fontFamily: Theme.fonts.body.medium,
-  },
-
   scrollContent: {
-    backgroundColor: "#FFFFFF",
+    flexGrow: 1,
   },
-
   topCreamSection: {
-    backgroundColor: "#F8F4E6",
+    backgroundColor: "#F7F4EA",
     paddingHorizontal: 16,
-    paddingBottom: 18,
+    paddingBottom: 22,
+    gap: 18,
   },
-
   backButton: {
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     alignItems: "flex-start",
     justifyContent: "center",
-    marginBottom: 14,
   },
-
   pageTitle: {
-    fontSize: 18,
-    lineHeight: 24,
+    fontSize: 26,
+    lineHeight: 32,
     color: Theme.colors.text,
-    fontFamily: Theme.fonts.heading.semibold,
-    maxWidth: "92%",
+    fontFamily: Theme.fonts.heading.bold,
   },
-
   offlineBanner: {
     minHeight: 52,
-    backgroundColor: "#F84C00",
-    paddingHorizontal: 16,
+    backgroundColor: "#F24E1E",
+    paddingHorizontal: 14,
     paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
-
   offlineIconWrap: {
     width: 26,
     height: 26,
     borderRadius: 13,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.74)",
+    borderColor: "rgba(255,255,255,0.7)",
     alignItems: "center",
     justifyContent: "center",
   },
-
   offlineBannerText: {
     flex: 1,
     color: "#FFFFFF",
-    fontSize: 11.8,
-    lineHeight: 15.5,
+    fontSize: 12,
+    lineHeight: 16,
     fontFamily: Theme.fonts.body.semibold,
   },
-
   bodySection: {
     paddingHorizontal: 16,
     paddingTop: 18,
     gap: 18,
   },
-
   sectionBlock: {
-    gap: 4,
+    gap: 6,
   },
-
   sectionTitle: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: "#111827",
+    fontSize: 16,
+    lineHeight: 22,
+    color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
   },
-
   sectionSubtitle: {
-    fontSize: 12.5,
-    lineHeight: 18,
-    color: "#5F6773",
-    fontFamily: Theme.fonts.body.regular,
-    maxWidth: "92%",
+    fontSize: 13,
+    lineHeight: 19,
+    color: Theme.colors.textMuted,
   },
-
   videoCard: {
-    height: 184,
-    borderRadius: 18,
+    height: 238,
+    borderRadius: 22,
     overflow: "hidden",
-    backgroundColor: "#DCE7E7",
-    borderWidth: 1,
-    borderColor: "#D8E3E2",
+    backgroundColor: "#111827",
   },
-
   video: {
     width: "100%",
     height: "100%",
   },
-
   videoOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(15, 23, 42, 0.08)",
+    backgroundColor: "rgba(0,0,0,0.12)",
   },
-
   playButton: {
-    width: 74,
-    height: 74,
-    borderRadius: 37,
-    backgroundColor: "rgba(255,255,255,0.88)",
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "rgba(255,255,255,0.92)",
     alignItems: "center",
     justifyContent: "center",
   },
-
   videoFallback: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
-    backgroundColor: "#EAF1F1",
+    gap: 8,
   },
-
   videoFallbackText: {
     fontSize: 13,
     lineHeight: 18,
-    color: Theme.colors.textMuted,
-    fontFamily: Theme.fonts.body.medium,
+    color: "#CBD5E1",
   },
-
   fieldBlock: {
     gap: 8,
   },
-
   fieldLabel: {
     fontSize: 13,
     lineHeight: 18,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
   },
-
   textArea: {
-    minHeight: 134,
+    minHeight: 142,
     borderRadius: 18,
-    borderWidth: 1.2,
-    borderColor: "#C8D2DB",
     backgroundColor: "#FFFFFF",
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    lineHeight: 20,
     color: Theme.colors.text,
-    fontSize: 16,
-    lineHeight: 22,
-    fontFamily: Theme.fonts.body.regular,
   },
-
   falseReportCard: {
-    borderRadius: 18,
-    backgroundColor: "#CFEFDE",
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    borderRadius: 16,
+    backgroundColor: "rgba(5,163,156,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(5,163,156,0.14)",
+    padding: 12,
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 10,
   },
-
   falseReportIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(5,163,156,0.16)",
-    marginTop: 1,
-    flexShrink: 0,
   },
-
   falseReportText: {
     flex: 1,
-    fontSize: 12.8,
-    lineHeight: 18.5,
-    color: "#426A5B",
-    fontFamily: Theme.fonts.body.medium,
-    paddingTop: 2,
+    fontSize: 12,
+    lineHeight: 18,
+    color: Theme.colors.textMuted,
   },
-
   footerWrap: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "#FFFFFF",
-  },
-
-  footerDivider: {
-    height: 1,
-    backgroundColor: "#E5E7EB",
-  },
-
-  footerInner: {
+    backgroundColor: "rgba(255,255,255,0.96)",
+    borderTopWidth: 1,
+    borderTopColor: Theme.colors.border,
     paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 20,
+    paddingTop: 12,
   },
-
-  submitBtn: {
-    minHeight: 56,
-    borderRadius: 18,
-    marginTop: 50,
+  submitButton: {
+    marginVertical: 0,
+  },
+  loadingWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  loadingText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: Theme.colors.textMuted,
   },
 });

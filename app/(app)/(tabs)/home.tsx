@@ -48,12 +48,14 @@ const HOME_TOUR_TARGET_IDS = ["home.calendar-strip"];
 function roleLabelFromRole(role?: string): string {
   if (role === "observer") return "Observer";
   if (role === "public-viewer") return "Public Viewer";
+
   return "Volunteer";
 }
 
 function userRoleFromProfileRole(role?: string): UserRole {
   if (role === "observer") return "observer";
   if (role === "public-viewer") return "public-viewer";
+
   return "volunteer";
 }
 
@@ -78,12 +80,15 @@ function normalizeElectionType(value: string): ElectionType {
   const clean = value.trim().toLowerCase();
 
   if (clean.includes("presidential") || clean === "national") return "national";
+
   if (clean.includes("senatorial") || clean.includes("senate")) {
     return "senatorial";
   }
+
   if (clean.includes("representatives") || clean.includes("house-of-rep")) {
     return "house-of-representatives";
   }
+
   if (clean.includes("assembly")) return "house-of-assembly";
   if (clean.includes("gubernatorial")) return "gubernatorial";
   if (clean.includes("local")) return "local-government";
@@ -147,7 +152,8 @@ function mapElectionUpdate(
 ): ElectionUpdateItem {
   return {
     id: item.id,
-    collationId: item.activeElectionId ?? item.electionId ?? fallbackElectionId ?? item.id,
+    collationId:
+      item.activeElectionId ?? item.electionId ?? fallbackElectionId ?? item.id,
     tag: item.type === "incident-upload" ? "INCIDENT" : "RESULT",
     title: item.title,
     info: item.info,
@@ -155,7 +161,9 @@ function mapElectionUpdate(
   };
 }
 
-function mapSocialUpdateToDiscussion(item: DashboardSocialUpdate): DiscussionItem {
+function mapSocialUpdateToDiscussion(
+  item: DashboardSocialUpdate
+): DiscussionItem {
   return {
     id: item.id,
     source: item.source,
@@ -177,13 +185,32 @@ function getNewsTitle(item: DashboardNewsItem): string {
   return (
     item.title?.trim() ||
     item.headline?.trim() ||
+    item.summary?.trim() ||
+    item.excerpt?.trim() ||
     item.body?.trim() ||
     "News update"
   );
 }
 
+function getNewsSlug(item: DashboardNewsItem): string {
+  return item.slug?.trim() || item.id?.trim() || "";
+}
+
+function getNewsImageUrl(item: DashboardNewsItem): string | undefined {
+  return (
+    item.imageUrl?.trim() ||
+    item.imageURL?.trim() ||
+    item.thumbnailUrl?.trim() ||
+    item.thumbnailURLUrl?.trim() ||
+    item.thumbnailURL?.trim() ||
+    item.heroImageUrl?.trim() ||
+    item.heroImageURL?.trim() ||
+    undefined
+  );
+}
+
 function getNewsDate(item: DashboardNewsItem): string {
-  const rawDate = item.date ?? item.publishedAt ?? item.createdAt;
+  const rawDate = item.date ?? item.publishedAt ?? item.createdAt ?? item.updatedAt;
 
   if (!rawDate) return "";
 
@@ -202,11 +229,14 @@ function getNewsDate(item: DashboardNewsItem): string {
 }
 
 function mapNewsItem(item: DashboardNewsItem): NewsItem {
+  const slug = getNewsSlug(item);
+
   return {
-    id: item.id,
+    id: item.id || slug,
+    slug,
     title: getNewsTitle(item),
     date: getNewsDate(item),
-    imageUrl: item.imageUrl ?? item.thumbnailUrl ?? undefined,
+    imageUrl: getNewsImageUrl(item),
   };
 }
 
@@ -226,6 +256,7 @@ function HomeSkeleton() {
               <View style={styles.skeletonTitle} />
               <View style={styles.skeletonSubtitle} />
             </View>
+
             <View style={styles.skeletonIconRow}>
               <View style={styles.skeletonIcon} />
               <View style={styles.skeletonIcon} />
@@ -233,8 +264,9 @@ function HomeSkeleton() {
           </View>
 
           <View style={styles.skeletonCalendarHeader} />
+
           <View style={styles.skeletonCalendarRow}>
-            {[0, 1, 2, 3].map((item) => (
+            {[0, 1, 2, 3, 4].map((item) => (
               <View key={item} style={styles.skeletonCalendarChip} />
             ))}
           </View>
@@ -250,6 +282,7 @@ function HomeSkeleton() {
                   <View style={styles.skeletonLineLarge} />
                   <View style={styles.skeletonLineSmall} />
                 </View>
+
                 <View style={styles.skeletonThumb} />
               </View>
             ))}
@@ -278,6 +311,7 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       const liveToday = startOfLocalDay();
+
       setToday(liveToday);
       setSelectedDate(liveToday);
     }, [])
@@ -356,7 +390,9 @@ export default function HomeScreen() {
   const news = useMemo(() => {
     if (!dashboard) return [];
 
-    return dashboard.latestNewsAndInsights.map(mapNewsItem);
+    return dashboard.latestNewsAndInsights
+      .map(mapNewsItem)
+      .filter((item) => item.id || item.slug);
   }, [dashboard]);
 
   const hasElection = liveElectionCards.length > 0;
@@ -366,6 +402,11 @@ export default function HomeScreen() {
   }, []);
 
   const onRefresh = useCallback(async () => {
+    const liveToday = startOfLocalDay();
+
+    setToday(liveToday);
+    setSelectedDate(liveToday);
+
     await dashboardQuery.refetch();
 
     if (isConnected) {
@@ -425,6 +466,7 @@ export default function HomeScreen() {
             Check your connection and try again. If you were previously signed
             in, cached dashboard data will appear once available.
           </AppText>
+
           <AppButton
             title="Retry"
             onPress={() => {
@@ -470,6 +512,7 @@ export default function HomeScreen() {
                 <HomeCalendarStrip
                   items={calendarItems}
                   selectedKey={selectedKey}
+                  todayKey={todayKey}
                   monthLabel={monthLabel}
                   onSelect={handleSelectDay}
                 />
@@ -621,13 +664,13 @@ const styles = StyleSheet.create({
   },
   skeletonCalendarRow: {
     flexDirection: "row",
-    gap: 14,
+    gap: 12,
     marginTop: 16,
   },
   skeletonCalendarChip: {
-    width: 74,
-    height: 74,
-    borderRadius: 37,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: skeletonColor,
   },
   skeletonElectionCard: {

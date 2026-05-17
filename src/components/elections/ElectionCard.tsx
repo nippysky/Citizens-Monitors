@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
 import type { ElectionItem, ElectionType } from "@/data/elections";
+import { getElectionTypeLabel } from "@/data/elections";
 import HouseOfRepsElection from "@/svgs/app/HouseOfRepsElection";
 import PresidentialElection from "@/svgs/app/PresidentialElection";
 import SenatorElection from "@/svgs/app/SenatorElection";
@@ -13,58 +14,60 @@ type Props = {
   item: ElectionItem;
   onLivePress?: () => void;
   onConcludedPress?: () => void;
+  onUpcomingPress?: () => void;
 };
 
 function statusColor(status: ElectionItem["status"]): string {
   if (status === "live") return "#FF2A2A";
   if (status === "upcoming") return "#F28C38";
+
   return "#159A32";
 }
 
 function statusLabel(status: ElectionItem["status"]): string {
   if (status === "live") return "Live";
   if (status === "upcoming") return "UPCOMING";
+
   return "CONCLUDED";
 }
 
 function ElectionTypeIcon({ type }: { type: ElectionType }) {
   const size = 34;
+  const normalized = String(type).toLowerCase();
 
-  switch (type) {
-    case "Presidential":
-      return <PresidentialElection width={size} height={size} />;
-    case "Senatorial":
-      return <SenatorElection width={size} height={size} />;
-    case "House of Reps":
-    case "State House of Assembly":
-      return <HouseOfRepsElection width={size} height={size} />;
-    case "Governorship":
-    case "Gubernatorial":
-      return <PresidentialElection width={size} height={size} />;
-    case "Local Government":
-      return <PresidentialElection width={size} height={size} />;
-    default:
-      return <PresidentialElection width={size} height={size} />;
+  if (normalized.includes("senatorial") || normalized.includes("senate")) {
+    return <SenatorElection width={size} height={size} />;
   }
+
+  if (
+    normalized.includes("house") ||
+    normalized.includes("gubernatorial") ||
+    normalized.includes("governorship")
+  ) {
+    return <HouseOfRepsElection width={size} height={size} />;
+  }
+
+  return <PresidentialElection width={size} height={size} />;
 }
 
 export default function ElectionCard({
   item,
   onLivePress,
   onConcludedPress,
+  onUpcomingPress,
 }: Props) {
   const isLive = item.status === "live";
   const isUpcoming = item.status === "upcoming";
   const isConcluded = item.status === "concluded";
 
-  const showCTA = isLive || isConcluded;
+  const showCTA = isLive || isConcluded || isUpcoming;
   const ctaLabel = isLive
     ? "Monitor Election"
     : isConcluded
       ? "View Reports"
-      : "";
+      : "View Details";
 
-  const handleCtaPress = () => {
+  const handleCardPress = () => {
     if (isLive) {
       onLivePress?.();
       return;
@@ -72,11 +75,21 @@ export default function ElectionCard({
 
     if (isConcluded) {
       onConcludedPress?.();
+      return;
     }
+
+    onUpcomingPress?.();
   };
 
   return (
-    <View style={[styles.cardWrap, isLive && styles.cardWrapLive]}>
+    <Pressable
+      onPress={handleCardPress}
+      style={({ pressed }) => [
+        styles.cardWrap,
+        isLive && styles.cardWrapLive,
+        pressed && styles.cardPressed,
+      ]}
+    >
       <View style={[styles.dateCol, isLive && styles.dateColLive]}>
         <Ionicons
           name="calendar-outline"
@@ -106,7 +119,13 @@ export default function ElectionCard({
               • {statusLabel(item.status)}
             </AppText>
 
-            <AppText style={styles.title}>{item.title}</AppText>
+            <AppText style={styles.title} numberOfLines={2}>
+              {item.title}
+            </AppText>
+
+            <AppText style={styles.typeText} numberOfLines={1}>
+              {getElectionTypeLabel(item.type)}
+            </AppText>
           </View>
 
           <View style={styles.badgeWrap}>
@@ -121,10 +140,23 @@ export default function ElectionCard({
               size={18}
               color={Theme.colors.textMuted}
             />
-            <AppText style={styles.metaText}>{item.location}</AppText>
+            <AppText style={styles.metaText} numberOfLines={1}>
+              {item.location}
+            </AppText>
           </View>
 
-          {!isUpcoming && typeof item.partiesCount === "number" ? (
+          <View style={styles.metaItem}>
+            <Ionicons
+              name="time-outline"
+              size={18}
+              color={Theme.colors.textMuted}
+            />
+            <AppText style={styles.metaText} numberOfLines={1}>
+              {item.dateRangeLabel}
+            </AppText>
+          </View>
+
+          {typeof item.partiesCount === "number" ? (
             <View style={styles.metaItem}>
               <Ionicons
                 name="people-outline"
@@ -132,31 +164,24 @@ export default function ElectionCard({
                 color={Theme.colors.textMuted}
               />
               <AppText style={styles.metaText}>
-                {item.partiesCount} Parties
+                {item.partiesCount} parties configured
               </AppText>
             </View>
           ) : null}
         </View>
 
         {showCTA ? (
-          <Pressable
-            onPress={handleCtaPress}
-            style={({ pressed }) => [
-              styles.ctaRow,
-              pressed && styles.ctaRowPressed,
-            ]}
-            hitSlop={6}
-          >
+          <View style={styles.ctaRow}>
             <AppText style={styles.ctaText}>{ctaLabel}</AppText>
             <Ionicons
               name="chevron-forward"
               size={18}
               color={Theme.colors.primary}
             />
-          </Pressable>
+          </View>
         ) : null}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -174,6 +199,10 @@ const styles = StyleSheet.create({
     borderColor: "#F04438",
     backgroundColor: "#F04438",
     padding: 10,
+  },
+
+  cardPressed: {
+    opacity: 0.88,
   },
 
   dateCol: {
@@ -224,31 +253,34 @@ const styles = StyleSheet.create({
 
   contentCard: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
     paddingHorizontal: 14,
     paddingVertical: 14,
     gap: 12,
+    backgroundColor: "#FFFFFF",
   },
 
   contentCardLive: {
-    borderRadius: 16,
+    borderRadius: 14,
   },
 
   topRow: {
     flexDirection: "row",
+    alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: 10,
+    gap: 12,
   },
 
   topLeft: {
     flex: 1,
+    minWidth: 0,
     gap: 4,
   },
 
   status: {
-    fontSize: 13.5,
-    lineHeight: 18,
-    fontFamily: Theme.fonts.body.semibold,
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: Theme.fonts.body.bold,
+    textTransform: "uppercase",
   },
 
   title: {
@@ -258,46 +290,54 @@ const styles = StyleSheet.create({
     fontFamily: Theme.fonts.heading.bold,
   },
 
+  typeText: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+
   badgeWrap: {
-    paddingTop: 4,
-    alignItems: "flex-end",
-    justifyContent: "flex-start",
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(25,183,176,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 22,
-    flexWrap: "wrap",
+    gap: 7,
   },
 
   metaItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 7,
   },
 
   metaText: {
-    fontSize: 13.5,
+    flex: 1,
+    fontSize: 13,
     lineHeight: 18,
     color: Theme.colors.textMuted,
-    fontFamily: Theme.fonts.body.medium,
   },
 
   ctaRow: {
+    minHeight: 38,
+    borderRadius: 12,
+    backgroundColor: "rgba(25,183,176,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(25,183,176,0.22)",
+    paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    alignSelf: "flex-start",
-  },
-
-  ctaRowPressed: {
-    opacity: 0.72,
+    justifyContent: "space-between",
   },
 
   ctaText: {
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.semibold,
   },

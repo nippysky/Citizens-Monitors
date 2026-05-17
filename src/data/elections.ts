@@ -1,88 +1,174 @@
-export type ElectionScopeTab = "polling-unit" | "all-elections";
+import type {
+  ActiveElectionApiItem,
+  ElectionApiStatus,
+} from "@/lib/api/elections.api";
+
 export type ElectionStatus = "live" | "upcoming" | "concluded";
+export type ElectionStatusFilter = ElectionStatus | "all";
+
+export type ElectionScopeTab = "all-elections" | "polling-unit";
+
 export type ElectionType =
+  | "national"
+  | "presidential"
+  | "senatorial"
+  | "house-of-representatives"
+  | "house-of-assembly"
+  | "gubernatorial"
+  | "governorship"
+  | "LGA"
+  | "lga"
+  | "local-government"
   | "Presidential"
-  | "Governorship"
   | "Senatorial"
   | "House of Reps"
-  | "Local Government"
   | "State House of Assembly"
-  | "Gubernatorial";
+  | "Governorship"
+  | "Gubernatorial"
+  | "Local Government"
+  | "Other";
+
+export type ElectionDateParts = {
+  day: string;
+  monthShort: string;
+  year: string;
+};
 
 export type ElectionItem = {
   id: string;
+  activeElectionId: string;
   title: string;
-  status: ElectionStatus;
   type: ElectionType;
-  date: {
-    monthShort: string;
-    day: string;
-    year: string;
-  };
+  rawType: string;
   location: string;
-  partiesCount?: number;
-  ctaLabel: string;
-  state: string;
-  scope: ElectionScopeTab;
-  startDate: string; // YYYY-MM-DD
+  status: ElectionStatus;
+  date: ElectionDateParts;
+  startDate: string;
+  endDate: string;
+  startDateKey: string;
+  endDateKey: string;
+  dateRangeLabel: string;
+  mockElection: boolean;
+  partiesCount: number;
 };
 
 export type ElectionFilterState = {
-  status: ElectionStatus | "all";
+  status: ElectionStatusFilter;
+  electionTypes: ElectionType[];
   fromDate: string;
   toDate: string;
-  electionTypes: ElectionType[];
-  state: string;
 };
 
-export const electionStatusPills: (ElectionStatus | "all")[] = [
+export const electionStatusPills: ElectionStatusFilter[] = [
   "all",
-  "concluded",
-  "upcoming",
   "live",
+  "upcoming",
+  "concluded",
 ];
 
 export const electionTypeOptions: ElectionType[] = [
-  "Presidential",
-  "Governorship",
-  "Senatorial",
-  "House of Reps",
-  "Local Government",
-  "State House of Assembly",
-  "Gubernatorial",
+  "national",
+  "senatorial",
+  "house-of-representatives",
+  "house-of-assembly",
+  "gubernatorial",
+  "LGA",
+  "local-government",
 ];
 
-export const stateOptions = [
-  "All states",
-  "Lagos",
-  "Abuja",
-  "Kano",
-  "Rivers",
-  "Oyo",
-  "Kaduna",
-];
-
-/**
- * Kept for compatibility with the existing context / bottom sheet shape.
- * In the new polling-unit-only Elections screen, only `status` is effectively used.
- */
 export const defaultElectionFilters: ElectionFilterState = {
   status: "all",
+  electionTypes: [],
   fromDate: "",
   toDate: "",
-  electionTypes: [],
-  state: "All states",
 };
 
+const WAT_TIME_ZONE = "Africa/Lagos";
+
+function getDatePartsInWAT(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: WAT_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const day = parts.find((part) => part.type === "day")?.value ?? "01";
+  const month = parts.find((part) => part.type === "month")?.value ?? "01";
+  const year = parts.find((part) => part.type === "year")?.value ?? "1970";
+
+  return { day, month, year };
+}
+
+function getDateTime(value: string): number {
+  const date = new Date(value);
+  const time = date.getTime();
+
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function getPrimaryStatusRank(status: ElectionStatus): number {
+  /**
+   * Product requirement:
+   * - live elections must always remain at the top
+   * - every other election follows by latest date descending
+   */
+  return status === "live" ? 0 : 1;
+}
+
+function getSecondaryStatusRank(status: ElectionStatus): number {
+  if (status === "upcoming") return 0;
+  if (status === "concluded") return 1;
+
+  return 2;
+}
+
+export function sortElectionsForDisplay<T extends ElectionItem>(
+  elections: T[]
+): T[] {
+  return [...elections].sort((a, b) => {
+    const primaryStatusDiff =
+      getPrimaryStatusRank(a.status) - getPrimaryStatusRank(b.status);
+
+    if (primaryStatusDiff !== 0) {
+      return primaryStatusDiff;
+    }
+
+    const startDateDiff = getDateTime(b.startDate) - getDateTime(a.startDate);
+
+    if (startDateDiff !== 0) {
+      return startDateDiff;
+    }
+
+    const endDateDiff = getDateTime(b.endDate) - getDateTime(a.endDate);
+
+    if (endDateDiff !== 0) {
+      return endDateDiff;
+    }
+
+    const secondaryStatusDiff =
+      getSecondaryStatusRank(a.status) - getSecondaryStatusRank(b.status);
+
+    if (secondaryStatusDiff !== 0) {
+      return secondaryStatusDiff;
+    }
+
+    return a.title.localeCompare(b.title);
+  });
+}
+
 export function toDateKeyLocal(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+  const { day, month, year } = getDatePartsInWAT(date);
   return `${year}-${month}-${day}`;
 }
 
 export function parseDateKeyLocal(dateKey: string): Date {
   const [year, month, day] = dateKey.split("-").map(Number);
+
+  if (!year || !month || !day) {
+    return new Date();
+  }
+
   return new Date(year, month - 1, day);
 }
 
@@ -94,252 +180,294 @@ export function addMonths(date: Date, amount: number): Date {
   return new Date(date.getFullYear(), date.getMonth() + amount, 1);
 }
 
-export function isSameDay(a: Date, b: Date): boolean {
-  return toDateKeyLocal(a) === toDateKeyLocal(b);
-}
-
-export function isSameMonth(a: Date, b: Date): boolean {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
-}
-
-export function buildCalendarGrid(monthDate: Date): Date[] {
-  const firstDayOfMonth = startOfMonth(monthDate);
-  const jsDay = firstDayOfMonth.getDay(); // Sunday = 0
-  const mondayOffset = jsDay === 0 ? 6 : jsDay - 1;
-
-  const gridStart = new Date(firstDayOfMonth);
-  gridStart.setDate(firstDayOfMonth.getDate() - mondayOffset);
-
-  return Array.from({ length: 35 }, (_, index) => {
-    const day = new Date(gridStart);
-    day.setDate(gridStart.getDate() + index);
-    return day;
-  });
-}
-
-export function formatMonthYear(date: Date): string {
-  return date.toLocaleDateString("en-US", {
+export function toMonthTitle(date: Date): string {
+  return new Intl.DateTimeFormat("en-US", {
     month: "long",
     year: "numeric",
-  });
+  }).format(date);
 }
 
 export function formatDisplayDate(dateKey: string): string {
-  return parseDateKeyLocal(dateKey).toLocaleDateString("en-US", {
+  const date = parseDateKeyLocal(dateKey);
+
+  return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
-  });
+  }).format(date);
 }
 
-function formatCardDate(dateKey: string) {
-  const date = parseDateKeyLocal(dateKey);
+export function formatCompactDate(dateValue: string): string {
+  const date = new Date(dateValue);
+
+  if (Number.isNaN(date.getTime())) return "—";
+
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: WAT_TIME_ZONE,
+    month: "short",
+    day: "numeric",
+  }).format(date);
+}
+
+export function formatElectionDateRange(startDate: string, endDate: string) {
+  const start = formatCompactDate(startDate);
+  const end = formatCompactDate(endDate);
+
+  if (start === "—" && end === "—") return "Date unavailable";
+  if (start === end) return `${start} · WAT`;
+
+  return `${start} - ${end} · WAT`;
+}
+
+export function getElectionLocationLabel(
+  electionLocation: string | null | undefined
+): string {
+  const normalized = electionLocation?.trim();
+
+  if (!normalized) return "Nationwide";
+
+  return normalized;
+}
+
+export function normalizeElectionType(type: string): ElectionType {
+  const raw = type.trim();
+
+  switch (raw.toLowerCase()) {
+    case "national":
+    case "presidential":
+      return "national";
+    case "senatorial":
+    case "senate":
+      return "senatorial";
+    case "house-of-representatives":
+    case "house of representatives":
+    case "house-of-reps":
+    case "house of reps":
+      return "house-of-representatives";
+    case "house-of-assembly":
+    case "state-house-of-assembly":
+    case "state house of assembly":
+      return "house-of-assembly";
+    case "gubernatorial":
+    case "governorship":
+      return "gubernatorial";
+    case "lga":
+    case "local-government":
+    case "local government":
+      return "LGA";
+    default:
+      return "Other";
+  }
+}
+
+export function getElectionTypeLabel(type: ElectionType | string): string {
+  switch (String(type).toLowerCase()) {
+    case "national":
+    case "presidential":
+      return "Presidential";
+    case "senatorial":
+    case "senate":
+      return "Senatorial";
+    case "house-of-representatives":
+      return "House of Representatives";
+    case "house-of-assembly":
+      return "State House of Assembly";
+    case "gubernatorial":
+    case "governorship":
+      return "Gubernatorial";
+    case "lga":
+    case "local-government":
+      return "Local Government";
+    default:
+      return String(type || "Election");
+  }
+}
+
+export function mapApiElectionToItem(
+  election: ActiveElectionApiItem
+): ElectionItem {
+  const start = new Date(election.startDate);
+  const startDay =
+    Number.isNaN(start.getTime()) === false
+      ? new Intl.DateTimeFormat("en-US", {
+          timeZone: WAT_TIME_ZONE,
+          day: "2-digit",
+        }).format(start)
+      : "—";
+
+  const startMonth =
+    Number.isNaN(start.getTime()) === false
+      ? new Intl.DateTimeFormat("en-US", {
+          timeZone: WAT_TIME_ZONE,
+          month: "short",
+        }).format(start)
+      : "—";
+
+  const startYear =
+    Number.isNaN(start.getTime()) === false
+      ? new Intl.DateTimeFormat("en-US", {
+          timeZone: WAT_TIME_ZONE,
+          year: "numeric",
+        }).format(start)
+      : "—";
+
+  const normalizedType = normalizeElectionType(election.electionType);
 
   return {
-    monthShort: date
-      .toLocaleDateString("en-US", { month: "short" })
-      .toUpperCase(),
-    day: String(date.getDate()).padStart(2, "0"),
-    year: String(date.getFullYear()),
+    id: election.id,
+    activeElectionId: election.id,
+    title: election.electionName || getElectionTypeLabel(normalizedType),
+    type: normalizedType,
+    rawType: election.electionType,
+    location: getElectionLocationLabel(election.electionLocation),
+    status: election.status,
+    date: {
+      day: startDay,
+      monthShort: startMonth,
+      year: startYear,
+    },
+    startDate: election.startDate,
+    endDate: election.endDate,
+    startDateKey: toDateKeyLocal(new Date(election.startDate)),
+    endDateKey: toDateKeyLocal(new Date(election.endDate)),
+    dateRangeLabel: formatElectionDateRange(election.startDate, election.endDate),
+    mockElection: election.mockElection,
+    partiesCount: election.partiesCount,
   };
 }
 
-function offsetDateKey(daysFromToday: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() + daysFromToday);
-  return toDateKeyLocal(date);
-}
+function parseDateInputToKey(value: string): string | null {
+  const trimmed = value.trim();
 
-function createElectionItem(input: Omit<ElectionItem, "date">): ElectionItem {
-  return {
-    ...input,
-    date: formatCardDate(input.startDate),
-  };
-}
+  if (!trimmed) return null;
 
-/**
- * DEV / dummy elections data:
- * collapsed into one single "your polling unit elections" stream
- * so the UI matches the new product direction.
- *
- * We intentionally keep `scope` on the type for production readiness,
- * but all current dummy items use `polling-unit`.
- */
-export const electionsDummyData: ElectionItem[] = [
-  createElectionItem({
-    id: "pu-live-today",
-    title: "2026 House of Assembly election",
-    status: "live",
-    type: "State House of Assembly",
-    location: "National",
-    partiesCount: 46,
-    ctaLabel: "Monitor Election",
-    state: "Lagos",
-    scope: "polling-unit",
-    startDate: offsetDateKey(0),
-  }),
-  createElectionItem({
-    id: "pu-upcoming-1",
-    title: "2026 House of Assembly election",
-    status: "upcoming",
-    type: "State House of Assembly",
-    location: "National",
-    ctaLabel: "View Details",
-    state: "Lagos",
-    scope: "polling-unit",
-    startDate: offsetDateKey(1),
-  }),
-  createElectionItem({
-    id: "pu-upcoming-3",
-    title: "2026 House of Assembly election",
-    status: "upcoming",
-    type: "House of Reps",
-    location: "National",
-    ctaLabel: "View Details",
-    state: "Lagos",
-    scope: "polling-unit",
-    startDate: offsetDateKey(3),
-  }),
-  createElectionItem({
-    id: "pu-upcoming-7",
-    title: "2026 House of Assembly election",
-    status: "upcoming",
-    type: "Governorship",
-    location: "National",
-    ctaLabel: "View Details",
-    state: "Lagos",
-    scope: "polling-unit",
-    startDate: offsetDateKey(7),
-  }),
-  createElectionItem({
-    id: "pu-concluded-2",
-    title: "2026 House of Assembly election",
-    status: "concluded",
-    type: "Local Government",
-    location: "National",
-    partiesCount: 46,
-    ctaLabel: "View Reports",
-    state: "Lagos",
-    scope: "polling-unit",
-    startDate: offsetDateKey(-2),
-  }),
-  createElectionItem({
-    id: "pu-concluded-5",
-    title: "2026 House of Assembly election",
-    status: "concluded",
-    type: "State House of Assembly",
-    location: "National",
-    partiesCount: 46,
-    ctaLabel: "View Reports",
-    state: "Lagos",
-    scope: "polling-unit",
-    startDate: offsetDateKey(-5),
-  }),
-  createElectionItem({
-    id: "pu-concluded-9",
-    title: "2026 House of Assembly election",
-    status: "concluded",
-    type: "House of Reps",
-    location: "National",
-    partiesCount: 46,
-    ctaLabel: "View Reports",
-    state: "Lagos",
-    scope: "polling-unit",
-    startDate: offsetDateKey(-9),
-  }),
-];
-
-export function getElectionDateRangeLabel(scope: ElectionScopeTab): string {
-  if (scope === "polling-unit") {
-    return "Dec 2024 - Nov 2025";
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (isoMatch) {
+    return trimmed;
   }
 
-  return "Dec 2024 - Nov 2025";
-}
+  const slashMatch = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
+  if (slashMatch) {
+    const [, dayRaw, monthRaw, yearRaw] = slashMatch;
+    const day = dayRaw.padStart(2, "0");
+    const month = monthRaw.padStart(2, "0");
 
-export function getElectionHeadline(scope: ElectionScopeTab): string {
-  if (scope === "polling-unit") {
-    return "Discover your polling unit elections";
+    return `${yearRaw}-${month}-${day}`;
   }
 
-  return "Discover all elections in Nigeria";
+  return null;
 }
 
-function matchesScope(item: ElectionItem, scope: ElectionScopeTab): boolean {
-  return item.scope === scope;
-}
-
-function matchesStatus(
-  item: ElectionItem,
-  status: ElectionFilterState["status"]
+function rangeIntersects(
+  electionStartKey: string,
+  electionEndKey: string,
+  filterFromKey: string | null,
+  filterToKey: string | null
 ): boolean {
-  if (status === "all") return true;
-  return item.status === status;
+  if (filterFromKey && electionEndKey < filterFromKey) return false;
+  if (filterToKey && electionStartKey > filterToKey) return false;
+
+  return true;
 }
 
-function matchesSelectedDate(
-  item: ElectionItem,
-  selectedDateKey: string | null
+export function isElectionActiveOnDate(
+  election: ElectionItem,
+  dateKey: string
 ): boolean {
-  if (!selectedDateKey) return true;
-  return item.startDate === selectedDateKey;
+  return election.startDateKey <= dateKey && election.endDateKey >= dateKey;
 }
 
-/**
- * Simplified for the new polling-unit-only elections experience:
- * - scope is still honored for production readiness
- * - selected calendar date is honored
- * - status pill filter is honored
- * - advanced dummy filters (type/state/from/to) are ignored in this new UX
- */
 export function filterElections(
   elections: ElectionItem[],
-  scope: ElectionScopeTab,
+  _scope: ElectionScopeTab | "polling-unit",
   filters: ElectionFilterState,
-  selectedDateKey: string | null = null
+  selectedCalendarDateKey: string | null
 ): ElectionItem[] {
-  return elections.filter((item) => {
-    return (
-      matchesScope(item, scope) &&
-      matchesStatus(item, filters.status) &&
-      matchesSelectedDate(item, selectedDateKey)
-    );
-  });
-}
+  const fromKey = parseDateInputToKey(filters.fromDate);
+  const toKey = parseDateInputToKey(filters.toDate);
+  const selectedTypes = new Set(filters.electionTypes.map(String));
 
-export function getCalendarFilteredElections(
-  elections: ElectionItem[],
-  scope: ElectionScopeTab,
-  filters: ElectionFilterState,
-  dateKey: string
-): ElectionItem[] {
-  return filterElections(elections, scope, filters, dateKey);
-}
+  const filtered = elections.filter((election) => {
+    if (filters.status !== "all" && election.status !== filters.status) {
+      return false;
+    }
 
-export function getHighlightedDateKeysForMonth(
-  elections: ElectionItem[],
-  scope: ElectionScopeTab,
-  filters: ElectionFilterState,
-  visibleMonth: Date
-): Set<string> {
-  const baseItems = filterElections(elections, scope, filters, null);
+    if (
+      selectedTypes.size > 0 &&
+      !selectedTypes.has(election.type) &&
+      !selectedTypes.has(election.rawType)
+    ) {
+      return false;
+    }
 
-  return new Set(
-    baseItems
-      .filter((item) =>
-        isSameMonth(parseDateKeyLocal(item.startDate), visibleMonth)
+    if (
+      !rangeIntersects(
+        election.startDateKey,
+        election.endDateKey,
+        fromKey,
+        toKey
       )
-      .map((item) => item.startDate)
-  );
+    ) {
+      return false;
+    }
+
+    if (
+      selectedCalendarDateKey &&
+      !isElectionActiveOnDate(election, selectedCalendarDateKey)
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+
+  return sortElectionsForDisplay(filtered);
 }
 
-export function getEmptyCalendarSubtitle(
-  selectedDateKey: string,
-  todayKey: string
-): string {
-  if (selectedDateKey > todayKey) {
-    return "Citizen Monitor have not commence operate then.";
-  }
+export function getElectionRangeLabel(elections: ElectionItem[]): string {
+  if (!elections.length) return "No active election schedule yet";
 
-  return "No election was held on this day(s)";
+  const sortedByStart = [...elections].sort((a, b) =>
+    a.startDateKey.localeCompare(b.startDateKey)
+  );
+
+  const sortedByEnd = [...elections].sort((a, b) =>
+    b.endDateKey.localeCompare(a.endDateKey)
+  );
+
+  const first = sortedByStart[0];
+  const last = sortedByEnd[0];
+
+  return `${formatCompactDate(first.startDate)} - ${formatCompactDate(
+    last.endDate
+  )}`;
+}
+
+export function coerceStatusForApi(
+  value: ElectionStatusFilter
+): ElectionApiStatus {
+  return value;
+}
+
+export function buildMonthMatrix(visibleMonth: Date) {
+  const year = visibleMonth.getFullYear();
+  const month = visibleMonth.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const mondayOffset = (firstDay.getDay() + 6) % 7;
+  const gridStart = new Date(year, month, 1 - mondayOffset);
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(
+      gridStart.getFullYear(),
+      gridStart.getMonth(),
+      gridStart.getDate() + index
+    );
+
+    return {
+      key: toDateKeyLocal(date),
+      label: String(date.getDate()),
+      date,
+      muted: date.getMonth() !== month,
+    };
+  });
 }

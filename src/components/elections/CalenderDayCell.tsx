@@ -21,10 +21,11 @@ export default function CalendarDayCell({
   return (
     <Pressable
       onPress={onPress}
-      style={[
+      style={({ pressed }) => [
         styles.cell,
         selected && styles.cellSelected,
         highlighted && !selected && styles.cellHighlighted,
+        pressed && styles.pressed,
       ]}
     >
       <AppText
@@ -55,6 +56,10 @@ const styles = StyleSheet.create({
 
   cellHighlighted: {
     backgroundColor: "rgba(25,183,176,0.08)",
+  },
+
+  pressed: {
+    opacity: 0.72,
   },
 
   text: {

@@ -42,11 +42,13 @@ export function ElectionsProvider({ children }: Props) {
   const today = useMemo(() => new Date(), []);
   const todayKey = useMemo(() => toDateKeyLocal(today), [today]);
 
-  const [scope, setScope] = useState<ElectionScopeTab>("all-elections");
+  const [scope, setScope] = useState<ElectionScopeTab>("polling-unit");
   const [filters, setFilters] = useState<ElectionFilterState>(
     defaultElectionFilters
   );
-  const [selectedCalendarDateKey, setSelectedCalendarDateKey] = useState<string | null>(null);
+  const [selectedCalendarDateKey, setSelectedCalendarDateKey] = useState<
+    string | null
+  >(null);
   const [visibleCalendarMonth, setVisibleCalendarMonth] = useState<Date>(
     startOfMonth(today)
   );

@@ -16,6 +16,7 @@ import LiveNoticeDevTrigger from "@/components/feedback/LiveNoticeDevTrigger";
 import CommencementBottomSheet from "@/components/reporting/CommencementBottomSheet";
 import LocationPermissionModal from "@/components/reporting/LocationPermissionModal";
 import { Paths } from "@/constants/paths";
+import { useMyProfileQuery } from "@/hooks/api/useMyProfileQuery";
 import {
   buildCommencementContext,
   buildInitialIncidentDraft,
@@ -26,6 +27,7 @@ import {
   saveIncidentDraft,
   saveResultDraft,
 } from "@/lib/reporting";
+import { useActiveElectionsQuery } from "@/hooks/api/useElectionQueries";
 
 type ShowNoticeArgs = {
   message: string;
@@ -42,45 +44,213 @@ type LiveNoticeContextValue = {
   triggerDevElectionNotice: () => void;
 };
 
+type LiveElectionLike = {
+  id?: string;
+  electionName?: string;
+  electionType?: string;
+  electionLocation?: string | null;
+  startDate?: string;
+  endDate?: string;
+  status?: string;
+};
+
+type ProfileLike = {
+  role?: string;
+  userType?: string;
+  state?: string | null;
+  lga?: string | null;
+  ward?: string | null;
+  pollingUnit?: string | null;
+  pollingUnitName?: string | null;
+  pollingUnitCode?: string | null;
+  user?: ProfileLike;
+};
+
 const LiveNoticeContext = createContext<LiveNoticeContextValue | null>(null);
+
+function asProfileLike(value: unknown): ProfileLike | null {
+  if (!value || typeof value !== "object") return null;
+  return value as ProfileLike;
+}
+
+function normalizeRole(profile: ProfileLike | null): string {
+  const source =
+    profile?.role ??
+    profile?.userType ??
+    profile?.user?.role ??
+    profile?.user?.userType ??
+    "";
+  return String(source).trim().toLowerCase();
+}
+
+function canReceiveReportingNotice(profile: ProfileLike | null): boolean {
+  const role = normalizeRole(profile);
+  return role === "observer" || role === "volunteer";
+}
+
+function clean(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function pickProfileText(
+  profile: ProfileLike | null,
+  keys: (keyof ProfileLike)[],
+  fallback: string,
+): string {
+  for (const key of keys) {
+    const direct = clean(profile?.[key]);
+    if (direct) return direct;
+
+    const nested = clean(profile?.user?.[key]);
+    if (nested) return nested;
+  }
+
+  return fallback;
+}
+
+function getElectionTitle(election: LiveElectionLike): string {
+  const name = clean(election.electionName);
+  const location = clean(election.electionLocation);
+
+  if (!name && !location) return "Live Election";
+  if (!location) return name;
+
+  const normalizedLocation = location.toLowerCase();
+  if (name.toLowerCase().includes(normalizedLocation)) return name;
+
+  return `${location} ${name}`;
+}
+
+function buildContextFromLiveElection(params: {
+  election: LiveElectionLike;
+  profile: ProfileLike | null;
+}): CommencementContext | null {
+  const electionId = clean(params.election.id);
+  if (!electionId) return null;
+
+  const profile = params.profile;
+  const pollingUnitName = pickProfileText(
+    profile,
+    ["pollingUnitName", "pollingUnit"],
+    "Your Polling Unit",
+  );
+  const pollingUnitCode = pickProfileText(
+    profile,
+    ["pollingUnitCode", "pollingUnit"],
+    pollingUnitName,
+  );
+
+  return buildCommencementContext({
+    electionId,
+    electionTitle: getElectionTitle(params.election),
+    pollingUnitName,
+    pollingUnitCode,
+    ward: pickProfileText(profile, ["ward"], "Your Ward"),
+    lga: pickProfileText(profile, ["lga"], "Your LGA"),
+    state: pickProfileText(profile, ["state"], "Your State"),
+  });
+}
+
+function getPrimaryLiveElection(
+  elections: LiveElectionLike[],
+): LiveElectionLike | null {
+  const live = elections.filter((item) => clean(item.id));
+  if (!live.length) return null;
+
+  return [...live].sort((a, b) => {
+    const aStart = Date.parse(clean(a.startDate)) || 0;
+    const bStart = Date.parse(clean(b.startDate)) || 0;
+    return bStart - aStart;
+  })[0];
+}
+
+function buildNoticeMessage(context: CommencementContext): string {
+  return `${context.electionTitle} is Live! Submit results & incident reports.`;
+}
+
+function buildReportRoute(
+  pathname: string,
+  ctx: CommencementContext,
+  extra?: Record<string, string>,
+) {
+  return {
+    pathname: pathname as never,
+    params: {
+      electionId: ctx.electionId,
+      electionTitle: ctx.electionTitle,
+      pollingUnitName: ctx.pollingUnitName,
+      pollingUnitCode: ctx.pollingUnitCode,
+      ward: ctx.ward,
+      lga: ctx.lga,
+      state: ctx.state,
+      ...extra,
+    },
+  };
+}
 
 export function LiveNoticeProvider({ children }: { children: ReactNode }) {
   const commencementRef = useRef<BottomSheetModal>(null);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shownElectionIdsRef = useRef<Set<string>>(new Set());
+
+  const liveElectionsQuery = useActiveElectionsQuery("live");
+  const profileQuery = useMyProfileQuery();
 
   const [visible, setVisible] = useState(false);
   const [rendered, setRendered] = useState(false);
   const [message, setMessage] = useState("");
   const [actionLabel, setActionLabel] = useState<string | undefined>();
   const [noticeContext, setNoticeContext] = useState<CommencementContext>(
-    DEV_COMMENCEMENT_CONTEXT
+    DEV_COMMENCEMENT_CONTEXT,
   );
   const [customOnPress, setCustomOnPress] = useState<(() => void) | null>(null);
 
   const [locationVisible, setLocationVisible] = useState(false);
-  const [locationSuccessHandler, setLocationSuccessHandler] =
-    useState<((geoLabel: string) => void) | null>(null);
+  const [locationSuccessHandler, setLocationSuccessHandler] = useState<
+    ((geoLabel: string) => void) | null
+  >(null);
 
-  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const profile = useMemo(
+    () => asProfileLike(profileQuery.data),
+    [profileQuery.data],
+  );
 
-  const clearTimer = () => {
+  const primaryProdNoticeContext = useMemo(() => {
+    if (!canReceiveReportingNotice(profile)) return null;
+
+    const elections = (liveElectionsQuery.data?.elections ??
+      []) as LiveElectionLike[];
+    const primaryElection = getPrimaryLiveElection(elections);
+
+    if (!primaryElection) return null;
+
+    return buildContextFromLiveElection({
+      election: primaryElection,
+      profile,
+    });
+  }, [liveElectionsQuery.data, profile]);
+
+  const clearTimer = useCallback(() => {
     if (hideTimerRef.current) {
       clearTimeout(hideTimerRef.current);
       hideTimerRef.current = null;
     }
-  };
+  }, []);
 
   const hideNotice = useCallback(() => {
     clearTimer();
     setVisible(false);
-  }, []);
+  }, [clearTimer]);
 
   const showNotice = useCallback(
     ({ message, actionLabel, contextData, onPress }: ShowNoticeArgs) => {
       clearTimer();
 
+      const nextContext = buildCommencementContext(contextData);
+
       setMessage(message);
       setActionLabel(actionLabel);
-      setNoticeContext(buildCommencementContext(contextData));
+      setNoticeContext(nextContext);
       setCustomOnPress(() => onPress ?? null);
       setRendered(true);
 
@@ -92,7 +262,7 @@ export function LiveNoticeProvider({ children }: { children: ReactNode }) {
         setVisible(false);
       }, 30000);
     },
-    []
+    [clearTimer],
   );
 
   const openCommencement = useCallback((contextData?: CommencementContext) => {
@@ -104,20 +274,21 @@ export function LiveNoticeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const triggerDevElectionNotice = useCallback(() => {
+    const context = primaryProdNoticeContext ?? DEV_COMMENCEMENT_CONTEXT;
+
     showNotice({
-      message:
-        "Alimosho 2026 Election is Live! Submit result & incident reports.",
+      message: buildNoticeMessage(context),
       actionLabel: "Submit Election Report",
-      contextData: DEV_COMMENCEMENT_CONTEXT,
+      contextData: context,
     });
-  }, [showNotice]);
+  }, [primaryProdNoticeContext, showNotice]);
 
   const requestLocationForAction = useCallback(
     (onGranted: (geoLabel: string) => void) => {
       setLocationSuccessHandler(() => onGranted);
       setLocationVisible(true);
     },
-    []
+    [],
   );
 
   const handleLocationGranted = useCallback(
@@ -125,7 +296,7 @@ export function LiveNoticeProvider({ children }: { children: ReactNode }) {
       setLocationVisible(false);
       locationSuccessHandler?.(geoLabel);
     },
-    [locationSuccessHandler]
+    [locationSuccessHandler],
   );
 
   const handleProceedResult = useCallback(
@@ -133,33 +304,55 @@ export function LiveNoticeProvider({ children }: { children: ReactNode }) {
       const draft = buildInitialResultDraft(noticeContext, time);
       await saveResultDraft(draft);
 
-      router.push(Paths.submitElectionReport);
+      router.push(
+        buildReportRoute(Paths.submitElectionReport, noticeContext, {
+          votingStartTime: time,
+        }),
+      );
     },
-    [noticeContext]
+    [noticeContext],
   );
 
   const handleProceedIncident = useCallback(async () => {
     const draft = buildInitialIncidentDraft(noticeContext);
     await saveIncidentDraft(draft);
 
-    router.push(Paths.reportIncident);
+    router.push(buildReportRoute(Paths.reportIncident, noticeContext));
   }, [noticeContext]);
 
   useEffect(() => {
+    if (!primaryProdNoticeContext) return;
+
+    const id = primaryProdNoticeContext.electionId;
+    if (shownElectionIdsRef.current.has(id)) return;
+
+    shownElectionIdsRef.current.add(id);
+
+    showNotice({
+      message: buildNoticeMessage(primaryProdNoticeContext),
+      actionLabel: "Submit Election Report",
+      contextData: primaryProdNoticeContext,
+    });
+  }, [primaryProdNoticeContext, showNotice]);
+
+  useEffect(() => {
     if (!REPORTING_DEV_CONFIG.autoShowDemoLiveNotice) return;
+    if (primaryProdNoticeContext) return;
+    if (liveElectionsQuery.isLoading || profileQuery.isLoading) return;
 
     const timer = setTimeout(() => {
       triggerDevElectionNotice();
     }, 1200);
 
     return () => clearTimeout(timer);
-  }, [triggerDevElectionNotice]);
+  }, [
+    liveElectionsQuery.isLoading,
+    primaryProdNoticeContext,
+    profileQuery.isLoading,
+    triggerDevElectionNotice,
+  ]);
 
-  useEffect(() => {
-    return () => {
-      clearTimer();
-    };
-  }, []);
+  useEffect(() => clearTimer, [clearTimer]);
 
   const value = useMemo(
     () => ({
@@ -175,7 +368,7 @@ export function LiveNoticeProvider({ children }: { children: ReactNode }) {
       openCommencement,
       requestLocationForAction,
       triggerDevElectionNotice,
-    ]
+    ],
   );
 
   return (
@@ -187,24 +380,24 @@ export function LiveNoticeProvider({ children }: { children: ReactNode }) {
       ) : null}
 
       {rendered ? (
-<GlobalLiveNotice
-  visible={visible}
-  message={message}
-  actionLabel={actionLabel}
-  onPressAction={() => {
-    if (customOnPress) {
-      customOnPress();
-    } else {
-      openCommencement(noticeContext);
-    }
+        <GlobalLiveNotice
+          visible={visible}
+          message={message}
+          actionLabel={actionLabel}
+          onPressAction={() => {
+            if (customOnPress) {
+              customOnPress();
+            } else {
+              openCommencement(noticeContext);
+            }
 
-    requestAnimationFrame(() => {
-      hideNotice();
-    });
-  }}
-  onClose={hideNotice} // 👈 ADD THIS
-  onHide={() => setRendered(false)}
-/>
+            requestAnimationFrame(() => {
+              hideNotice();
+            });
+          }}
+          onClose={hideNotice}
+          onHide={() => setRendered(false)}
+        />
       ) : null}
 
       <CommencementBottomSheet

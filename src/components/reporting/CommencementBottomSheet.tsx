@@ -3,14 +3,14 @@ import {
   BottomSheetModal,
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
+import { Ionicons } from "@expo/vector-icons";
 import { forwardRef, useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 
+import TimePickerSheet from "@/components/reporting/TimePickerSheet";
 import AppButton from "@/components/ui/AppButton";
 import AppSelectField from "@/components/ui/AppSelectField";
 import AppText from "@/components/ui/AppText";
-import TimePickerSheet from "@/components/reporting/TimePickerSheet";
 import { CommencementContext } from "@/lib/reporting";
 import { Theme } from "@/theme";
 
@@ -22,6 +22,27 @@ type Props = {
 
 type Step = "choice" | "time";
 
+function resolveElectionTitle(contextData: CommencementContext | null): string {
+  return contextData?.electionTitle?.trim() || "this election";
+}
+
+function resolvePollingUnitName(contextData: CommencementContext | null): string {
+  return contextData?.pollingUnitName?.trim() || "Your Polling Unit";
+}
+
+function resolveUnitMeta(contextData: CommencementContext | null): string {
+  const parts = [
+    contextData?.pollingUnitCode,
+    contextData?.ward,
+    contextData?.lga,
+    contextData?.state,
+  ]
+    .map((item) => item?.trim())
+    .filter(Boolean);
+
+  return parts.length ? parts.join(" · ") : "Polling unit context will be attached to this report.";
+}
+
 const CommencementBottomSheet = forwardRef<BottomSheetModal, Props>(
   function CommencementBottomSheet(
     { contextData, onProceedIncident, onProceedResult },
@@ -32,6 +53,10 @@ const CommencementBottomSheet = forwardRef<BottomSheetModal, Props>(
     const [step, setStep] = useState<Step>("choice");
     const [selectedTime, setSelectedTime] = useState("");
     const [iosPickerVisible, setIosPickerVisible] = useState(false);
+
+    const electionTitle = resolveElectionTitle(contextData);
+    const pollingUnitName = resolvePollingUnitName(contextData);
+    const unitMeta = resolveUnitMeta(contextData);
 
     const dismiss = useCallback(() => {
       if (ref && typeof ref !== "function" && ref.current) {
@@ -57,6 +82,7 @@ const CommencementBottomSheet = forwardRef<BottomSheetModal, Props>(
 
     const handleProceed = useCallback(() => {
       if (!selectedTime) return;
+
       onProceedResult(selectedTime);
       handleClose();
     }, [selectedTime, onProceedResult, handleClose]);
@@ -107,21 +133,13 @@ const CommencementBottomSheet = forwardRef<BottomSheetModal, Props>(
             <>
               <View style={styles.unitCard}>
                 <AppText style={styles.unitLabel}>📍 Your Polling Unit</AppText>
-                <AppText style={styles.unitName}>
-                  {contextData?.pollingUnitName ??
-                    "Ikotun Community Primary School"}
-                </AppText>
-                <AppText style={styles.unitMeta}>
-                  {contextData?.pollingUnitCode ?? "LA/01/08/004"} ·{" "}
-                  {contextData?.ward ?? "Ward 01"},{" "}
-                  {contextData?.lga ?? "Alimosho LGA"},{" "}
-                  {contextData?.state ?? "Lagos"}
-                </AppText>
+                <AppText style={styles.unitName}>{pollingUnitName}</AppText>
+                <AppText style={styles.unitMeta}>{unitMeta}</AppText>
               </View>
 
               <View style={styles.questionWrap}>
                 <AppText style={styles.question}>
-                  Did the Alimosho LG election hold in your polling unit?
+                  Did {electionTitle} hold in your polling unit?
                 </AppText>
               </View>
 

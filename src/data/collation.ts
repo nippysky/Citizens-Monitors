@@ -1,19 +1,18 @@
-// ─── src/data/collation.ts ───────────────────────────────────────────────────
-// Enriched dummy data simulating real production collation behaviour.
-// Swap `collationDummyData` for an API response — every consumer already
-// works with `CollationItem`.
-// ─────────────────────────────────────────────────────────────────────────────
-
-/* ───── types ───── */
+import type {
+  CollationIncidentPayload,
+  CollationResultPayload,
+  CollationSentimentPayload,
+  ElectionCollationResponse,
+} from "@/lib/api/collation.api";
 
 export type PartyResult = {
   id: string;
   name: string;
-  shortName: string; // e.g. "APC" – also used for the SVG logo key
+  shortName: string;
   votes: number;
   percent: number;
   color: string;
-  logoKey: string; // matches component name in @/svgs/parties/*
+  logoKey: string;
 };
 
 export type SentimentLegendItem = {
@@ -31,6 +30,7 @@ export type GeoBreakdownItem = {
   coveredUnits: number;
   totalUnits: number;
   totalVotes: number;
+  percentOfTotalVotes: number;
   parties: {
     shortName: string;
     percent: number;
@@ -49,6 +49,24 @@ export type ReviewReportItem = {
   reviewCount: number;
   isConfirmed?: boolean;
   flagged?: boolean;
+  evidence?: {
+    note?: string;
+    locationMeta?: string;
+    pollingUnitName?: string;
+    pollingUnitCode?: string;
+    observerHandle?: string;
+    submittedAt?: string;
+    verificationStatus?: "verified" | "pending";
+    sourceType?: "observer-upload" | "community-report";
+    electionName?: string;
+    accreditedVoter?: string;
+    rejectedVotes?: string;
+    spoiledBallots?: string;
+    usedBallots?: string;
+    unusedBallots?: string;
+    imageUri?: string;
+    videoUri?: string;
+  };
 };
 
 export type DiscussionItem = {
@@ -64,14 +82,30 @@ export type DiscussionItem = {
 export type MonitoringActivityItem = {
   label: string;
   value: string;
-  icon: string; // Ionicons name
+  icon: string;
   color: string;
+};
+
+export type IncidentAnalyticsItem = {
+  id: string;
+  label: string;
+  count: number;
+  percent: number;
+  color: string;
+  iconKey:
+    | "thuggery"
+    | "ballot-stuffing"
+    | "underage-voting"
+    | "inec-misconduct"
+    | "result-alteration"
+    | "voter-intimidation";
 };
 
 export type CollationItem = {
   id: string;
   status: "live" | "ended";
   electionTitle: string;
+  electionType: string;
   electionDateLabel: string;
   progressPercent: number;
   coveredUnits: number;
@@ -109,384 +143,560 @@ export type CollationItem = {
     };
     intimidationBarPercent: number;
   };
+  incidentAnalytics: IncidentAnalyticsItem[];
   monitoringActivity: MonitoringActivityItem[];
   geoBreakdown: GeoBreakdownItem[];
   reviewReports: ReviewReportItem[];
   discussions: DiscussionItem[];
 };
 
-/* ───── helpers ───── */
+export type CollationElectionSource = {
+  id: string;
+  electionName: string;
+  electionType: string;
+  electionLocation: string | null;
+  startDate: string;
+  endDate: string;
+  mockElection: boolean;
+  partiesCount: number;
+  status: string;
+};
+
+export const collationDummyData: CollationItem[] = [];
+
+const WAT_TIME_ZONE = "Africa/Lagos";
+
+const PARTY_COLORS: Record<string, string> = {
+  APC: "#E84C3D",
+  LP: "#17A34A",
+  PDP: "#3C63E5",
+  NNPP: "#F29B2F",
+  OTHER: "#C8CDD7",
+  OTHERS: "#C8CDD7",
+};
+
+const PARTY_NAMES: Record<string, string> = {
+  APC: "All Progressives Congress",
+  LP: "Labour Party",
+  PDP: "People's Democratic Party",
+  NNPP: "New Nigeria People's Party",
+  OTHER: "Other Parties",
+  OTHERS: "Other Parties",
+};
+
+const INCIDENT_META: Record<
+  string,
+  { label: string; color: string; iconKey: IncidentAnalyticsItem["iconKey"] }
+> = {
+  "thuggery & violence": {
+    label: "Thuggery & Violence",
+    color: "#DF3F38",
+    iconKey: "thuggery",
+  },
+  "thuggery and violence": {
+    label: "Thuggery & Violence",
+    color: "#DF3F38",
+    iconKey: "thuggery",
+  },
+  "ballot stuffing": {
+    label: "Ballot Stuffing",
+    color: "#BF39B6",
+    iconKey: "ballot-stuffing",
+  },
+  "underage voting": {
+    label: "Underage Voting",
+    color: "#3F63DD",
+    iconKey: "underage-voting",
+  },
+  "inec misconduct": {
+    label: "INEC Misconduct",
+    color: "#EB9446",
+    iconKey: "inec-misconduct",
+  },
+  "fraudulent electoral officers": {
+    label: "INEC Misconduct",
+    color: "#EB9446",
+    iconKey: "inec-misconduct",
+  },
+  "result alteration": {
+    label: "Result Alteration",
+    color: "#B685F5",
+    iconKey: "result-alteration",
+  },
+  "voter intimidation": {
+    label: "Voter Intimidation",
+    color: "#DD4137",
+    iconKey: "voter-intimidation",
+  },
+};
+
+function toNumber(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/[^\d.-]/g, ""));
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function safeDate(value?: string | null): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function slugify(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+function formatDate(value?: string | null): string {
+  const date = safeDate(value);
+  if (!date) return "—";
+
+  return new Intl.DateTimeFormat("en-NG", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: WAT_TIME_ZONE,
+  }).format(date);
+}
+
+function formatDateRange(start?: string | null, end?: string | null): string {
+  const startLabel = formatDate(start);
+  const endLabel = formatDate(end);
+
+  if (startLabel !== "—" && endLabel !== "—") return `${startLabel} – ${endLabel}`;
+  if (startLabel !== "—") return `From ${startLabel}`;
+  if (endLabel !== "—") return `Until ${endLabel}`;
+
+  return "Date unavailable";
+}
+
+function formatElectionDateLabel(start?: string | null): string {
+  const dateLabel = formatDate(start);
+  return dateLabel === "—"
+    ? "Live results from all elections"
+    : `Live results from all elections · ${dateLabel}`;
+}
+
+function getTimeAgo(value?: string | null): string {
+  const date = safeDate(value);
+  if (!date) return "Not synced yet";
+
+  const diffMs = Math.max(0, Date.now() - date.getTime());
+  const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hr${hours === 1 ? "" : "s"} ago`;
+
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} day${days === 1 ? "" : "s"} ago`;
+
+  return formatDate(value);
+}
 
 export function formatCompactNumber(value: number): string {
   return new Intl.NumberFormat("en-NG").format(value);
 }
 
 export function getCollationNotificationText(item: CollationItem): string {
-  if (item.isAssignedToPollingUnit) {
-    return `${item.fullTitle} is Live! Submit result & incident reports as our observer.`;
-  }
-  return `${item.fullTitle} is Live! Join public collation updates and follow reports.`;
+  return `${item.fullTitle} is Live! Submit result & incident reports as our observer.`;
 }
 
-/* ───── party colours (canonical) ───── */
+function normalizeLocation(value?: string | null): string {
+  return value?.trim() || "Nationwide";
+}
 
-export const PARTY_COLORS: Record<string, string> = {
-  APC: "#E84C3D",
-  LP: "#17A34A",
-  PDP: "#3C63E5",
-  NNPP: "#F29B2F",
-  OTHERS: "#C8CDD7",
-};
+function resolvePartyKey(party: string): string {
+  const key = party.trim().toUpperCase();
+  return PARTY_COLORS[key] ? key : "OTHERS";
+}
 
-/* ───── dummy data ───── */
+function resolvePartyName(party: string): string {
+  const key = resolvePartyKey(party);
+  return PARTY_NAMES[key] ?? party;
+}
 
-export const collationDummyData: CollationItem[] = [
-  // ── 1. Observer / assigned polling unit ───────────────────────────────
-  {
-    id: "alimosho-lg-2026",
-    status: "live",
-    electionTitle: "2026 Alimosho Local Government Election",
-    electionDateLabel: "Live results from all elections · Nov 8, 2025",
-    progressPercent: 43,
-    coveredUnits: 248,
-    totalUnits: 326,
-    lastSyncLabel: "Feb 23, 2026 · 02:14 PM",
-    fullTitle: "Alimosho Local Government Election 2026",
-    location: "Lagos State, Alimosho District",
-    dateRange: "Jun. 15th – Jun 16th, 2026",
-    description:
-      "See the vote result from 14 Polling Units in Alimosho reported by our observer.",
-    resultsUploaded: 14,
-    incidentsReported: 24,
-    observersCount: 56,
-    totalVotesLabel: "675,690 Votes",
-    canReviewReports: true,
-    canJoinDiscussion: true,
-    isAssignedToPollingUnit: true,
+function buildParties(result: CollationResultPayload | null): PartyResult[] {
+  const entries = Object.entries(result?.aggregateAnalysis ?? {})
+    .map(([party, votes]) => ({ party: party.trim(), votes: toNumber(votes) }))
+    .filter((item) => item.party && item.votes >= 0);
 
-    parties: [
-      {
-        id: "apc",
-        name: "All Progressives Congress",
-        shortName: "APC",
-        votes: 123450,
-        percent: 65,
-        color: "#E84C3D",
-        logoKey: "APC",
-      },
-      {
-        id: "lp",
-        name: "Labour Party",
-        shortName: "LP",
-        votes: 62345,
-        percent: 20,
-        color: "#17A34A",
-        logoKey: "LP",
-      },
-      {
-        id: "pdp",
-        name: "People's Democratic Party",
-        shortName: "PDP",
-        votes: 1856,
-        percent: 10,
-        color: "#3C63E5",
-        logoKey: "PDP",
-      },
-      {
-        id: "nnpp",
-        name: "New Nigeria People's Party",
-        shortName: "NNPP",
-        votes: 201,
-        percent: 5,
-        color: "#F29B2F",
-        logoKey: "NNPP",
-      },
-      {
-        id: "others",
-        name: "Other Parties",
-        shortName: "Others",
-        votes: 0,
-        percent: 0,
-        color: "#C8CDD7",
-        logoKey: "OTHERS",
-      },
+  const total = entries.reduce((sum, item) => sum + item.votes, 0);
+
+  return entries
+    .sort((a, b) => b.votes - a.votes)
+    .map((item) => {
+      const key = resolvePartyKey(item.party);
+      const percent = total > 0 ? Math.round((item.votes / total) * 100) : 0;
+
+      return {
+        id: slugify(item.party),
+        name: resolvePartyName(item.party),
+        shortName: item.party.toUpperCase(),
+        votes: item.votes,
+        percent,
+        color: PARTY_COLORS[key] ?? PARTY_COLORS.OTHERS,
+        logoKey: key,
+      };
+    });
+}
+
+function getTotalVotes(parties: PartyResult[]): number {
+  return parties.reduce((sum, party) => sum + party.votes, 0);
+}
+
+function getCoverage(response: ElectionCollationResponse) {
+  const registered = Math.max(
+    toNumber(response.result?.footer?.["registered-lgas"]),
+    toNumber(response.incidentReport?.footer?.["registered-lgas"])
+  );
+  const submitted = Math.max(
+    toNumber(response.result?.footer?.["submitted-lgas"]),
+    toNumber(response.incidentReport?.footer?.["submitted-lgas"])
+  );
+
+  if (registered > 0 || submitted > 0) {
+    return { coveredUnits: submitted, totalUnits: registered };
+  }
+
+  const fallback =
+    response.overview.resultsUploadedCount + response.overview.incidentsReportedCount;
+
+  return { coveredUnits: fallback, totalUnits: fallback };
+}
+
+function buildOfficialSummary(response: ElectionCollationResponse): CollationItem["officialSummary"] {
+  const figures = response.overview.administrativeFiguresFromReports;
+  const accreditedVoters = toNumber(figures.accreditedVoters);
+  const usedBallots = toNumber(figures.usedBallotPapers);
+  const rejectedVotes = toNumber(figures.rejectedVotes);
+  const spoiledBallots = toNumber(figures.spoiledBallotPapers);
+
+  return {
+    accreditedVoters,
+    rejectedVotes,
+    spoiledBallots,
+    usedBallots,
+    unusedBallots: Math.max(0, accreditedVoters - usedBallots),
+    aggregateVoters:
+      typeof response.overview.officialInecAggregate.value === "number"
+        ? formatCompactNumber(response.overview.officialInecAggregate.value)
+        : "Not Recorded",
+  };
+}
+
+function buildSentiment(payload: CollationSentimentPayload | null): CollationItem["sentiment"] {
+  const voteRating = payload?.aggregateAnalysis.voteRating ?? {};
+  const voterIntimidation = payload?.aggregateAnalysis.voterIntimidation ?? {};
+  const voteBuying = payload?.aggregateAnalysis.voteBuying ?? {};
+
+  const good = toNumber(voteRating.good);
+  const okay = toNumber(voteRating.okay);
+  const poor = toNumber(voteRating.poor);
+  const ratingTotal = good + okay + poor;
+
+  const goodPercent = ratingTotal > 0 ? Math.round((good / ratingTotal) * 100) : 0;
+  const okayPercent = ratingTotal > 0 ? Math.round((okay / ratingTotal) * 100) : 0;
+  const poorPercent = ratingTotal > 0 ? Math.max(0, 100 - goodPercent - okayPercent) : 0;
+
+  const voteBuyingYes = toNumber(voteBuying.yes);
+  const voteBuyingNo = toNumber(voteBuying.no);
+  const intimidationYes = toNumber(voterIntimidation.yes);
+  const intimidationNo = toNumber(voterIntimidation.no);
+  const intimidationTotal = intimidationYes + intimidationNo;
+
+  return {
+    score: goodPercent,
+    legend: [
+      { label: "Good", value: goodPercent, count: good, color: "#58B8AB" },
+      { label: "Manageable", value: okayPercent, count: okay, color: "#4B7BE7" },
+      { label: "Poor", value: poorPercent, count: poor, color: "#E45125" },
     ],
-
-    officialSummary: {
-      accreditedVoters: 675435,
-      rejectedVotes: 657,
-      spoiledBallots: 320,
-      usedBallots: 601,
-      unusedBallots: 87,
-      aggregateVoters: "8,570,298",
+    voteBuyingSubmitted: voteBuyingYes + voteBuyingNo,
+    voteBuyingObserverSubmitted: voteBuyingYes,
+    intimidation: {
+      total: intimidationTotal,
+      occurred: intimidationYes,
+      notOccurred: intimidationNo,
     },
+    intimidationBarPercent:
+      intimidationTotal > 0 ? Math.round((intimidationYes / intimidationTotal) * 100) : 0,
+  };
+}
 
-    sentiment: {
-      score: 63,
-      legend: [
-        { label: "Good", value: 64, count: 112, color: "#16B3AA" },
-        { label: "Manageable", value: 20, count: 76, color: "#4377F0" },
-        { label: "Poor", value: 6, count: 32, color: "#F04A1D" },
-      ],
-      voteBuyingSubmitted: 15,
-      voteBuyingObserverSubmitted: 5,
-      intimidation: { total: 20, occurred: 15, notOccurred: 5 },
-      intimidationBarPercent: 75,
+function normalizeIncidentKey(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function resolveIncidentMeta(label: string) {
+  const key = normalizeIncidentKey(label);
+  return (
+    INCIDENT_META[key] ?? {
+      label,
+      color: "#DF3F38",
+      iconKey: "thuggery" as const,
+    }
+  );
+}
+
+function buildIncidentAnalytics(payload: CollationIncidentPayload | null): IncidentAnalyticsItem[] {
+  const aggregate = payload?.aggregateAnalysis ?? {};
+  const entries = Object.entries(aggregate)
+    .map(([label, count]) => ({ label, count: toNumber(count) }))
+    .filter((item) => item.count > 0);
+
+  const merged = new Map<string, { label: string; count: number; color: string; iconKey: IncidentAnalyticsItem["iconKey"] }>();
+
+  for (const item of entries) {
+    const meta = resolveIncidentMeta(item.label);
+    const key = normalizeIncidentKey(meta.label);
+    const existing = merged.get(key);
+
+    merged.set(key, {
+      label: meta.label,
+      count: (existing?.count ?? 0) + item.count,
+      color: meta.color,
+      iconKey: meta.iconKey,
+    });
+  }
+
+  const total = Array.from(merged.values()).reduce((sum, item) => sum + item.count, 0);
+
+  return Array.from(merged.values()).map((item) => ({
+    id: slugify(item.label),
+    label: item.label,
+    count: item.count,
+    percent: total > 0 ? Math.round((item.count / total) * 100) : 0,
+    color: item.color,
+    iconKey: item.iconKey,
+  }));
+}
+
+function buildGeoBreakdown(response: ElectionCollationResponse, parties: PartyResult[]): GeoBreakdownItem[] {
+  if (!response.result && !response.incidentReport) return [];
+
+  const totalVotes = getTotalVotes(parties);
+  const { coveredUnits, totalUnits } = getCoverage(response);
+  const incidentRows = response.incidentReport?.chart ?? [];
+
+  if (response.result?.restriction?.value || response.meta.electionLocation) {
+    const name = response.result?.restriction?.value ?? response.meta.electionLocation ?? "Election Scope";
+
+    return [
+      {
+        id: slugify(name),
+        name: name.toUpperCase(),
+        reports: response.overview.resultsUploadedCount,
+        incidents: response.overview.incidentsReportedCount,
+        coveredUnits,
+        totalUnits,
+        totalVotes,
+        percentOfTotalVotes: 100,
+        parties: parties.map((party) => ({
+          shortName: party.shortName,
+          percent: party.percent,
+          color: party.color,
+        })),
+      },
+    ];
+  }
+
+  return incidentRows
+    .map((row) => {
+      const name = typeof row.lga === "string" ? row.lga : "Unknown LGA";
+      const incidents = Object.entries(row).reduce((sum, [key, value]) => {
+        if (key === "lga") return sum;
+        return sum + toNumber(value);
+      }, 0);
+
+      return {
+        id: slugify(name),
+        name: name.toUpperCase(),
+        reports: response.overview.resultsUploadedCount,
+        incidents,
+        coveredUnits,
+        totalUnits,
+        totalVotes,
+        percentOfTotalVotes: 100,
+        parties: parties.map((party) => ({
+          shortName: party.shortName,
+          percent: party.percent,
+          color: party.color,
+        })),
+      };
+    })
+    .filter((item) => item.incidents > 0 || item.reports > 0);
+}
+
+function buildMonitoringActivity(response: ElectionCollationResponse): MonitoringActivityItem[] {
+  const totalReports = response.overview.resultsUploadedCount + response.overview.incidentsReportedCount;
+  const submitters = response.overview.distinctObserverSubmitters;
+
+  return [
+    {
+      label: "Active Volunteer",
+      value: String(submitters),
+      icon: "people-outline",
+      color: "#111827",
     },
+    {
+      label: "PVC Verified",
+      value: totalReports > 0 ? "Active" : "—",
+      icon: "shield-checkmark-outline",
+      color: "#16B3AA",
+    },
+    {
+      label: "Active Observers",
+      value: String(submitters),
+      icon: "binoculars-outline",
+      color: "#111827",
+    },
+    {
+      label: "Avg, submission time",
+      value: getTimeAgo(response.overview.lastSyncAt),
+      icon: "time-outline",
+      color: "#111827",
+    },
+  ];
+}
 
-    monitoringActivity: [
-      { label: "Active Volunteer", value: "56/79", icon: "people-outline", color: "#16B3AA" },
-      { label: "PVC Verified", value: "89%", icon: "shield-checkmark-outline", color: "#4377F0" },
-      { label: "Active Observers", value: "15/19", icon: "binoculars-outline", color: "#F29B2F" },
-      { label: "Avg. submission time", value: "14 min", icon: "time-outline", color: "#F04A1D" },
-    ],
+function buildFallbackItem(election: CollationElectionSource): CollationItem {
+  const location = normalizeLocation(election.electionLocation);
+  const dateRange = formatDateRange(election.startDate, election.endDate);
 
-    geoBreakdown: [
-      {
-        id: "alimosho-south",
-        name: "ALIMOSHO SOUTH",
-        reports: 45,
-        incidents: 8,
-        coveredUnits: 234,
-        totalUnits: 279,
-        totalVotes: 3206321,
-        parties: [
-          { shortName: "APC", percent: 53, color: "#16B3AA" },
-          { shortName: "LP", percent: 42, color: "#F39B2F" },
-          { shortName: "NNPP", percent: 12, color: "#3C63E5" },
-          { shortName: "PDP", percent: 43, color: "#F04A1D" },
-        ],
-      },
-      {
-        id: "alimosho-north",
-        name: "ALIMOSHO NORTH",
-        reports: 45,
-        incidents: 8,
-        coveredUnits: 234,
-        totalUnits: 279,
-        totalVotes: 3206321,
-        parties: [
-          { shortName: "APC", percent: 53, color: "#16B3AA" },
-          { shortName: "LP", percent: 42, color: "#F39B2F" },
-          { shortName: "NNPP", percent: 12, color: "#3C63E5" },
-          { shortName: "PDP", percent: 43, color: "#F04A1D" },
-        ],
-      },
-      {
-        id: "alimosho-west",
-        name: "ALIMOSHO WEST",
-        reports: 45,
-        incidents: 8,
-        coveredUnits: 234,
-        totalUnits: 279,
-        totalVotes: 3206321,
-        parties: [
-          { shortName: "APC", percent: 53, color: "#16B3AA" },
-          { shortName: "LP", percent: 42, color: "#F39B2F" },
-          { shortName: "NNPP", percent: 12, color: "#3C63E5" },
-          { shortName: "PDP", percent: 43, color: "#F04A1D" },
-        ],
-      },
-      {
-        id: "alimosho-east",
-        name: "ALIMOSHO EAST",
-        reports: 45,
-        incidents: 8,
-        coveredUnits: 234,
-        totalUnits: 279,
-        totalVotes: 3206321,
-        parties: [
-          { shortName: "APC", percent: 53, color: "#16B3AA" },
-          { shortName: "LP", percent: 42, color: "#F39B2F" },
-          { shortName: "NNPP", percent: 12, color: "#3C63E5" },
-          { shortName: "PDP", percent: 43, color: "#F04A1D" },
-        ],
-      },
-    ],
-
-    reviewReports: [
-      {
-        id: "report-1",
-        type: "result",
-        title: "Result Report — EC8A",
-        author: "@IronEagle23",
-        createdAgo: "2 min ago",
-        body: "Confirm what's accurate, and flag what's false. See evidence attached for your polling unit result.",
-        reviewCount: 4,
-      },
-      {
-        id: "report-2",
-        type: "incident",
-        title: "Incident doing the Lagos State Governorship Election 2026",
-        author: "Incident",
-        createdAgo: "Feb 12, 2026 · 1:43 PM",
-        tag: "VOTER INTIMIDATION",
-        body: "Three men in black shirts arrived at the polling unit entrance and were turning away voters. INEC officials told them to leave but they ignored. Police called and have since arrived. Situation calming.",
-        reviewCount: 0,
-      },
-      {
-        id: "report-3",
-        type: "incident",
-        title: "Incident",
-        author: "Incident",
-        createdAgo: "Feb 12, 2026 · 1:43 PM",
-        tag: "MISSING MATERIALS",
-        body: "Result sheets (Form EC8A) not yet distributed to this polling unit as of 10am. INEC supervising officer informed. Voters waiting.",
-        reviewCount: 0,
-      },
-      {
-        id: "report-4",
-        type: "incident",
-        title: "Incident",
-        author: "Incident",
-        createdAgo: "Feb 12, 2026 · 1:43 PM",
-        tag: "MISSING MATERIALS",
-        body: "Result sheets (Form EC8A) not yet distributed to this polling unit as of 10am. INEC supervising officer informed. Voters waiting.",
-        reviewCount: 2,
-        isConfirmed: true,
-      },
-      {
-        id: "report-5",
-        type: "incident",
-        title: "Incident",
-        author: "Incident",
-        createdAgo: "Feb 12, 2026 · 1:43 PM",
-        tag: "MISSING MATERIALS",
-        body: "Result sheets (Form EC8A) not yet distributed to this polling unit as of 10am. INEC supervising officer informed. Voters waiting.",
-        reviewCount: 14,
-        flagged: true,
-      },
-    ],
-
-    discussions: [
-      {
-        id: "discussion-1",
-        author: "@IronEagle23",
-        body: "Here is the latest verified election result from Alimosho Ward 4. The process was peaceful and orderly throughout the morning.",
-        minutesAgo: 2,
-        likes: 14,
-        commentCount: 12,
-        shares: 3,
-      },
-      {
-        id: "discussion-2",
-        author: "@SilverKing65",
-        body: "The process was calm in my area too, officials arrived early enough. Material distribution was smooth and orderly at our unit.",
-        minutesAgo: 5,
-        likes: 14,
-        commentCount: 12,
-        shares: 3,
-      },
-      {
-        id: "discussion-3",
-        author: "@Fishtank89",
-        body: "Crowd control improved later in the morning and things became easier. Youth corpers handled the accreditation well at our booth.",
-        minutesAgo: 8,
-        likes: 14,
-        commentCount: 12,
-        shares: 3,
-      },
-    ],
-  },
-
-  // ── 2. Public viewer / not assigned ──────────────────────────────────
-  {
-    id: "alimosho-lg-public",
-    status: "live",
-    electionTitle: "2026 Alimosho Local Government Election",
-    electionDateLabel: "Live results from all elections · Nov 8, 2025",
+  return {
+    id: election.id,
+    status: election.status === "live" ? "live" : "ended",
+    electionTitle: election.electionName || "Election",
+    electionType: election.electionType,
+    electionDateLabel: formatElectionDateLabel(election.startDate),
     progressPercent: 0,
     coveredUnits: 0,
-    totalUnits: 326,
-    lastSyncLabel: "Feb 23, 2026 · 02:14 PM",
-    fullTitle: "Alimosho Local Government Election 2026",
-    location: "Lagos State, Alimosho District",
-    dateRange: "Jun. 15th – Jun 16th, 2026",
-    description:
-      "See the vote result from 14 Polling Units in Alimosho reported by our observer.",
+    totalUnits: 0,
+    lastSyncLabel: "Not synced yet",
+    fullTitle: election.electionName || "Election",
+    location,
+    dateRange,
+    description: "No verified collation report has been submitted yet.",
     resultsUploaded: 0,
     incidentsReported: 0,
-    observersCount: 56,
-    totalVotesLabel: "— Votes",
+    observersCount: 0,
+    totalVotesLabel: "0 Votes",
     canReviewReports: false,
-    canJoinDiscussion: false,
+    canJoinDiscussion: election.status === "live",
     isAssignedToPollingUnit: false,
-
-    parties: [
-      {
-        id: "apc-2",
-        name: "All Progressives Congress",
-        shortName: "APC",
-        votes: 0,
-        percent: 0,
-        color: "#E84C3D",
-        logoKey: "APC",
-      },
-      {
-        id: "lp-2",
-        name: "Labour Party",
-        shortName: "LP",
-        votes: 0,
-        percent: 0,
-        color: "#17A34A",
-        logoKey: "LP",
-      },
-      {
-        id: "pdp-2",
-        name: "People's Democratic Party",
-        shortName: "PDP",
-        votes: 0,
-        percent: 0,
-        color: "#3C63E5",
-        logoKey: "PDP",
-      },
-      {
-        id: "nnpp-2",
-        name: "New Nigeria People's Party",
-        shortName: "NNPP",
-        votes: 0,
-        percent: 0,
-        color: "#F29B2F",
-        logoKey: "NNPP",
-      },
-      {
-        id: "others-2",
-        name: "Other Parties",
-        shortName: "Others",
-        votes: 0,
-        percent: 0,
-        color: "#C8CDD7",
-        logoKey: "OTHERS",
-      },
-    ],
-
+    parties: [],
     officialSummary: {
       accreditedVoters: 0,
       rejectedVotes: 0,
       spoiledBallots: 0,
       usedBallots: 0,
       unusedBallots: 0,
-      aggregateVoters: "Not recorded yet",
+      aggregateVoters: "Not Recorded",
     },
-
-    sentiment: {
-      score: 100,
-      legend: [{ label: "Good", value: 100, count: 1, color: "#4377F0" }],
-      voteBuyingSubmitted: 0,
-      voteBuyingObserverSubmitted: 1,
-      intimidation: { total: 15, occurred: 15, notOccurred: 0 },
-      intimidationBarPercent: 100,
-    },
-
+    sentiment: buildSentiment(null),
+    incidentAnalytics: [],
     monitoringActivity: [
-      { label: "Active Volunteer", value: "0/0", icon: "people-outline", color: "#16B3AA" },
-      { label: "PVC Verified", value: "—", icon: "shield-checkmark-outline", color: "#4377F0" },
-      { label: "Active Observers", value: "0/0", icon: "binoculars-outline", color: "#F29B2F" },
-      { label: "Avg. submission time", value: "—", icon: "time-outline", color: "#F04A1D" },
+      { label: "Active Volunteer", value: "0", icon: "people-outline", color: "#111827" },
+      { label: "PVC Verified", value: "—", icon: "shield-checkmark-outline", color: "#16B3AA" },
+      { label: "Active Observers", value: "0", icon: "binoculars-outline", color: "#111827" },
+      { label: "Avg, submission time", value: "—", icon: "time-outline", color: "#111827" },
     ],
-
     geoBreakdown: [],
     reviewReports: [],
     discussions: [],
-  },
-];
+  };
+}
+
+export function mapCollationResponseToItem(
+  response: ElectionCollationResponse,
+  fallbackElection?: CollationElectionSource
+): CollationItem {
+  const meta = response.meta;
+  const location = normalizeLocation(meta.electionLocation ?? response.electionDetails.electionLocation);
+  const electionTitle = meta.electionName || response.electionDetails.electionName || "Election";
+  const parties = buildParties(response.result);
+  const totalVotes = getTotalVotes(parties);
+  const { coveredUnits, totalUnits } = getCoverage(response);
+  const progressPercent = totalUnits > 0 ? Math.round((coveredUnits / totalUnits) * 100) : 0;
+  const hasReportData = response.overview.resultsUploadedCount > 0 || response.overview.incidentsReportedCount > 0;
+
+  return {
+    id: meta.activeElectionId,
+    status: fallbackElection?.status === "live" ? "live" : "ended",
+    electionTitle,
+    electionType: meta.electionType,
+    electionDateLabel: formatElectionDateLabel(meta.startDate),
+    progressPercent,
+    coveredUnits,
+    totalUnits,
+    lastSyncLabel: getTimeAgo(response.overview.lastSyncAt),
+    fullTitle: electionTitle,
+    location,
+    dateRange: formatDateRange(meta.startDate, meta.endDate),
+    description:
+      response.overview.resultsUploadedCount > 0
+        ? `See the vote result from ${response.overview.resultsUploadedCount} result${
+            response.overview.resultsUploadedCount === 1 ? "" : "s"
+          } and ${response.overview.incidentsReportedCount} incident${
+            response.overview.incidentsReportedCount === 1 ? "" : "s"
+          } in ${location} reported by observers.`
+        : "No verified collation report has been submitted yet.",
+    resultsUploaded: response.overview.resultsUploadedCount,
+    incidentsReported: response.overview.incidentsReportedCount,
+    observersCount: response.overview.distinctObserverSubmitters,
+    totalVotesLabel: `${formatCompactNumber(totalVotes)} Votes`,
+    canReviewReports: false,
+    canJoinDiscussion: fallbackElection?.status === "live",
+    isAssignedToPollingUnit: hasReportData,
+    parties,
+    officialSummary: buildOfficialSummary(response),
+    sentiment: buildSentiment(response.sentimentAnalysis),
+    incidentAnalytics: buildIncidentAnalytics(response.incidentReport),
+    monitoringActivity: buildMonitoringActivity(response),
+    geoBreakdown: buildGeoBreakdown(response, parties),
+    reviewReports: [],
+    discussions: [],
+  };
+}
+
+export function buildCollationItem(
+  response?: ElectionCollationResponse,
+  fallbackElection?: CollationElectionSource
+): CollationItem {
+  if (response) return mapCollationResponseToItem(response, fallbackElection);
+  if (fallbackElection) return buildFallbackItem(fallbackElection);
+
+  return buildFallbackItem({
+    id: "unknown-election",
+    electionName: "Election",
+    electionType: "election",
+    electionLocation: null,
+    startDate: new Date().toISOString(),
+    endDate: new Date().toISOString(),
+    mockElection: false,
+    partiesCount: 0,
+    status: "live",
+  });
+}
+
+function startTime(item: CollationItem): number {
+  const source = item.dateRange.split("–")[0]?.trim();
+  const date = source ? new Date(source) : null;
+  return date && !Number.isNaN(date.getTime()) ? date.getTime() : 0;
+}
+
+export function sortCollationItems(items: CollationItem[]): CollationItem[] {
+  return [...items].sort((a, b) => {
+    if (a.status === "live" && b.status !== "live") return -1;
+    if (a.status !== "live" && b.status === "live") return 1;
+    return startTime(b) - startTime(a);
+  });
+}
