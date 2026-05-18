@@ -1,4 +1,7 @@
 // ─── src/lib/notifications.ts ────────────────────────────────────────────────
+// Pure notification utilities. No React, no app state, no backend calls.
+// Backend sync and React lifecycle live in NotificationsGate.
+
 import { Platform } from "react-native";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
@@ -20,15 +23,24 @@ export type AppNotificationData = {
   [key: string]: unknown;
 };
 
-type NotificationBehaviorResult = Promise<{
-  shouldShowBanner: boolean;
-  shouldShowList: boolean;
-  shouldPlaySound: boolean;
-  shouldSetBadge: boolean;
-}>;
+const TAG = "[notifications]";
 
+function devLog(...args: unknown[]): void {
+  if (__DEV__) {
+    console.log(TAG, ...args);
+  }
+}
+
+function devWarn(...args: unknown[]): void {
+  if (__DEV__) {
+    console.warn(TAG, ...args);
+  }
+}
+
+// Foreground behavior: show banner + list, play sound, do not auto-increment
+// badge. Override per-channel on Android by setting `showBadge` on the channel.
 Notifications.setNotificationHandler({
-  handleNotification: (): NotificationBehaviorResult =>
+  handleNotification: () =>
     Promise.resolve({
       shouldShowBanner: true,
       shouldShowList: true,
@@ -83,15 +95,20 @@ export async function configureNotificationChannelsAsync(): Promise<void> {
 
 export async function requestNotificationPermissionsAsync(): Promise<boolean> {
   const settings = await Notifications.getPermissionsAsync();
-
-  console.log("[notifications] existing permission status:", settings.status);
+  devLog("existing permission status:", settings.status);
 
   let finalStatus = settings.status;
 
   if (finalStatus !== "granted") {
-    const requested = await Notifications.requestPermissionsAsync();
+    const requested = await Notifications.requestPermissionsAsync({
+      ios: {
+        allowAlert: true,
+        allowBadge: true,
+        allowSound: true,
+      },
+    });
     finalStatus = requested.status;
-    console.log("[notifications] requested permission status:", finalStatus);
+    devLog("requested permission status:", finalStatus);
   }
 
   return finalStatus === "granted";
@@ -102,21 +119,22 @@ export function getExpoProjectId(): string {
     Constants.expoConfig?.extra?.eas?.projectId ??
     Constants.easConfig?.projectId;
 
-  console.log("[notifications] resolved projectId:", projectId ?? "null");
-
   if (!projectId) {
     throw new Error(
-      "Missing EAS projectId. Make sure the app is configured with EAS and built with an EAS preview/production build."
+      "Missing EAS projectId. Configure EAS and build with an EAS dev/preview/production build."
     );
   }
 
   return projectId;
 }
 
+/**
+ * Acquires the Expo push token. Returns null if permission denied or token
+ * acquisition fails — never throws, so callers can treat null as "no push"
+ * without try/catch boilerplate.
+ */
 export async function registerForPushNotificationsAsync(): Promise<string | null> {
-  console.log("[notifications] register start");
-  console.log("[notifications] platform:", Platform.OS);
-  console.log("[notifications] Device.isDevice:", Device.isDevice);
+  devLog("register start; platform:", Platform.OS, "isDevice:", Device.isDevice);
 
   try {
     if (Platform.OS === "android") {
@@ -124,32 +142,39 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
     }
 
     const granted = await requestNotificationPermissionsAsync();
-
     if (!granted) {
-      console.warn("[notifications] permission not granted");
+      devWarn("permission not granted");
       return null;
     }
 
     const projectId = getExpoProjectId();
-
-    const tokenResponse = await Notifications.getExpoPushTokenAsync({
-      projectId,
-    });
-
+    const tokenResponse = await Notifications.getExpoPushTokenAsync({ projectId });
     const token = tokenResponse.data;
 
-    console.log("[notifications] expo push token:", token);
+    if (!token || !token.startsWith("ExponentPushToken[")) {
+      devWarn("invalid token format:", token);
+      return null;
+    }
 
+    devLog("registered token:", token);
     return token;
   } catch (error) {
-    console.error("[notifications] register failed:", error);
+    devWarn("register failed:", error);
     return null;
   }
 }
 
-export async function getNotificationPermissionStatusAsync(): Promise<string> {
-  const settings = await Notifications.getPermissionsAsync();
-  return settings.status;
+/**
+ * Subscribe to native push token rotation. Fired when FCM (Android) or APNs
+ * (iOS) reissues the underlying device token — e.g. after Play Services
+ * upgrade, app data clear, device migration. When this fires, the Expo push
+ * token will also change; callers should re-acquire via
+ * registerForPushNotificationsAsync and re-sync to backend.
+ */
+export function addExpoPushTokenListener(
+  callback: (token: Notifications.DevicePushToken) => void
+): Notifications.EventSubscription {
+  return Notifications.addPushTokenListener(callback);
 }
 
 export function addForegroundNotificationListener(
@@ -168,10 +193,8 @@ export function getNotificationDataFromResponse(
   response: Notifications.NotificationResponse | null | undefined
 ): AppNotificationData | null {
   if (!response) return null;
-
   const data = response.notification.request.content.data;
   if (!data || typeof data !== "object") return null;
-
   return data as AppNotificationData;
 }
 
@@ -179,10 +202,8 @@ export function getNotificationDataFromNotification(
   notification: Notifications.Notification | null | undefined
 ): AppNotificationData | null {
   if (!notification) return null;
-
   const data = notification.request.content.data;
   if (!data || typeof data !== "object") return null;
-
   return data as AppNotificationData;
 }
 
@@ -192,6 +213,11 @@ export async function getLastNotificationResponseAsync(): Promise<Notifications.
 
 export async function clearLastNotificationResponseAsync(): Promise<void> {
   await Notifications.clearLastNotificationResponseAsync();
+}
+
+export async function getNotificationPermissionStatusAsync(): Promise<string> {
+  const settings = await Notifications.getPermissionsAsync();
+  return settings.status;
 }
 
 export async function setAppBadgeCountAsync(count: number): Promise<void> {
