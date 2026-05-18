@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "561797977604",
-    "project_id": "citizens-monitor",
-    "storage_bucket": "citizens-monitor.firebasestorage.app"
+    "project_number": "833971126530",
+    "project_id": "citizen-monitors-app",
+    "storage_bucket": "citizen-monitors-app.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:561797977604:android:a1fc0c5a8e116b66f28751",
+        "mobilesdk_app_id": "1:833971126530:android:9fe093e78f59273cf0421b",
         "android_client_info": {
           "package_name": "com.citizenmonitors.app"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDf9ZCPhitCb3kBl63Sr6oCgEGsTEE4l50"
+          "current_key": "AIzaSyDWbn9QN-isohZCmPoOF01F2reFMx8kW0c"
         }
       ],
       "services": {

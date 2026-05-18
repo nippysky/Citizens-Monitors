@@ -17,7 +17,7 @@ export default function PressCoverageFeedCard({
   isLast = false,
 }: Props) {
   const handlePress = () => {
-    router.push(Paths.pressCoverageDetails(item.id));
+    router.push(Paths.pressCoverageDetails(item.slug));
   };
 
   return (
@@ -29,7 +29,17 @@ export default function PressCoverageFeedCard({
         pressed && styles.cardPressed,
       ]}
     >
-      <Image source={{ uri: item.imageUrl }} style={styles.image} />
+      {item.imageUrl ? (
+        <Image source={{ uri: item.imageUrl }} style={styles.image} />
+      ) : (
+        <View style={styles.imageFallback}>
+          <Ionicons
+            name="megaphone-outline"
+            size={24}
+            color={Theme.colors.textMuted}
+          />
+        </View>
+      )}
 
       <View style={styles.content}>
         <View style={styles.textWrap}>
@@ -77,6 +87,15 @@ const styles = StyleSheet.create({
     height: 74,
     borderRadius: 12,
     backgroundColor: "#EEF2F6",
+  },
+
+  imageFallback: {
+    width: 86,
+    height: 74,
+    borderRadius: 12,
+    backgroundColor: "#EEF2F6",
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   content: {
