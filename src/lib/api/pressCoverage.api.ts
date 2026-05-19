@@ -3,7 +3,7 @@ const API_BASE_URL =
   "https://citizen-monitors.onrender.com/api/v1/mobile";
 
 const INHOUSE_ACCESS_TOKEN =
-  process.env.EXPO_PUBLIC_INHOUSE_ACCESS_TOKEN ?? "";
+  process.env.INHOUSE_ACCESS_TOKEN ?? "";
 
 export type PressCoverageApiItem = {
   id: string;

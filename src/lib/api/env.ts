@@ -18,7 +18,7 @@ export const ApiEnv = {
     )
   ),
   inhouseAccessToken: requireEnv(
-    process.env.EXPO_PUBLIC_INHOUSE_ACCESS_TOKEN,
-    "EXPO_PUBLIC_INHOUSE_ACCESS_TOKEN"
+    process.env.INHOUSE_ACCESS_TOKEN,
+    "INHOUSE_ACCESS_TOKEN"
   ),
 } as const;

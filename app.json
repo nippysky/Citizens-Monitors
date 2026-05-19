@@ -96,17 +96,22 @@
           "defaultChannel": "default"
         }
       ],
-        [
-    "expo-secure-store",
-    {
-      "configureAndroidBackup": true
-    }
-  ],
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true
+        }
+      ],
       "expo-font",
       "expo-dev-client",
       "expo-video",
       "@react-native-community/datetimepicker",
-      "expo-secure-store"
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.833971126530-i376uf33tnaq8tah00743vh19ngojira"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
