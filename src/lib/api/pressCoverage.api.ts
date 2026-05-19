@@ -2,8 +2,8 @@ const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL ??
   "https://citizen-monitors.onrender.com/api/v1/mobile";
 
-const INHOUSE_ACCESS_TOKEN =
-  process.env.INHOUSE_ACCESS_TOKEN ?? "";
+const EXPO_PUBLIC_INHOUSE_ACCESS_TOKEN =
+  process.env.EXPO_PUBLIC_INHOUSE_ACCESS_TOKEN ?? "";
 
 export type PressCoverageApiItem = {
   id: string;
@@ -54,8 +54,8 @@ async function requestJson<T>(url: string, options?: RequestOptions): Promise<T>
     Accept: "application/json",
   };
 
-  if (INHOUSE_ACCESS_TOKEN) {
-    headers["X-Inhouse-Access-Token"] = INHOUSE_ACCESS_TOKEN;
+  if (EXPO_PUBLIC_INHOUSE_ACCESS_TOKEN) {
+    headers["X-Inhouse-Access-Token"] = EXPO_PUBLIC_INHOUSE_ACCESS_TOKEN;
   }
 
   const response = await fetch(url, {

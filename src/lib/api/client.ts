@@ -1,14 +1,14 @@
 import { create, isAxiosError, type AxiosError } from "axios";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
-const INHOUSE_ACCESS_TOKEN = process.env.INHOUSE_ACCESS_TOKEN;
+const EXPO_PUBLIC_INHOUSE_ACCESS_TOKEN = process.env.EXPO_PUBLIC_INHOUSE_ACCESS_TOKEN;
 
 if (!API_BASE_URL) {
   throw new Error("Missing EXPO_PUBLIC_API_BASE_URL");
 }
 
-if (!INHOUSE_ACCESS_TOKEN) {
-  throw new Error("Missing INHOUSE_ACCESS_TOKEN");
+if (!EXPO_PUBLIC_INHOUSE_ACCESS_TOKEN) {
+  throw new Error("Missing EXPO_PUBLIC_INHOUSE_ACCESS_TOKEN");
 }
 
 export const apiClient = create({
@@ -17,7 +17,7 @@ export const apiClient = create({
   headers: {
     Accept: "application/json",
     "Content-Type": "application/json",
-    "X-Inhouse-Access-Token": INHOUSE_ACCESS_TOKEN,
+    "X-Inhouse-Access-Token": EXPO_PUBLIC_INHOUSE_ACCESS_TOKEN,
   },
 });
 
