@@ -1,7 +1,7 @@
 // ─── src/components/app/NotificationsGate.tsx ───────────────────────────────
 // Side-effect-only component that owns the entire push notification lifecycle:
 //   - Acquires the Expo push token on mount
-//   - Re-acquires when push token rotates (FCM/APNs upgrades, data clear)
+//   - Re-acquires when push token truly rotates
 //   - Syncs token to backend after user is authenticated
 //   - Handles foreground notifications, taps, and cold-start tap routing
 //
@@ -9,7 +9,7 @@
 
 import { Alert } from "react-native";
 import { router } from "expo-router";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import { useAuth } from "@/context/AuthContext";
 import { registerPushToken } from "@/lib/api/pushToken.api";
@@ -18,6 +18,7 @@ import {
   addExpoPushTokenListener,
   addForegroundNotificationListener,
   addNotificationResponseListener,
+  canRegisterForRemotePushNotifications,
   clearLastNotificationResponseAsync,
   getLastNotificationResponseAsync,
   getNotificationDataFromResponse,
@@ -25,12 +26,41 @@ import {
 } from "@/lib/notifications";
 
 // ─── DEV-ONLY toggles ────────────────────────────────────────────────────────
-// Flip these on while debugging push delivery. Both are gated by __DEV__,
-// so neither has any effect in production builds — but flipping them off
-// here keeps dev logs quieter on normal runs.
+// Both are gated by __DEV__, so neither affects production builds.
 
-const DEV_SHOW_TOKEN_ALERT = false; // pops an Alert with the token on app boot
-const DEV_LOG_FOREGROUND_NOTIFICATIONS = true; // log every foreground push
+const DEV_SHOW_TOKEN_ALERT = false;
+const DEV_LOG_FOREGROUND_NOTIFICATIONS = false;
+
+// Keeps the boot token log once per JS runtime, even with React StrictMode or
+// quick remounts during development.
+let devLoggedExpoToken: string | null = null;
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function serializeNativePushToken(token: unknown): string | null {
+  if (!token || typeof token !== "object") return null;
+
+  const maybeToken = token as {
+    type?: unknown;
+    data?: unknown;
+  };
+
+  try {
+    const type =
+      typeof maybeToken.type === "string" ? maybeToken.type : "unknown";
+
+    const data =
+      typeof maybeToken.data === "string"
+        ? maybeToken.data
+        : JSON.stringify(maybeToken.data);
+
+    if (!data) return null;
+
+    return `${type}:${data}`;
+  } catch {
+    return null;
+  }
+}
 
 // ─── Notification tap routing ────────────────────────────────────────────────
 
@@ -76,14 +106,17 @@ function handleNotificationRoute(data: AppNotificationData | null): void {
 async function syncTokenToBackend(token: string): Promise<boolean> {
   try {
     await registerPushToken(token);
+
     if (__DEV__) {
       console.log("[NotificationsGate] token synced to backend");
     }
+
     return true;
   } catch (err) {
     if (__DEV__) {
       console.warn("[NotificationsGate] backend sync failed:", err);
     }
+
     return false;
   }
 }
@@ -93,30 +126,75 @@ async function syncTokenToBackend(token: string): Promise<boolean> {
 export default function NotificationsGate(): null {
   const { isAuthenticated, token: authToken } = useAuth();
 
-  // Latest acquired Expo push token, updated on acquisition + rotation events.
+  const isAuthenticatedRef = useRef(isAuthenticated);
+  const authTokenRef = useRef<string | null>(authToken ?? null);
+
+  // Latest acquired Expo push token, updated on acquisition + true rotation.
   const currentExpoTokenRef = useRef<string | null>(null);
 
-  // Last token we successfully POSTed to the backend; used to avoid redundant
-  // re-syncs on auth state changes that didn't change the token.
+  // Last token we successfully POSTed to the backend.
   const lastSyncedTokenRef = useRef<string | null>(null);
 
-  // ─── Effect 1: bootstrap (runs once) ──────────────────────────────────────
-  // Acquires the Expo push token, sets up listeners for foreground, taps,
-  // cold-starts, and token rotation. Does NOT sync to backend — that's
-  // Effect 2's job, gated on auth state.
+  // Prevents duplicate backend POSTs for the same token while a request is still
+  // in-flight.
+  const syncInFlightTokenRef = useRef<string | null>(null);
+
+  // Prevents token-rotation callbacks from repeatedly re-entering registration.
+  const rotationRefreshInFlightRef = useRef(false);
+
+  // Stores the last native APNs/FCM token event we handled. If Expo emits the
+  // same native token repeatedly, we ignore the duplicates.
+  const lastNativePushTokenRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    isAuthenticatedRef.current = isAuthenticated;
+    authTokenRef.current = authToken ?? null;
+  }, [isAuthenticated, authToken]);
+
+  const syncCurrentTokenIfNeeded = useCallback((): void => {
+    const expoToken = currentExpoTokenRef.current;
+
+    if (!isAuthenticatedRef.current) return;
+    if (!authTokenRef.current) return;
+    if (!expoToken) return;
+
+    if (lastSyncedTokenRef.current === expoToken) return;
+    if (syncInFlightTokenRef.current === expoToken) return;
+
+    syncInFlightTokenRef.current = expoToken;
+
+    void syncTokenToBackend(expoToken)
+      .then((synced) => {
+        if (!synced) return;
+
+        // Only mark as synced if this is still the active token.
+        if (currentExpoTokenRef.current === expoToken) {
+          lastSyncedTokenRef.current = expoToken;
+        }
+      })
+      .finally(() => {
+        if (syncInFlightTokenRef.current === expoToken) {
+          syncInFlightTokenRef.current = null;
+        }
+      });
+  }, []);
+
+  // ─── Effect 1: bootstrap + listeners ──────────────────────────────────────
 
   useEffect(() => {
     let mounted = true;
 
     const boot = async (): Promise<void> => {
       const expoToken = await registerForPushNotificationsAsync();
+
       if (!mounted) return;
 
       if (expoToken) {
         currentExpoTokenRef.current = expoToken;
 
-        if (__DEV__) {
-          // Prominent log so it's easy to grab from Metro for testing.
+        if (__DEV__ && devLoggedExpoToken !== expoToken) {
+          devLoggedExpoToken = expoToken;
+
           console.log(
             "\n========== EXPO PUSH TOKEN ==========\n" +
               expoToken +
@@ -127,11 +205,16 @@ export default function NotificationsGate(): null {
             Alert.alert("Expo Push Token (DEV)", expoToken);
           }
         }
+
+        // Handles the race where auth was already restored before token
+        // acquisition completed.
+        syncCurrentTokenIfNeeded();
       }
 
       // Handle cold-start: app was opened from killed state via notification tap.
       try {
         const lastResponse = await getLastNotificationResponseAsync();
+
         if (mounted && lastResponse) {
           const data = getNotificationDataFromResponse(lastResponse);
           handleNotificationRoute(data);
@@ -148,7 +231,7 @@ export default function NotificationsGate(): null {
 
     // Foreground notifications: the system banner shows automatically via
     // setNotificationHandler in lib/notifications.ts. This listener is for
-    // any additional side effects we want (analytics, in-app badges, etc.).
+    // optional side effects only.
     const foregroundSub = addForegroundNotificationListener((notification) => {
       if (__DEV__ && DEV_LOG_FOREGROUND_NOTIFICATIONS) {
         console.log(
@@ -158,85 +241,77 @@ export default function NotificationsGate(): null {
       }
     });
 
-    // Tap response: user tapped a notification (from tray, banner, or lock screen).
+    // Tap response: user tapped a notification from tray, banner, or lock screen.
     const responseSub = addNotificationResponseListener((response) => {
       const data = getNotificationDataFromResponse(response);
       handleNotificationRoute(data);
     });
 
-    // Token rotation: FCM/APNs reissued the underlying device token. Re-acquire
-    // and queue a backend re-sync (Effect 2 will pick it up if authenticated).
-    const tokenSub = addExpoPushTokenListener(() => {
-      void registerForPushNotificationsAsync().then((newExpoToken) => {
-        if (!mounted || !newExpoToken) return;
-        currentExpoTokenRef.current = newExpoToken;
-        // Force re-sync on next auth check by clearing the last-synced ref.
-        lastSyncedTokenRef.current = null;
+    // Do not subscribe to token rotation on unsupported simulator push flow.
+    const tokenSub = canRegisterForRemotePushNotifications()
+      ? addExpoPushTokenListener((nativeToken) => {
+          const nativeTokenKey = serializeNativePushToken(nativeToken);
 
-        if (__DEV__) {
-          console.log("[NotificationsGate] token rotated, new token:", newExpoToken);
-        }
+          if (
+            nativeTokenKey &&
+            lastNativePushTokenRef.current === nativeTokenKey
+          ) {
+            return;
+          }
 
-        // If user is currently authenticated, sync immediately rather than
-        // waiting for the next auth state change.
-        if (authToken) {
-          void syncTokenToBackend(newExpoToken).then((synced) => {
-            if (synced) lastSyncedTokenRef.current = newExpoToken;
-          });
-        }
-      });
-    });
+          if (nativeTokenKey) {
+            lastNativePushTokenRef.current = nativeTokenKey;
+          }
+
+          if (rotationRefreshInFlightRef.current) {
+            return;
+          }
+
+          rotationRefreshInFlightRef.current = true;
+
+          void registerForPushNotificationsAsync({ forceRefresh: true })
+            .then((newExpoToken) => {
+              if (!mounted || !newExpoToken) return;
+
+              const previousExpoToken = currentExpoTokenRef.current;
+
+              // Critical loop-breaker: do not treat the same Expo token as a
+              // real rotation.
+              if (previousExpoToken === newExpoToken) {
+                return;
+              }
+
+              currentExpoTokenRef.current = newExpoToken;
+              lastSyncedTokenRef.current = null;
+
+              if (__DEV__) {
+                console.log(
+                  "[NotificationsGate] Expo push token changed:",
+                  newExpoToken
+                );
+              }
+
+              syncCurrentTokenIfNeeded();
+            })
+            .finally(() => {
+              rotationRefreshInFlightRef.current = false;
+            });
+        })
+      : null;
 
     return () => {
       mounted = false;
       foregroundSub.remove();
       responseSub.remove();
-      tokenSub.remove();
+      tokenSub?.remove();
     };
-    // Intentionally empty deps — this effect runs once for the app lifetime.
-    // `authToken` is read via ref-free closure inside the rotation handler;
-    // that's fine because the handler is only called on rotation events,
-    // which are rare, and we have Effect 2 as the durable sync mechanism.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [syncCurrentTokenIfNeeded]);
 
-  // ─── Effect 2: sync to backend when authenticated ─────────────────────────
-  // Runs whenever auth state changes. If we have a token in hand and the user
-  // is now authenticated (and we haven't already synced this exact token),
-  // POST it to the backend.
+  // ─── Effect 2: sync when auth becomes ready ────────────────────────────────
 
   useEffect(() => {
-    const expoToken = currentExpoTokenRef.current;
-
-    if (!isAuthenticated || !expoToken) return;
-    if (lastSyncedTokenRef.current === expoToken) return;
-
-    void syncTokenToBackend(expoToken).then((synced) => {
-      if (synced) {
-        lastSyncedTokenRef.current = expoToken;
-      }
-    });
-  }, [isAuthenticated, authToken]);
-
-  // Bootstrap can also finish AFTER auth is already established (token
-  // acquisition is async, auth may resolve from cache near-instantly). In
-  // that case Effect 2 has nothing to do yet because the ref is still null.
-  // We poll once on each render via a microtask — cheap, covers the race.
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const microtask = setTimeout(() => {
-      const expoToken = currentExpoTokenRef.current;
-      if (!expoToken) return;
-      if (lastSyncedTokenRef.current === expoToken) return;
-
-      void syncTokenToBackend(expoToken).then((synced) => {
-        if (synced) lastSyncedTokenRef.current = expoToken;
-      });
-    }, 500);
-
-    return () => clearTimeout(microtask);
-  }, [isAuthenticated]);
+    syncCurrentTokenIfNeeded();
+  }, [isAuthenticated, authToken, syncCurrentTokenIfNeeded]);
 
   return null;
 }

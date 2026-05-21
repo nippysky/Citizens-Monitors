@@ -12,6 +12,7 @@ import BackButton from "@/components/ui/BackButton";
 import { LockIcon } from "@/components/ui/InputIcons";
 import { Paths } from "@/constants/paths";
 import { useResetPasswordMutation } from "@/hooks/api/useResetPasswordMutation";
+import { useSetPasswordMutation } from "@/hooks/api/useSetPasswordMutation";
 import { useAppToast } from "@/hooks/useAppToast";
 import { useSetPasswordForm } from "@/hooks/useSetPasswordForm";
 import { Theme } from "@/theme";
@@ -33,9 +34,14 @@ export default function SetPasswordScreen() {
 
   const { control, handleSubmit, formState } = useSetPasswordForm();
   const { showToast } = useAppToast();
-  const resetPasswordMutation = useResetPasswordMutation();
 
-  const isLoading = formState.isSubmitting || resetPasswordMutation.isPending;
+  const resetPasswordMutation = useResetPasswordMutation();
+  const setPasswordMutation = useSetPasswordMutation();
+
+  const isLoading =
+    formState.isSubmitting ||
+    resetPasswordMutation.isPending ||
+    setPasswordMutation.isPending;
 
   const copy = useMemo(() => {
     if (flow === "reset-password") {
@@ -58,6 +64,9 @@ export default function SetPasswordScreen() {
 
   const onSubmit = handleSubmit(async (values) => {
     try {
+      // -----------------------------------------------------------------------
+      // Reset-password flow (OTP-based) — UNCHANGED
+      // -----------------------------------------------------------------------
       if (flow === "reset-password") {
         if (!email || !otp) {
           showToast({
@@ -84,13 +93,29 @@ export default function SetPasswordScreen() {
         return;
       }
 
-      /**
-       * Current email signup already sets password at register.
-       * This branch is kept for future Google/social auth password setup.
-       */
+      // -----------------------------------------------------------------------
+      // Sign-up flow (Google OAuth password setup)
+      //
+      // User is already authenticated — apiRequest auto-attaches the Bearer
+      // token from SecureStore. After success, send them to the onboarding
+      // wizard with their email so it can drive submitDetails/selectRole/etc.
+      // -----------------------------------------------------------------------
+      const response = await setPasswordMutation.mutateAsync({
+        password: values.password,
+        confirmPassword: values.confirmPassword,
+      });
+
       showToast({
-        type: "error",
-        message: "Password setup is not available for this flow yet.",
+        type: "success",
+        message: response.message ?? copy.successMessage,
+      });
+
+      // Forward email so the onboarding screen can use it for backend calls.
+      // Without this, onboarding's requireEmailOrRestart() would bounce the
+      // user back to sign-up.
+      router.replace({
+        pathname: Paths.onboarding,
+        params: { email },
       });
     } catch (error) {
       const message =

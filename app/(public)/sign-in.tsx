@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import AuthMetaAction from "@/components/auth/AuthMetaAction";
@@ -13,9 +14,11 @@ import { EmailIcon, LockIcon } from "@/components/ui/InputIcons";
 import SocialButton from "@/components/ui/SocialButton";
 import { Paths } from "@/constants/paths";
 import { useAuth } from "@/context/AuthContext";
+import { useGoogleAuthMutation } from "@/hooks/api/useGoogleAuthMutation";
 import { useSignInMutation } from "@/hooks/api/useSignInMutation";
 import { useAppToast } from "@/hooks/useAppToast";
 import { useSignInForm } from "@/hooks/useSignInForms";
+import { signInWithGoogle } from "@/lib/auth/googleAuth";
 import { mapMobileUserToAuthUser } from "@/lib/auth/mapMobileUserToAuthUser";
 import { Theme } from "@/theme";
 
@@ -23,9 +26,24 @@ export default function SignInScreen() {
   const { control, handleSubmit, formState } = useSignInForm();
   const { signIn } = useAuth();
   const { showToast } = useAppToast();
-  const signInMutation = useSignInMutation();
 
-  const isLoading = formState.isSubmitting || signInMutation.isPending;
+  const signInMutation = useSignInMutation();
+  const googleMutation = useGoogleAuthMutation();
+
+  // Tracks the time spent inside the native Google sheet before our backend
+  // mutation begins. Without this, the screen loader would flicker off
+  // between the sheet closing and the API call starting.
+  const [isGoogleSigningIn, setIsGoogleSigningIn] = useState(false);
+
+  const isLoading =
+    formState.isSubmitting ||
+    signInMutation.isPending ||
+    isGoogleSigningIn ||
+    googleMutation.isPending;
+
+  // ---------------------------------------------------------------------------
+  // Email + password sign-in (unchanged)
+  // ---------------------------------------------------------------------------
 
   const onSubmit = handleSubmit(async (values) => {
     const email = values.email.trim().toLowerCase();
@@ -55,20 +73,81 @@ export default function SignInScreen() {
       const message =
         error instanceof Error ? error.message : "Unable to sign in.";
 
-      showToast({
-        type: "error",
-        message,
-      });
-
+      showToast({ type: "error", message });
       console.log("Sign in error:", error);
     }
   });
 
-  const handleGoogleContinue = (): void => {
-    showToast({
-      type: "error",
-      message: "Google sign in is not available yet.",
-    });
+  // ---------------------------------------------------------------------------
+  // Google sign-in
+  //
+  // Same endpoint as sign-up. Backend tells us via `requiresPasswordSetup`
+  // whether to send the user to the set-password screen (first-time Google
+  // user) or straight to app home (returning user).
+  // ---------------------------------------------------------------------------
+
+  const handleGoogleContinue = async (): Promise<void> => {
+    setIsGoogleSigningIn(true);
+
+    try {
+      const result = await signInWithGoogle();
+
+      if (result.kind === "cancelled") {
+        return;
+      }
+
+      if (result.kind === "error") {
+        showToast({ type: "error", message: result.message });
+        return;
+      }
+
+      const response = await googleMutation.mutateAsync({
+        idToken: result.idToken,
+      });
+
+      if (!response.token) {
+        throw new Error(
+          "Sign-in succeeded with Google but no session token was returned."
+        );
+      }
+
+      // Persist the session so the set-password screen can use the token
+      // for any authenticated calls it needs to make.
+      await signIn(mapMobileUserToAuthUser(response.user, result.email), {
+        token: response.token,
+        hasCompletedOnboarding: !response.requiresPasswordSetup,
+      });
+
+      if (response.requiresPasswordSetup) {
+        showToast({
+          type: "success",
+          message:
+            response.message ??
+            "Welcome! Set a password to finish creating your account.",
+        });
+        router.replace({
+          pathname: Paths.setPassword,
+          params: { email: result.email },
+        });
+        return;
+      }
+
+      showToast({
+        type: "success",
+        message: response.message ?? "Signed in with Google.",
+      });
+      router.replace(Paths.appHome);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to sign in with Google.";
+
+      showToast({ type: "error", message });
+      console.log("Google sign-in error:", error);
+    } finally {
+      setIsGoogleSigningIn(false);
+    }
   };
 
   return (
@@ -95,6 +174,7 @@ export default function SignInScreen() {
             <SocialButton
               title="Continue With Google"
               onPress={handleGoogleContinue}
+              disabled={isLoading}
             />
 
             <DividerText text="OR SIGN IN WITH" />

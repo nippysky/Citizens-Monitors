@@ -23,7 +23,20 @@ export type AppNotificationData = {
   [key: string]: unknown;
 };
 
+type RegisterPushOptions = {
+  /**
+   * Forces a fresh Expo token lookup. Used only after a real native push-token
+   * rotation event. Normal app boot should use the cached/in-flight value.
+   */
+  forceRefresh?: boolean;
+};
+
 const TAG = "[notifications]";
+
+const loggedOnceKeys = new Set<string>();
+
+let cachedExpoPushToken: string | null = null;
+let registrationPromise: Promise<string | null> | null = null;
 
 function devLog(...args: unknown[]): void {
   if (__DEV__) {
@@ -31,10 +44,41 @@ function devLog(...args: unknown[]): void {
   }
 }
 
+function devLogOnce(key: string, ...args: unknown[]): void {
+  if (!__DEV__) return;
+  if (loggedOnceKeys.has(`log:${key}`)) return;
+
+  loggedOnceKeys.add(`log:${key}`);
+  console.log(TAG, ...args);
+}
+
+function devWarnOnce(key: string, ...args: unknown[]): void {
+  if (!__DEV__) return;
+  if (loggedOnceKeys.has(`warn:${key}`)) return;
+
+  loggedOnceKeys.add(`warn:${key}`);
+  console.warn(TAG, ...args);
+}
+
 function devWarn(...args: unknown[]): void {
   if (__DEV__) {
     console.warn(TAG, ...args);
   }
+}
+
+/**
+ * Remote Expo push-token registration should not run on iOS Simulator.
+ * Expo can warn repeatedly there, and the token flow is not reliable.
+ *
+ * Android emulator support can vary by environment, so this guard is kept
+ * intentionally specific to iOS Simulator.
+ */
+export function canRegisterForRemotePushNotifications(): boolean {
+  if (Platform.OS === "ios" && !Device.isDevice) {
+    return false;
+  }
+
+  return true;
 }
 
 // Foreground behavior: show banner + list, play sound, do not auto-increment
@@ -95,7 +139,12 @@ export async function configureNotificationChannelsAsync(): Promise<void> {
 
 export async function requestNotificationPermissionsAsync(): Promise<boolean> {
   const settings = await Notifications.getPermissionsAsync();
-  devLog("existing permission status:", settings.status);
+
+  devLogOnce(
+    `existing-permission-status:${settings.status}`,
+    "existing permission status:",
+    settings.status
+  );
 
   let finalStatus = settings.status;
 
@@ -107,8 +156,14 @@ export async function requestNotificationPermissionsAsync(): Promise<boolean> {
         allowSound: true,
       },
     });
+
     finalStatus = requested.status;
-    devLog("requested permission status:", finalStatus);
+
+    devLogOnce(
+      `requested-permission-status:${finalStatus}`,
+      "requested permission status:",
+      finalStatus
+    );
   }
 
   return finalStatus === "granted";
@@ -129,47 +184,91 @@ export function getExpoProjectId(): string {
 }
 
 /**
- * Acquires the Expo push token. Returns null if permission denied or token
- * acquisition fails — never throws, so callers can treat null as "no push"
- * without try/catch boilerplate.
+ * Acquires the Expo push token.
+ *
+ * Important:
+ * - Returns null on iOS Simulator to avoid noisy, unreliable token acquisition.
+ * - Caches successful tokens.
+ * - De-dupes in-flight registration so multiple callers cannot spam
+ *   getExpoPushTokenAsync at the same time.
+ * - Never throws; callers can treat null as "no push".
  */
-export async function registerForPushNotificationsAsync(): Promise<string | null> {
-  devLog("register start; platform:", Platform.OS, "isDevice:", Device.isDevice);
+export async function registerForPushNotificationsAsync(
+  options: RegisterPushOptions = {}
+): Promise<string | null> {
+  const { forceRefresh = false } = options;
 
-  try {
-    if (Platform.OS === "android") {
-      await configureNotificationChannelsAsync();
-    }
-
-    const granted = await requestNotificationPermissionsAsync();
-    if (!granted) {
-      devWarn("permission not granted");
-      return null;
-    }
-
-    const projectId = getExpoProjectId();
-    const tokenResponse = await Notifications.getExpoPushTokenAsync({ projectId });
-    const token = tokenResponse.data;
-
-    if (!token || !token.startsWith("ExponentPushToken[")) {
-      devWarn("invalid token format:", token);
-      return null;
-    }
-
-    devLog("registered token:", token);
-    return token;
-  } catch (error) {
-    devWarn("register failed:", error);
+  if (!canRegisterForRemotePushNotifications()) {
+    devWarnOnce(
+      "ios-simulator-remote-push-skip",
+      "remote push-token registration skipped on iOS Simulator. Use a physical iPhone for Expo push-token testing."
+    );
     return null;
   }
+
+  if (!forceRefresh && cachedExpoPushToken) {
+    return cachedExpoPushToken;
+  }
+
+  if (registrationPromise) {
+    return registrationPromise;
+  }
+
+  registrationPromise = (async () => {
+    devLog("register start; platform:", Platform.OS, "isDevice:", Device.isDevice);
+
+    try {
+      if (Platform.OS === "android") {
+        await configureNotificationChannelsAsync();
+      }
+
+      const granted = await requestNotificationPermissionsAsync();
+
+      if (!granted) {
+        devWarnOnce("permission-not-granted", "permission not granted");
+        return null;
+      }
+
+      const projectId = getExpoProjectId();
+      const tokenResponse = await Notifications.getExpoPushTokenAsync({
+        projectId,
+      });
+
+      const token = tokenResponse.data;
+
+      if (!token || !token.startsWith("ExponentPushToken[")) {
+        devWarn("invalid token format:", token);
+        return null;
+      }
+
+      const previousToken = cachedExpoPushToken;
+      cachedExpoPushToken = token;
+
+      if (previousToken !== token) {
+        devLog("registered token:", token);
+      } else {
+        devLogOnce(
+          `registered-token-unchanged:${token}`,
+          "registered token unchanged:",
+          token
+        );
+      }
+
+      return token;
+    } catch (error) {
+      devWarn("register failed:", error);
+      return null;
+    } finally {
+      registrationPromise = null;
+    }
+  })();
+
+  return registrationPromise;
 }
 
 /**
  * Subscribe to native push token rotation. Fired when FCM (Android) or APNs
- * (iOS) reissues the underlying device token — e.g. after Play Services
- * upgrade, app data clear, device migration. When this fires, the Expo push
- * token will also change; callers should re-acquire via
- * registerForPushNotificationsAsync and re-sync to backend.
+ * (iOS) reissues the underlying device token.
  */
 export function addExpoPushTokenListener(
   callback: (token: Notifications.DevicePushToken) => void
@@ -193,8 +292,11 @@ export function getNotificationDataFromResponse(
   response: Notifications.NotificationResponse | null | undefined
 ): AppNotificationData | null {
   if (!response) return null;
+
   const data = response.notification.request.content.data;
+
   if (!data || typeof data !== "object") return null;
+
   return data as AppNotificationData;
 }
 
@@ -202,8 +304,11 @@ export function getNotificationDataFromNotification(
   notification: Notifications.Notification | null | undefined
 ): AppNotificationData | null {
   if (!notification) return null;
+
   const data = notification.request.content.data;
+
   if (!data || typeof data !== "object") return null;
+
   return data as AppNotificationData;
 }
 

@@ -349,3 +349,142 @@ export async function submitObserverRole(
     timeoutMs: 180_000,
   });
 }
+
+// ============================================================================
+// REPLACE the previous googleAuth snippet at the bottom of src/lib/api/auth.api.ts
+// with this version. Everything above (registerUser, signInUser, etc.) stays
+// exactly as it is.
+// ============================================================================
+//
+// Matches the actual backend contract:
+//   Request:  { idToken, expires_in, ...devicePayload (platform, deviceId, ...) }
+//   Response: { message, token, user: MobileUser, requiresPasswordSetup, nextStep }
+//
+// Routing rules (handled by the caller, not here):
+//   - requiresPasswordSetup === true   → set-password screen
+//   - requiresPasswordSetup === false  → app home
+//
+// ============================================================================
+
+// ----- Types -----------------------------------------------------------------
+
+export type GoogleAuthPayload = {
+  /** The ID token returned by Google's native SDK to the mobile app.
+   *  Backend verifies its `aud` claim against our Web OAuth Client ID and
+   *  trusts the `email` + `sub` claims. */
+  idToken: string;
+};
+
+export type GoogleAuthResponse = {
+  message: string;
+  token: string;
+  user: MobileUser;
+  /**
+   * True when this Google account had no existing user OR the existing user
+   * has not yet set a password. Client should route to the set-password
+   * screen so the user can also log in later via email + password.
+   *
+   * False for returning users who already have a password set. Client routes
+   * straight to the app shell.
+   */
+  requiresPasswordSetup: boolean;
+  /**
+   * Backend-suggested next step in the onboarding funnel.
+   * Observed values: "set_password", "select_role", "submit_details", "home".
+   * Reserved for richer routing logic later; today the client only acts on
+   * `requiresPasswordSetup`. Kept on the type so future screens can read it
+   * without another API change.
+   */
+  nextStep?: string;
+};
+
+// ----- Request ---------------------------------------------------------------
+
+/**
+ * Google ID tokens issued by the mobile SDK have a 1-hour lifetime.
+ * "3599" matches what Google's official OAuth libraries report (one second
+ * short of an hour, to account for clock skew). This is informational only —
+ * the backend decodes the idToken's `exp` claim itself for the authoritative
+ * value — but the field is in the documented contract so we include it.
+ */
+const GOOGLE_ID_TOKEN_EXPIRES_IN = "3599";
+
+/**
+ * Exchange a Google idToken for a Citizen Monitors session.
+ *
+ * The same endpoint handles both first-time Google sign-up AND repeat
+ * sign-in:
+ *   - If the Google account is brand new, the backend creates a user record
+ *     with `hasSetPassword: false` and returns requiresPasswordSetup: true.
+ *   - If the Google account already maps to an existing user, the backend
+ *     signs them in and returns requiresPasswordSetup: false.
+ *
+ * Device telemetry is attached the same way as register/sign-in so the
+ * backend has consistent context for fraud, audit, and push-target lookup.
+ */
+export async function googleAuth(
+  payload: GoogleAuthPayload
+): Promise<GoogleAuthResponse> {
+  const devicePayload = await getRegistrationDevicePayload();
+
+  return apiRequest<GoogleAuthResponse>("/auth/google", {
+    method: "POST",
+    auth: false,
+    body: {
+      idToken: payload.idToken,
+      expires_in: GOOGLE_ID_TOKEN_EXPIRES_IN,
+      ...devicePayload,
+    },
+  });
+}
+
+// ============================================================================
+// APPEND to src/lib/api/auth.api.ts (next to / below the googleAuth section).
+// ============================================================================
+//
+// Endpoint: POST /auth/set-password
+// Auth:     REQUIRED — Bearer token from the prior /auth/google response.
+//
+// Used by users who signed up via Google OAuth (where requiresPasswordSetup
+// came back true). Setting a password here lets them ALSO log in later with
+// email + password — without needing Google.
+//
+// IMPORTANT — Not to be confused with /auth/reset-password (the OTP-based
+// forgot-password flow). That one is `resetPassword()` above; this one is
+// for an already-authenticated user choosing a password for the first time.
+// ============================================================================
+
+// ----- Types -----------------------------------------------------------------
+
+export type SetPasswordPayload = {
+  password: string;
+  confirmPassword: string;
+};
+
+export type SetPasswordResponse = {
+  message: string;
+  /** Backend-suggested next step in the onboarding funnel.
+   *  Observed values: "user_coverage", "select_role", "home".
+   *  Captured for future routing logic; today the client always sends the
+   *  user to the onboarding wizard after a successful set-password. */
+  nextStep?: string;
+};
+
+// ----- Request ---------------------------------------------------------------
+
+export async function setPassword(
+  payload: SetPasswordPayload
+): Promise<SetPasswordResponse> {
+  return apiRequest<SetPasswordResponse>("/auth/set-password", {
+    method: "POST",
+    // Backend requires the Bearer token issued by the prior /auth/google call.
+    // apiRequest auto-attaches it from getApiAccessToken(), which reads from
+    // SecureStore — that token was persisted when we called signIn() during
+    // the Google flow.
+    auth: true,
+    body: {
+      password: payload.password,
+      confirmPassword: payload.confirmPassword,
+    },
+  });
+}

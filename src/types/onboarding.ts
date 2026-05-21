@@ -3,7 +3,10 @@ export type Gender = "Male" | "Female" | "";
 export type CitizenType = "observer" | "volunteer" | "public-viewer" | "";
 
 export type YesNo = "Yes" | "No" | "";
-export type VoterStatus = "Yes" | "No";
+// Includes "" for the form's initial "no selection yet" state, consistent
+// with YesNo. The canContinueCoverage check rejects "" before any submission,
+// so the API payload never sees an empty value.
+export type VoterStatus = "Yes" | "No" | "";
 export type MonitoringExperience = "First time" | "1-5 year" | "10 yr above" | "";
 
 export type JoinReason =
