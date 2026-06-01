@@ -8,6 +8,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import AppScreenLoader from "@/components/feedback/AppScreenLoader";
 import { useToastContext } from "@/components/feedback/ToastProvider";
 import TabBarSpacer from "@/components/layout/TabBarSpacer";
+import TourTarget from "@/components/tour/TourTarget";
 import BankDetailsBottomSheet, {
   BankFormState,
 } from "@/components/me/BankDetailsBottomSheet";
@@ -34,6 +35,7 @@ import AppButton from "@/components/ui/AppButton";
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
 import { useAuth } from "@/context/AuthContext";
+import { useTourScrollReset } from "@/context/TourContext";
 import {
   getMeAccountItems,
   getMeBanner,
@@ -99,6 +101,8 @@ const DEFAULT_FEEDBACK_FORM: FeedbackFormState = {
   title: "Feedback",
   message: "",
 };
+
+const ME_TOUR_TARGET_IDS = ["me.my-account"];
 
 function getFullName(profile: MyProfileResponse): string {
   return [profile.firstName, profile.lastName].filter(Boolean).join(" ").trim();
@@ -427,6 +431,8 @@ export default function MeScreen() {
     useUpgradeVolunteerToObserverMutation();
 
   const scrollViewRef = useRef<ScrollView>(null);
+
+  useTourScrollReset(scrollViewRef, ME_TOUR_TARGET_IDS);
 
   const [profileForm, setProfileForm] = useState<ProfileFormState>({
     firstName: "",
@@ -1043,10 +1049,10 @@ export default function MeScreen() {
 
           <MeProfileCard banner={banner} onPress={handleBannerPress} />
 
-          <View style={styles.sectionBlock}>
+          <TourTarget id="me.my-account" style={styles.sectionBlock}>
             <AppText style={styles.sectionTitle}>MY ACCOUNT</AppText>
             <MeSection items={accountItems} onItemPress={handleItemPress} />
-          </View>
+          </TourTarget>
 
           <View style={styles.sectionBlock}>
             <AppText style={styles.sectionTitle}>OTHERS</AppText>

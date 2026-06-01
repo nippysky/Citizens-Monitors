@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Pressable,
   StyleSheet,
@@ -41,10 +41,16 @@ export default function TourOverlay() {
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
   const [tooltipHeight, setTooltipHeight] = useState(180);
 
+  useEffect(() => {
+    if (!isActive) {
+      setShowSkipConfirm(false);
+    }
+  }, [isActive]);
+
   const targetRect = currentStep ? targets[currentStep.targetId] : undefined;
 
   const tooltipPosition = useMemo(() => {
-    if (!targetRect || !currentStep) return null;
+    if (!currentStep) return null;
 
     const placement = currentStep.placement ?? "auto";
     const arrowAtTab = currentStep.arrowAtTab;
@@ -52,7 +58,55 @@ export default function TourOverlay() {
     const safeTop = insets.top + 12;
     const safeBottom = screenHeight - insets.bottom - 12;
 
-    const targetCenterY = targetRect.y + targetRect.height / 2;
+    /*
+     * Fallback protection:
+     * Never return null while the tour is active.
+     * If the final target is not measured yet, this keeps 7/7 visible
+     * instead of leaving the tour active and forcing navigation back to Me.
+     */
+    if (!targetRect) {
+      const fallbackTooltipX = Math.max(
+        SCREEN_PADDING,
+        Math.min(
+          screenWidth / 2 - TOOLTIP_WIDTH / 2,
+          screenWidth - TOOLTIP_WIDTH - SCREEN_PADDING
+        )
+      );
+
+      const fallbackTooltipY = Math.max(
+        safeTop,
+        Math.min(
+          screenHeight - insets.bottom - tooltipHeight - 110,
+          safeBottom - tooltipHeight
+        )
+      );
+
+      let fallbackArrowAbsX: number | null = null;
+
+      if (arrowAtTab !== undefined) {
+        fallbackArrowAbsX = (arrowAtTab + 0.5) * (screenWidth / TAB_COUNT);
+      }
+
+      const fallbackArrowX =
+        fallbackArrowAbsX === null
+          ? TOOLTIP_WIDTH / 2
+          : Math.max(
+              26,
+              Math.min(
+                TOOLTIP_WIDTH - 26,
+                fallbackArrowAbsX - fallbackTooltipX
+              )
+            );
+
+      return {
+        tooltipX: fallbackTooltipX,
+        tooltipY: fallbackTooltipY,
+        placeBelow: false,
+        arrowX: fallbackArrowX,
+        showArrow: arrowAtTab !== undefined,
+      };
+    }
+
     const targetBottomY = targetRect.y + targetRect.height;
     const targetCenterX = targetRect.x + targetRect.width / 2;
 
@@ -60,9 +114,14 @@ export default function TourOverlay() {
     const spaceAbove = targetRect.y - safeTop - TOOLTIP_MARGIN;
 
     let placeBelow: boolean;
-    if (placement === "below") placeBelow = true;
-    else if (placement === "above") placeBelow = false;
-    else placeBelow = spaceBelow >= tooltipHeight || spaceBelow > spaceAbove;
+
+    if (placement === "below") {
+      placeBelow = true;
+    } else if (placement === "above") {
+      placeBelow = false;
+    } else {
+      placeBelow = spaceBelow >= tooltipHeight || spaceBelow > spaceAbove;
+    }
 
     let tooltipY = placeBelow
       ? targetBottomY + TOOLTIP_MARGIN
@@ -74,6 +133,7 @@ export default function TourOverlay() {
     );
 
     let arrowAbsX: number;
+
     if (arrowAtTab !== undefined) {
       arrowAbsX = (arrowAtTab + 0.5) * (screenWidth / TAB_COUNT);
     } else {
@@ -82,6 +142,7 @@ export default function TourOverlay() {
 
     let tooltipX = arrowAbsX - TOOLTIP_WIDTH / 2;
     const maxX = screenWidth - TOOLTIP_WIDTH - SCREEN_PADDING;
+
     tooltipX = Math.max(SCREEN_PADDING, Math.min(tooltipX, maxX));
 
     const arrowX = Math.max(
@@ -94,7 +155,7 @@ export default function TourOverlay() {
       tooltipY,
       placeBelow,
       arrowX,
-      targetCenterY,
+      showArrow: true,
     };
   }, [
     currentStep,
@@ -106,7 +167,9 @@ export default function TourOverlay() {
     insets.bottom,
   ]);
 
-  if (!isActive || !currentStep || !tooltipPosition) return null;
+  if (!isActive || !currentStep || !tooltipPosition) {
+    return null;
+  }
 
   return (
     <Animated.View
@@ -115,11 +178,13 @@ export default function TourOverlay() {
       style={styles.root}
       pointerEvents="box-none"
     >
-      {/* Full dark overlay only — no cutout, no highlight */}
       <View style={styles.backdrop} pointerEvents="none" />
 
-      {/* Block touches behind tour */}
-      <Pressable style={StyleSheet.absoluteFillObject} onPress={() => {}} />
+      <Pressable
+        style={StyleSheet.absoluteFillObject}
+        onPress={() => {}}
+        pointerEvents="auto"
+      />
 
       <Animated.View
         key={`tour-tooltip-${currentStepIndex}`}
@@ -135,39 +200,42 @@ export default function TourOverlay() {
             width: TOOLTIP_WIDTH,
           },
         ]}
-        onLayout={(e) => {
-          const h = e.nativeEvent.layout.height;
-          if (Math.abs(h - tooltipHeight) > 4) {
-            setTooltipHeight(h);
+        onLayout={(event) => {
+          const nextHeight = event.nativeEvent.layout.height;
+
+          if (Math.abs(nextHeight - tooltipHeight) > 4) {
+            setTooltipHeight(nextHeight);
           }
         }}
       >
-        <View
-          style={[
-            styles.arrow,
-            tooltipPosition.placeBelow
-              ? {
-                  top: -ARROW_SIZE,
-                  left: tooltipPosition.arrowX - ARROW_SIZE,
-                  borderBottomWidth: ARROW_SIZE,
-                  borderBottomColor: "#FBF4C7",
-                  borderLeftWidth: ARROW_SIZE,
-                  borderRightWidth: ARROW_SIZE,
-                  borderLeftColor: "transparent",
-                  borderRightColor: "transparent",
-                }
-              : {
-                  bottom: -ARROW_SIZE,
-                  left: tooltipPosition.arrowX - ARROW_SIZE,
-                  borderTopWidth: ARROW_SIZE,
-                  borderTopColor: "#FBF4C7",
-                  borderLeftWidth: ARROW_SIZE,
-                  borderRightWidth: ARROW_SIZE,
-                  borderLeftColor: "transparent",
-                  borderRightColor: "transparent",
-                },
-          ]}
-        />
+        {tooltipPosition.showArrow ? (
+          <View
+            style={[
+              styles.arrow,
+              tooltipPosition.placeBelow
+                ? {
+                    top: -ARROW_SIZE,
+                    left: tooltipPosition.arrowX - ARROW_SIZE,
+                    borderBottomWidth: ARROW_SIZE,
+                    borderBottomColor: "#FBF4C7",
+                    borderLeftWidth: ARROW_SIZE,
+                    borderRightWidth: ARROW_SIZE,
+                    borderLeftColor: "transparent",
+                    borderRightColor: "transparent",
+                  }
+                : {
+                    bottom: -ARROW_SIZE,
+                    left: tooltipPosition.arrowX - ARROW_SIZE,
+                    borderTopWidth: ARROW_SIZE,
+                    borderTopColor: "#FBF4C7",
+                    borderLeftWidth: ARROW_SIZE,
+                    borderRightWidth: ARROW_SIZE,
+                    borderLeftColor: "transparent",
+                    borderRightColor: "transparent",
+                  },
+            ]}
+          />
+        ) : null}
 
         <TourTooltipCard
           title={currentStep.title}
@@ -203,6 +271,7 @@ const styles = StyleSheet.create({
   },
   tooltipWrap: {
     position: "absolute",
+    zIndex: 9999,
   },
   arrow: {
     position: "absolute",

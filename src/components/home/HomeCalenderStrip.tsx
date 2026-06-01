@@ -32,6 +32,7 @@ type Props = {
 
 const CARD_SIZE = 64;
 const CARD_GAP = 12;
+const EDGE_PADDING = 16;
 const ITEM_SIZE = CARD_SIZE + CARD_GAP;
 
 type DayChipProps = {
@@ -127,13 +128,9 @@ export default function HomeCalendarStrip({
 }: Props) {
   const listRef = useRef<FlatList<CalendarDayItem>>(null);
   const centerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasAutoScrolledRef = useRef(false);
 
   const { width } = useWindowDimensions();
-
-  const sidePadding = useMemo(
-    () => Math.max(16, width / 2 - CARD_SIZE / 2),
-    [width]
-  );
 
   const selectedIndex = useMemo(
     () => items.findIndex((item) => item.key === selectedKey),
@@ -147,9 +144,38 @@ export default function HomeCalendarStrip({
 
   const targetIndex = selectedIndex >= 0 ? selectedIndex : todayIndex;
 
-  const centerIndex = useCallback(
+  const contentWidth = useMemo(() => {
+    if (items.length === 0) return 0;
+
+    return (
+      EDGE_PADDING * 2 +
+      items.length * CARD_SIZE +
+      Math.max(0, items.length - 1) * CARD_GAP
+    );
+  }, [items.length]);
+
+  const maxScrollOffset = useMemo(() => {
+    return Math.max(0, contentWidth - width);
+  }, [contentWidth, width]);
+
+  const getCenteredOffset = useCallback(
+    (index: number) => {
+      const itemCenter =
+        EDGE_PADDING + index * ITEM_SIZE + CARD_SIZE / 2;
+
+      const rawOffset = itemCenter - width / 2;
+
+      return Math.min(Math.max(rawOffset, 0), maxScrollOffset);
+    },
+    [maxScrollOffset, width]
+  );
+
+  const scrollToIndexSafely = useCallback(
     (index: number, animated: boolean) => {
       if (index < 0 || items.length === 0) return;
+
+      const safeIndex = Math.min(Math.max(index, 0), items.length - 1);
+      const offset = getCenteredOffset(safeIndex);
 
       if (centerTimerRef.current) {
         clearTimeout(centerTimerRef.current);
@@ -157,37 +183,42 @@ export default function HomeCalendarStrip({
 
       centerTimerRef.current = setTimeout(() => {
         requestAnimationFrame(() => {
-          listRef.current?.scrollToIndex({
-            index,
+          listRef.current?.scrollToOffset({
+            offset,
             animated,
-            viewPosition: 0.5,
           });
         });
       }, 60);
     },
-    [items.length]
+    [getCenteredOffset, items.length]
   );
 
   useEffect(() => {
-    centerIndex(targetIndex, false);
+    if (hasAutoScrolledRef.current) return;
+    if (targetIndex < 0) return;
+
+    hasAutoScrolledRef.current = true;
+    scrollToIndexSafely(targetIndex, false);
 
     return () => {
       if (centerTimerRef.current) {
         clearTimeout(centerTimerRef.current);
       }
     };
-  }, [centerIndex, targetIndex]);
+  }, [scrollToIndexSafely, targetIndex]);
 
   useFocusEffect(
     useCallback(() => {
-      centerIndex(targetIndex, false);
+      if (targetIndex >= 0) {
+        scrollToIndexSafely(targetIndex, false);
+      }
 
       return () => {
         if (centerTimerRef.current) {
           clearTimeout(centerTimerRef.current);
         }
       };
-    }, [centerIndex, targetIndex])
+    }, [scrollToIndexSafely, targetIndex])
   );
 
   const renderItem = useCallback(
@@ -202,14 +233,19 @@ export default function HomeCalendarStrip({
           today={today}
           onPress={() => {
             onSelect(item);
+
             const nextIndex = items.findIndex((day) => day.key === item.key);
-            centerIndex(nextIndex, true);
+            scrollToIndexSafely(nextIndex, true);
           }}
         />
       );
     },
-    [centerIndex, items, onSelect, selectedKey, todayKey]
+    [items, onSelect, scrollToIndexSafely, selectedKey, todayKey]
   );
+
+  const itemSeparator = useCallback(() => {
+    return <View style={styles.itemSeparator} />;
+  }, []);
 
   return (
     <View style={styles.wrap}>
@@ -241,40 +277,21 @@ export default function HomeCalendarStrip({
           horizontal
           showsHorizontalScrollIndicator={false}
           bounces
+          alwaysBounceHorizontal={false}
           overScrollMode="never"
-          decelerationRate="fast"
-          snapToInterval={ITEM_SIZE}
-          snapToAlignment="center"
-          disableIntervalMomentum
-          contentContainerStyle={[
-            styles.rowContent,
-            {
-              paddingLeft: sidePadding,
-              paddingRight: sidePadding,
-            },
-          ]}
+          contentInsetAdjustmentBehavior="never"
+          contentContainerStyle={styles.rowContent}
+          ItemSeparatorComponent={itemSeparator}
           getItemLayout={(_, index) => ({
             length: ITEM_SIZE,
             offset: ITEM_SIZE * index,
             index,
           })}
-          initialScrollIndex={targetIndex >= 0 ? targetIndex : 0}
-          onScrollToIndexFailed={(info) => {
-            setTimeout(() => {
-              listRef.current?.scrollToOffset({
-                offset: Math.max(0, info.averageItemLength * info.index),
-                animated: false,
-              });
-
-              requestAnimationFrame(() => {
-                centerIndex(info.index, false);
-              });
-            }, 80);
-          }}
           renderItem={renderItem}
-          initialNumToRender={9}
-          maxToRenderPerBatch={9}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
           windowSize={7}
+          removeClippedSubviews={false}
         />
       </View>
     </View>
@@ -324,7 +341,12 @@ const styles = StyleSheet.create({
   },
 
   rowContent: {
-    gap: CARD_GAP,
+    paddingLeft: EDGE_PADDING,
+    paddingRight: EDGE_PADDING,
+  },
+
+  itemSeparator: {
+    width: CARD_GAP,
   },
 
   dayPressable: {

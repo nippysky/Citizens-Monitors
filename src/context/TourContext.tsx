@@ -44,7 +44,7 @@ type TourContextValue = {
 
 const TourContext = createContext<TourContextValue | null>(null);
 
-function tabFromRoute(route: string) {
+function tabFromRoute(route: string): string {
   return route.split("/").filter(Boolean).pop() ?? "";
 }
 
@@ -55,24 +55,56 @@ export function TourProvider({ children }: { children: ReactNode }) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [targets, setTargets] = useState<Record<string, TourTargetRect>>({});
 
-  const hasCheckedStorage = useRef(false);
+  const hasCheckedStorageRef = useRef(false);
+  const isEndingTourRef = useRef(false);
+  const currentStepIndexRef = useRef(0);
+  const autoStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /* ── Auto-start the tour once after onboarding ── */
   useEffect(() => {
-    if (hasCheckedStorage.current) return;
+    currentStepIndexRef.current = currentStepIndex;
+  }, [currentStepIndex]);
+
+  const clearAutoStartTimer = useCallback(() => {
+    if (autoStartTimerRef.current) {
+      clearTimeout(autoStartTimerRef.current);
+      autoStartTimerRef.current = null;
+    }
+  }, []);
+
+  /* ── Auto-start the tour once after onboarding ───────────────────────────── */
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (hasCheckedStorageRef.current) return;
     if (!pathname.endsWith("/home")) return;
 
-    hasCheckedStorage.current = true;
+    hasCheckedStorageRef.current = true;
 
-    AsyncStorage.getItem(TOUR_STORAGE_KEY).then((value) => {
-      if (value === "true") return;
+    void AsyncStorage.getItem(TOUR_STORAGE_KEY)
+      .then((value) => {
+        if (cancelled) return;
+        if (value === "true") return;
 
-      setTimeout(() => {
-        setCurrentStepIndex(0);
-        setIsActive(true);
-      }, 900);
-    });
-  }, [pathname]);
+        autoStartTimerRef.current = setTimeout(() => {
+          if (cancelled) return;
+          if (isEndingTourRef.current) return;
+
+          setCurrentStepIndex(0);
+          setIsActive(true);
+        }, 900);
+      })
+      .catch((error) => {
+        if (__DEV__) {
+          console.warn("[TourProvider] failed to read tour state:", error);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      clearAutoStartTimer();
+    };
+  }, [clearAutoStartTimer, pathname]);
 
   const currentStep = useMemo<TourStep | null>(
     () => (isActive ? TOUR_STEPS[currentStepIndex] ?? null : null),
@@ -81,10 +113,12 @@ export function TourProvider({ children }: { children: ReactNode }) {
 
   const isLastStep = currentStepIndex >= TOUR_STEPS.length - 1;
 
-  /* ── Target registry ── */
+  /* ── Target registry ─────────────────────────────────────────────────────── */
+
   const registerTarget = useCallback((id: string, rect: TourTargetRect) => {
     setTargets((prev) => {
       const existing = prev[id];
+
       if (
         existing &&
         existing.x === rect.x &&
@@ -94,6 +128,7 @@ export function TourProvider({ children }: { children: ReactNode }) {
       ) {
         return prev;
       }
+
       return { ...prev, [id]: rect };
     });
   }, []);
@@ -101,61 +136,101 @@ export function TourProvider({ children }: { children: ReactNode }) {
   const unregisterTarget = useCallback((id: string) => {
     setTargets((prev) => {
       if (!prev[id]) return prev;
+
       const { [id]: _removed, ...rest } = prev;
       return rest;
     });
   }, []);
 
-  /* ── Cross-tab navigation — handled in an effect (NOT inside state setters) ── */
+  /* ── Cross-tab navigation ────────────────────────────────────────────────── */
+
   useEffect(() => {
     if (!isActive || !currentStep) return;
+
     const targetTab = tabFromRoute(currentStep.route);
     const currentTab = tabFromRoute(pathname);
+
     if (targetTab && targetTab !== currentTab) {
       router.navigate(currentStep.route as never);
     }
   }, [isActive, currentStep, pathname]);
 
-  /* ── Actions ── */
+  /* ── Actions ─────────────────────────────────────────────────────────────── */
+
   const startTour = useCallback(() => {
+    clearAutoStartTimer();
+    isEndingTourRef.current = false;
+
+    setTargets({});
     setCurrentStepIndex(0);
     setIsActive(true);
-  }, []);
+  }, [clearAutoStartTimer]);
 
   const endTour = useCallback(async () => {
+    if (isEndingTourRef.current) return;
+
+    isEndingTourRef.current = true;
+    clearAutoStartTimer();
+    hasCheckedStorageRef.current = true;
+
+    // Close the overlay immediately so it cannot keep blocking tab touches.
     setIsActive(false);
     setCurrentStepIndex(0);
-    await AsyncStorage.setItem(TOUR_STORAGE_KEY, "true");
-  }, []);
+    setTargets({});
+
+    try {
+      await AsyncStorage.setItem(TOUR_STORAGE_KEY, "true");
+    } catch (error) {
+      if (__DEV__) {
+        console.warn("[TourProvider] failed to save tour state:", error);
+      }
+    } finally {
+      isEndingTourRef.current = false;
+    }
+  }, [clearAutoStartTimer]);
 
   const next = useCallback(() => {
-    setCurrentStepIndex((prev) => {
-      const nextIndex = prev + 1;
-      if (nextIndex >= TOUR_STEPS.length) {
-        // Defer side effect — never call setState/navigate from inside an updater.
-        queueMicrotask(() => {
-          endTour();
-        });
-        return prev;
-      }
-      return nextIndex;
-    });
+    if (isEndingTourRef.current) return;
+
+    const currentIndex = currentStepIndexRef.current;
+    const nextIndex = currentIndex + 1;
+
+    if (nextIndex >= TOUR_STEPS.length) {
+      void endTour();
+      return;
+    }
+
+    currentStepIndexRef.current = nextIndex;
+    setCurrentStepIndex(nextIndex);
   }, [endTour]);
 
   const prev = useCallback(() => {
-    setCurrentStepIndex((cur) => Math.max(0, cur - 1));
+    if (isEndingTourRef.current) return;
+
+    setCurrentStepIndex((current) => {
+      const previousIndex = Math.max(0, current - 1);
+      currentStepIndexRef.current = previousIndex;
+      return previousIndex;
+    });
   }, []);
 
   const skip = useCallback(() => {
-    endTour();
+    void endTour();
   }, [endTour]);
 
   const resetTour = useCallback(async () => {
+    clearAutoStartTimer();
+
     await AsyncStorage.removeItem(TOUR_STORAGE_KEY);
-    hasCheckedStorage.current = false;
+
+    hasCheckedStorageRef.current = false;
+    isEndingTourRef.current = false;
+    currentStepIndexRef.current = 0;
+
+    setTargets({});
     setIsActive(false);
     setCurrentStepIndex(0);
-  }, []);
+  }, [clearAutoStartTimer]);
 
   const value = useMemo<TourContextValue>(
     () => ({
@@ -196,7 +271,11 @@ export function TourProvider({ children }: { children: ReactNode }) {
 
 export function useTour() {
   const ctx = useContext(TourContext);
-  if (!ctx) throw new Error("useTour must be used within TourProvider");
+
+  if (!ctx) {
+    throw new Error("useTour must be used within TourProvider");
+  }
+
   return ctx;
 }
 
@@ -204,11 +283,6 @@ export function useTour() {
  * Hook for screens with a ScrollView that contains tour targets.
  * When any of the listed `targetIds` becomes the active step, it scrolls
  * the screen back to top so the highlighted target is in view.
- *
- * Usage:
- *   const scrollRef = useRef<ScrollView>(null);
- *   useTourScrollReset(scrollRef, ["me.my-account"]);
- *   <ScrollView ref={scrollRef}>...</ScrollView>
  */
 export function useTourScrollReset(
   scrollRef: React.RefObject<ScrollView | null>,
@@ -220,13 +294,10 @@ export function useTourScrollReset(
     if (!isActive || !currentStep) return;
     if (!targetIds.includes(currentStep.targetId)) return;
 
-    // Wait for any tab navigation animation to settle, then snap to top.
-    // animated:false avoids visible motion behind the tour overlay
-    // and ensures the target is at its final position when measured.
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       scrollRef.current?.scrollTo({ y: 0, animated: false });
     }, 220);
 
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [isActive, currentStep, targetIds, scrollRef]);
 }

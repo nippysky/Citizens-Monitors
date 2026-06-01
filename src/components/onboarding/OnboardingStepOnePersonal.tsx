@@ -3,13 +3,13 @@ import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import BirthdaySheet from "@/components/ui/sheets/BirthdaySheet";
-import GenderSheet from "@/components/ui/sheets/GenderSheet";
-import SelectPickerSheet from "@/components/ui/sheets/SelectPickerSheet";
 import TutorialBanner from "@/components/onboarding/TutorialBanner";
 import AppInput from "@/components/ui/AppInput";
 import AppSelectField from "@/components/ui/AppSelectField";
 import AppText from "@/components/ui/AppText";
+import BirthdaySheet from "@/components/ui/sheets/BirthdaySheet";
+import GenderSheet from "@/components/ui/sheets/GenderSheet";
+import SelectPickerSheet from "@/components/ui/sheets/SelectPickerSheet";
 import { Theme } from "@/theme";
 import { BirthdayValue, Gender, StepOneForm } from "@/types/onboarding";
 
@@ -17,6 +17,83 @@ type Props = {
   value: StepOneForm;
   onChange: (value: StepOneForm) => void;
 };
+
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+function getMonthIndex(month: string): number {
+  const index = MONTHS.findIndex((item) => item === month);
+  return index >= 0 ? index : 0;
+}
+
+function getDaysInMonth(month: string, year: number): number {
+  return new Date(year, getMonthIndex(month) + 1, 0).getDate();
+}
+
+function formatBirthday(day: number, month: string, year: number): string {
+  return `${day} ${month}, ${year}`;
+}
+
+function getDefaultBirthdayValue(): BirthdayValue {
+  return {
+    day: 1,
+    month: "January",
+    year: 2000,
+    formatted: "1 January, 2000",
+  };
+}
+
+function parseBirthdayValue(
+  rawValue: string | undefined,
+  fallback?: BirthdayValue
+): BirthdayValue {
+  const fallbackValue = fallback ?? getDefaultBirthdayValue();
+  const birthday = rawValue?.trim();
+
+  if (!birthday) {
+    return { ...fallbackValue };
+  }
+
+  const match = birthday.match(/^(\d{1,2})\s+([A-Za-z]+),\s*(\d{4})$/);
+
+  if (!match) {
+    return { ...fallbackValue };
+  }
+
+  const day = Number(match[1]);
+  const month = match[2];
+  const year = Number(match[3]);
+
+  if (!Number.isFinite(day) || !Number.isFinite(year)) {
+    return { ...fallbackValue };
+  }
+
+  if (!MONTHS.includes(month)) {
+    return { ...fallbackValue };
+  }
+
+  const maxDay = getDaysInMonth(month, year);
+  const safeDay = Math.min(Math.max(day, 1), maxDay);
+
+  return {
+    day: safeDay,
+    month,
+    year,
+    formatted: formatBirthday(safeDay, month, year),
+  };
+}
 
 export default function OnboardingStepOnePersonal({ value, onChange }: Props) {
   const birthdaySheetRef = useRef<BottomSheetModal>(null);
@@ -26,14 +103,17 @@ export default function OnboardingStepOnePersonal({ value, onChange }: Props) {
   const [selectedGenderTemp, setSelectedGenderTemp] = useState<Gender>(
     value.gender || ""
   );
+
   const [countryQuery, setCountryQuery] = useState("");
 
-  const [birthdayTemp, setBirthdayTemp] = useState<BirthdayValue>({
-    day: 1,
-    month: "January",
-    year: 2000,
-    formatted: value.birthday || "1 January, 2000",
-  });
+  const [birthdayTemp, setBirthdayTemp] = useState<BirthdayValue>(() =>
+    parseBirthdayValue(value.birthday)
+  );
+
+  const handleOpenBirthdaySheet = (): void => {
+    setBirthdayTemp(parseBirthdayValue(value.birthday, birthdayTemp));
+    birthdaySheetRef.current?.present();
+  };
 
   const handleConfirmBirthday = (): void => {
     onChange({ ...value, birthday: birthdayTemp.formatted });
@@ -78,7 +158,7 @@ export default function OnboardingStepOnePersonal({ value, onChange }: Props) {
             label="Your Birthday"
             value={value.birthday}
             placeholder="Set your birthday"
-            onPress={() => birthdaySheetRef.current?.present()}
+            onPress={handleOpenBirthdaySheet}
             leftIcon={
               <MaterialCommunityIcons
                 name="calendar-month-outline"
