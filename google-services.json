@@ -12,7 +12,36 @@
           "package_name": "com.citizenmonitors.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "833971126530-0lt8o1e8vtnpgo4lbo43an0e33ndqlk8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.citizenmonitors.app",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "833971126530-ha982gopf0is7450ujirp274d9s20qil.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.citizenmonitors.app",
+            "certificate_hash": "6ab7450cce32a8524092232524bf73d5c866dccb"
+          }
+        },
+        {
+          "client_id": "833971126530-s0ereqo4p34a5kvm08lrm4e6958c8bjs.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.citizenmonitors.app",
+            "certificate_hash": "ad4d49e8d75c2a36a900483238906c7ab299d920"
+          }
+        },
+        {
+          "client_id": "833971126530-f78drcl6feolm9sei0cv6l5bv6r3hd7p.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDWbn9QN-isohZCmPoOF01F2reFMx8kW0c"
@@ -20,7 +49,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "833971126530-f78drcl6feolm9sei0cv6l5bv6r3hd7p.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "833971126530-i376uf33tnaq8tah00743vh19ngojira.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.citizenmonitors.app"
+              }
+            }
+          ]
         }
       }
     }

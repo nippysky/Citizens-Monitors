@@ -243,9 +243,9 @@ export default function SignUpScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+container: {
+  flexGrow: 1,
+},
   headerBlock: {
     gap: 20,
     marginBottom: 30,

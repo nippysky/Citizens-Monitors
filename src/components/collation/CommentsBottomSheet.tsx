@@ -6,7 +6,7 @@ import {
 } from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
 import { forwardRef, useCallback, useMemo, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Keyboard, Platform, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AppText from "@/components/ui/AppText";
@@ -95,7 +95,12 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
     ref
   ) {
     const insets = useSafeAreaInsets();
-    const snapPoints = useMemo(() => ["75%", "92%"], []);
+
+    /**
+     * Single high snap point by default.
+     * This prevents the sheet from opening halfway and hiding the input.
+     */
+    const snapPoints = useMemo(() => ["92%"], []);
 
     const postId = rawPostId ?? null;
 
@@ -157,6 +162,8 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
     }, [apiComments, comments, pendingComments, postId]);
 
     const close = useCallback(() => {
+      Keyboard.dismiss();
+
       if (ref && typeof ref !== "function" && ref.current) {
         ref.current.dismiss();
       }
@@ -287,8 +294,7 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
       [enqueue, isOnline, likeCommentMutation, likedIds, postId]
     );
 
-    const canSend =
-      text.trim().length > 0 && !createCommentMutation.isPending;
+    const canSend = text.trim().length > 0 && !createCommentMutation.isPending;
 
     return (
       <BottomSheetModal
@@ -296,8 +302,9 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
         snapPoints={snapPoints}
         index={0}
         enablePanDownToClose
+        enableDynamicSizing={false}
         topInset={insets.top + 12}
-        keyboardBehavior="interactive"
+        keyboardBehavior="extend"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
         backdropComponent={(props) => (
@@ -312,162 +319,175 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
         handleIndicatorStyle={styles.handle}
         backgroundStyle={styles.bg}
       >
-        <View style={styles.header}>
-          <View>
-            <AppText style={styles.headerTitle}>Comments</AppText>
+        <View style={styles.sheetBody}>
+          <View style={styles.header}>
+            <View style={styles.headerTextWrap}>
+              <AppText style={styles.headerTitle}>Comments</AppText>
 
-            {postId && !isOnline ? (
-              <AppText style={styles.headerSubtitle}>
-                Offline comments will sync automatically
-              </AppText>
-            ) : null}
+              {postId && !isOnline ? (
+                <AppText style={styles.headerSubtitle}>
+                  Offline comments will sync automatically
+                </AppText>
+              ) : null}
+            </View>
+
+            <Pressable onPress={close} hitSlop={8} style={styles.closeBtn}>
+              <Ionicons name="close" size={22} color={Theme.colors.textMuted} />
+            </Pressable>
           </View>
 
-          <Pressable onPress={close} hitSlop={8} style={styles.closeBtn}>
-            <Ionicons name="close" size={22} color={Theme.colors.textMuted} />
-          </Pressable>
-        </View>
-
-        <BottomSheetFlatList
-          data={resolvedComments}
-          keyExtractor={(comment) => comment.id}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.listContent}
-          keyboardShouldPersistTaps="handled"
-          refreshing={commentsQuery.isRefetching}
-          onRefresh={() => {
-            if (postId) {
-              void commentsQuery.refetch();
+          <BottomSheetFlatList
+            style={styles.list}
+            data={resolvedComments}
+            keyExtractor={(comment) => comment.id}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={
+              Platform.OS === "ios" ? "interactive" : "on-drag"
             }
-          }}
-          ListEmptyComponent={
-            commentsQuery.isLoading ? null : (
-              <View style={styles.emptyWrap}>
-                <Ionicons
-                  name="chatbubbles-outline"
-                  size={32}
-                  color={Theme.colors.textMuted}
-                />
-                <AppText style={styles.emptyTitle}>No comments yet</AppText>
-                <AppText style={styles.emptyText}>
-                  Be the first to respond to this pulse update.
-                </AppText>
-              </View>
-            )
-          }
-          renderItem={({ item }) => {
-            const isLiked =
-              likedIds.has(item.id) || item.isLikedByCurrentUser === true;
+            refreshing={commentsQuery.isRefetching}
+            onRefresh={() => {
+              if (postId) {
+                void commentsQuery.refetch();
+              }
+            }}
+            contentContainerStyle={[
+              styles.listContent,
+              resolvedComments.length === 0 && styles.listContentEmpty,
+            ]}
+            ListEmptyComponent={
+              commentsQuery.isLoading ? null : (
+                <View style={styles.emptyWrap}>
+                  <Ionicons
+                    name="chatbubbles-outline"
+                    size={32}
+                    color={Theme.colors.textMuted}
+                  />
+                  <AppText style={styles.emptyTitle}>No comments yet</AppText>
+                  <AppText style={styles.emptyText}>
+                    Be the first to respond to this pulse update.
+                  </AppText>
+                </View>
+              )
+            }
+            renderItem={({ item }) => {
+              const isLiked =
+                likedIds.has(item.id) || item.isLikedByCurrentUser === true;
 
-            const displayLikes = likeCounts[item.id] ?? item.likes;
+              const displayLikes = likeCounts[item.id] ?? item.likes;
 
-            return (
-              <View style={styles.commentCard}>
-                <View style={styles.commentHead}>
-                  <View style={styles.commentAuthorRow}>
-                    <Ionicons
-                      name={
-                        item.pendingSync
-                          ? "cloud-upload-outline"
-                          : "chatbox-ellipses-outline"
-                      }
-                      size={14}
-                      color={Theme.colors.textMuted}
-                    />
+              return (
+                <View style={styles.commentCard}>
+                  <View style={styles.commentHead}>
+                    <View style={styles.commentAuthorRow}>
+                      <Ionicons
+                        name={
+                          item.pendingSync
+                            ? "cloud-upload-outline"
+                            : "chatbox-ellipses-outline"
+                        }
+                        size={14}
+                        color={Theme.colors.textMuted}
+                      />
 
-                    <AppText style={styles.commentAuthor}>
-                      {item.author}
+                      <AppText style={styles.commentAuthor}>
+                        {item.author}
+                      </AppText>
+                    </View>
+
+                    <AppText style={styles.commentTime}>
+                      {item.pendingSync
+                        ? "Pending sync"
+                        : `${item.minutesAgo} min ago`}
                     </AppText>
                   </View>
 
-                  <AppText style={styles.commentTime}>
-                    {item.pendingSync
-                      ? "Pending sync"
-                      : `${item.minutesAgo} min ago`}
-                  </AppText>
-                </View>
+                  <AppText style={styles.commentBody}>{item.body}</AppText>
 
-                <AppText style={styles.commentBody}>{item.body}</AppText>
-
-                <View style={styles.commentActions}>
-                  <Pressable
-                    onPress={() => {
-                      void toggleLike(item);
-                    }}
-                    style={styles.likeBtn}
-                    hitSlop={6}
-                    disabled={item.pendingSync}
-                  >
-                    <Ionicons
-                      name={isLiked ? "thumbs-up" : "thumbs-up-outline"}
-                      size={15}
-                      color={
-                        isLiked ? Theme.colors.primary : Theme.colors.textMuted
-                      }
-                    />
-
-                    <AppText
-                      style={[
-                        styles.likeText,
-                        isLiked && { color: Theme.colors.primary },
-                      ]}
+                  <View style={styles.commentActions}>
+                    <Pressable
+                      onPress={() => {
+                        void toggleLike(item);
+                      }}
+                      style={styles.likeBtn}
+                      hitSlop={6}
+                      disabled={item.pendingSync}
                     >
-                      {displayLikes} Likes
-                    </AppText>
-                  </Pressable>
+                      <Ionicons
+                        name={isLiked ? "thumbs-up" : "thumbs-up-outline"}
+                        size={15}
+                        color={
+                          isLiked
+                            ? Theme.colors.primary
+                            : Theme.colors.textMuted
+                        }
+                      />
+
+                      <AppText
+                        style={[
+                          styles.likeText,
+                          isLiked && { color: Theme.colors.primary },
+                        ]}
+                      >
+                        {displayLikes} Likes
+                      </AppText>
+                    </Pressable>
+                  </View>
                 </View>
-              </View>
-            );
-          }}
-        />
-
-        <View
-          style={[
-            styles.inputContainer,
-            { paddingBottom: insets.bottom + 10 },
-          ]}
-        >
-          <View style={styles.inputRow}>
-            <View style={styles.inputIconWrap}>
-              <Ionicons
-                name="chatbubbles-outline"
-                size={20}
-                color={Theme.colors.textMuted}
-              />
-            </View>
-
-            <View style={styles.inputFieldWrap}>
-              <BottomSheetTextInput
-                placeholder="Leave Comment, @ To Mention"
-                placeholderTextColor={Theme.colors.textSoft}
-                value={text}
-                onChangeText={setText}
-                style={styles.input}
-                returnKeyType="send"
-                onSubmitEditing={() => {
-                  void submit();
-                }}
-                multiline
-              />
-            </View>
-          </View>
-
-          <Pressable
-            onPress={() => {
-              void submit();
+              );
             }}
-            disabled={!canSend}
-            style={[styles.submitBtn, !canSend && styles.submitBtnDisabled]}
+          />
+
+          <View
+            style={[
+              styles.inputContainer,
+              {
+                paddingBottom: Math.max(insets.bottom + 10, 18),
+              },
+            ]}
           >
-            <AppText
-              style={[
-                styles.submitBtnText,
-                !canSend && styles.submitBtnTextDisabled,
-              ]}
+            <View style={styles.inputRow}>
+              <View style={styles.inputIconWrap}>
+                <Ionicons
+                  name="chatbubbles-outline"
+                  size={20}
+                  color={Theme.colors.textMuted}
+                />
+              </View>
+
+              <View style={styles.inputFieldWrap}>
+                <BottomSheetTextInput
+                  placeholder="Leave Comment, @ To Mention"
+                  placeholderTextColor={Theme.colors.textSoft}
+                  value={text}
+                  onChangeText={setText}
+                  style={styles.input}
+                  returnKeyType="send"
+                  onSubmitEditing={() => {
+                    void submit();
+                  }}
+                  multiline
+                />
+              </View>
+            </View>
+
+            <Pressable
+              onPress={() => {
+                void submit();
+              }}
+              disabled={!canSend}
+              style={[styles.submitBtn, !canSend && styles.submitBtnDisabled]}
             >
-              {isOnline ? "Submit Comment" : "Save Offline"}
-            </AppText>
-          </Pressable>
+              <AppText
+                style={[
+                  styles.submitBtnText,
+                  !canSend && styles.submitBtnTextDisabled,
+                ]}
+              >
+                {isOnline ? "Submit Comment" : "Save Offline"}
+              </AppText>
+            </Pressable>
+          </View>
         </View>
       </BottomSheetModal>
     );
@@ -482,12 +502,19 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
   },
+
   handle: {
     backgroundColor: "rgba(17,26,50,0.12)",
     width: 44,
   },
+
+  sheetBody: {
+    flex: 1,
+    overflow: "hidden",
+  },
+
   header: {
-    minHeight: 58,
+    minHeight: 64,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -495,17 +522,26 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.colors.border,
   },
+
+  headerTextWrap: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 12,
+  },
+
   headerTitle: {
     fontSize: 18,
     lineHeight: 24,
     fontFamily: Theme.fonts.heading.semibold,
     color: Theme.colors.text,
   },
+
   headerSubtitle: {
     fontSize: 11.5,
     lineHeight: 16,
     color: Theme.colors.textMuted,
   },
+
   closeBtn: {
     width: 36,
     height: 36,
@@ -514,11 +550,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
+  list: {
+    flex: 1,
+  },
+
   listContent: {
     paddingHorizontal: 16,
     paddingTop: 14,
-    paddingBottom: 12,
+    paddingBottom: 20,
   },
+
+  listContentEmpty: {
+    flexGrow: 1,
+    justifyContent: "center",
+  },
+
   commentCard: {
     borderBottomWidth: 1,
     borderBottomColor: Theme.colors.border,
@@ -526,60 +573,71 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     gap: 6,
   },
+
   commentHead: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
+
   commentAuthorRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
+
   commentAuthor: {
     fontSize: 14,
     lineHeight: 18,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
   },
+
   commentTime: {
     fontSize: 11,
     lineHeight: 14,
     color: Theme.colors.textMuted,
   },
+
   commentBody: {
     fontSize: 14,
     lineHeight: 22,
     color: Theme.colors.text,
   },
+
   commentActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: 16,
     paddingTop: 2,
   },
+
   likeBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
   },
+
   likeText: {
     fontSize: 12,
     lineHeight: 16,
     color: Theme.colors.textMuted,
   },
+
   emptyWrap: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 48,
+    paddingHorizontal: 20,
     gap: 8,
   },
+
   emptyTitle: {
     fontSize: 16,
     lineHeight: 22,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
   },
+
   emptyText: {
     fontSize: 13,
     lineHeight: 18,
@@ -587,6 +645,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     maxWidth: 240,
   },
+
   inputContainer: {
     backgroundColor: Theme.colors.surface,
     borderTopWidth: 1,
@@ -595,17 +654,20 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     gap: 10,
   },
+
   inputRow: {
     flexDirection: "row",
     alignItems: "flex-end",
     gap: 10,
   },
+
   inputIconWrap: {
     width: 36,
     height: 44,
     alignItems: "center",
     justifyContent: "center",
   },
+
   inputFieldWrap: {
     flex: 1,
     minHeight: 44,
@@ -615,11 +677,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
+
   input: {
-    fontSize: 14,
-    color: Theme.colors.text,
+    minHeight: 22,
     maxHeight: 100,
+    fontSize: 14,
+    lineHeight: 20,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.regular,
+    padding: 0,
+    textAlignVertical: "top",
   },
+
   submitBtn: {
     minHeight: 44,
     borderRadius: 14,
@@ -627,15 +696,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
   submitBtnDisabled: {
     backgroundColor: "#D1D5DB",
   },
+
   submitBtnText: {
     fontSize: 14,
     lineHeight: 20,
     color: Theme.colors.white,
     fontFamily: Theme.fonts.body.semibold,
   },
+
   submitBtnTextDisabled: {
     color: "#9CA3AF",
   },

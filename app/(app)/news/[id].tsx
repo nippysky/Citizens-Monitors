@@ -9,6 +9,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AppGradientScreen from "@/components/app/AppGradientScreen";
 import BackButton from "@/components/ui/BackButton";
@@ -21,9 +22,18 @@ export default function NewsDetailsScreen() {
   const params = useLocalSearchParams<{ id?: string; slug?: string }>();
   const slug = normalizeRouteParam(params.slug) ?? normalizeRouteParam(params.id);
 
+  const insets = useSafeAreaInsets();
   const { showToast } = useAppToast();
+
   const articleQuery = useNewsInsightQuery(slug);
   const article = articleQuery.data;
+
+  const scrollContentStyle = [
+    styles.content,
+    {
+      paddingBottom: Math.max(insets.bottom + 96, 128),
+    },
+  ];
 
   const handleShare = async () => {
     if (!article) return;
@@ -53,10 +63,10 @@ export default function NewsDetailsScreen() {
 
   if (articleQuery.isLoading && !article) {
     return (
-      <AppGradientScreen>
+      <AppGradientScreen scroll={false}>
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.content}
+          contentContainerStyle={scrollContentStyle}
         >
           <View style={styles.topBar}>
             <BackButton label="" />
@@ -71,7 +81,14 @@ export default function NewsDetailsScreen() {
   if (articleQuery.isError || !article) {
     return (
       <AppGradientScreen scroll={false}>
-        <View style={styles.missingWrap}>
+        <View
+          style={[
+            styles.missingWrap,
+            {
+              paddingBottom: Math.max(insets.bottom + 24, 40),
+            },
+          ]}
+        >
           <View style={styles.topBar}>
             <BackButton label="" />
           </View>
@@ -108,10 +125,10 @@ export default function NewsDetailsScreen() {
   const heroImage = article.heroImageUrl ?? article.thumbnailUrl;
 
   return (
-    <AppGradientScreen>
+    <AppGradientScreen scroll={false}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={scrollContentStyle}
         bounces
         refreshControl={
           <RefreshControl
@@ -263,7 +280,6 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     paddingTop: 6,
-    paddingBottom: 28,
   },
 
   topBar: {

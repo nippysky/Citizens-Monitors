@@ -9,6 +9,7 @@ import NotificationList from "@/components/notifications/NotificationList";
 import NotificationsSkeleton from "@/components/notifications/NotificationsSkeleton";
 import AppText from "@/components/ui/AppText";
 import BackButton from "@/components/ui/BackButton";
+import { Paths } from "@/constants/paths";
 import {
   useMarkAllNotificationsReadMutation,
   useMarkNotificationReadMutation,
@@ -16,6 +17,336 @@ import {
 } from "@/hooks/api/useNotificationsQueries";
 import { AppNotification } from "@/lib/api/notifications.api";
 import { Theme } from "@/theme";
+
+type NotificationRecord = AppNotification & Record<string, unknown>;
+
+type ParsedPayload = {
+  slug?: string;
+  articleSlug?: string;
+  newsSlug?: string;
+  articleId?: string;
+  newsId?: string;
+  notificationId?: string;
+  type?: string;
+  notificationType?: string;
+  category?: string;
+  screen?: string;
+  url?: string;
+  deepLink?: string;
+  link?: string;
+  payload?: unknown;
+  metadata?: unknown;
+  meta?: unknown;
+  data?: unknown;
+  body?: unknown;
+  message?: unknown;
+  description?: unknown;
+  subtitle?: unknown;
+  content?: unknown;
+  [key: string]: unknown;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function tryParseJsonValue(value: unknown, depth = 0): unknown {
+  if (depth > 4) return null;
+
+  if (isRecord(value)) return value;
+  if (typeof value !== "string") return null;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const looksLikeJson =
+    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    trimmed.includes('\\"slug\\"') ||
+    trimmed.includes('\\"articleId\\"') ||
+    trimmed.includes('\\"newsId\\"');
+
+  if (!looksLikeJson) return null;
+
+  try {
+    const parsed = JSON.parse(trimmed);
+
+    if (typeof parsed === "string") {
+      return tryParseJsonValue(parsed, depth + 1);
+    }
+
+    return parsed;
+  } catch {
+    const unescaped = trimmed.replace(/\\"/g, '"');
+
+    if (unescaped !== trimmed) {
+      try {
+        const parsed = JSON.parse(unescaped);
+
+        if (typeof parsed === "string") {
+          return tryParseJsonValue(parsed, depth + 1);
+        }
+
+        return parsed;
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  }
+}
+
+function tryParseJsonObject(value: unknown): ParsedPayload | null {
+  const parsed = tryParseJsonValue(value);
+
+  if (isRecord(parsed)) {
+    return parsed as ParsedPayload;
+  }
+
+  return null;
+}
+
+function extractJsonStringValue(source: string, key: string): string | undefined {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regex = new RegExp(`"${escapedKey}"\\s*:\\s*"([^"]+)"`, "i");
+  const match = source.match(regex);
+
+  return match?.[1]?.trim() || undefined;
+}
+
+function getStringField(
+  source: Record<string, unknown> | null | undefined,
+  keys: string[]
+): string | undefined {
+  if (!source) return undefined;
+
+  for (const key of keys) {
+    const value = source[key];
+
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return undefined;
+}
+
+function scanRecordForArticlePayload(
+  record: Record<string, unknown>
+): ParsedPayload | null {
+  for (const value of Object.values(record)) {
+    const parsed = tryParseJsonObject(value);
+
+    if (parsed) {
+      const slug = getStringField(parsed, [
+        "slug",
+        "articleSlug",
+        "newsSlug",
+      ]);
+
+      const articleId = getStringField(parsed, ["articleId", "newsId"]);
+
+      if (slug || articleId) {
+        return parsed;
+      }
+    }
+
+    if (typeof value === "string") {
+      const slug = extractJsonStringValue(value, "slug");
+      const articleSlug = extractJsonStringValue(value, "articleSlug");
+      const newsSlug = extractJsonStringValue(value, "newsSlug");
+      const articleId = extractJsonStringValue(value, "articleId");
+      const newsId = extractJsonStringValue(value, "newsId");
+
+      if (slug || articleSlug || newsSlug || articleId || newsId) {
+        return {
+          slug,
+          articleSlug,
+          newsSlug,
+          articleId,
+          newsId,
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+function getDeepNotificationPayload(item: AppNotification): ParsedPayload {
+  const record = item as NotificationRecord;
+
+  const directPayload =
+    tryParseJsonObject(record.data) ??
+    tryParseJsonObject(record.payload) ??
+    tryParseJsonObject(record.metadata) ??
+    tryParseJsonObject(record.meta);
+
+  const visiblePayload =
+    tryParseJsonObject(record.body) ??
+    tryParseJsonObject(record.message) ??
+    tryParseJsonObject(record.description) ??
+    tryParseJsonObject(record.subtitle) ??
+    tryParseJsonObject(record.content);
+
+  const nestedPayload =
+    tryParseJsonObject(directPayload?.payload) ??
+    tryParseJsonObject(directPayload?.metadata) ??
+    tryParseJsonObject(directPayload?.meta) ??
+    tryParseJsonObject(directPayload?.data) ??
+    tryParseJsonObject(directPayload?.body) ??
+    tryParseJsonObject(directPayload?.message);
+
+  const scannedPayload = scanRecordForArticlePayload(record);
+
+  return {
+    ...(visiblePayload ?? {}),
+    ...(nestedPayload ?? {}),
+    ...(directPayload ?? {}),
+    ...(scannedPayload ?? {}),
+    ...record,
+  };
+}
+
+function getArticleRouteKey(item: AppNotification): string | null {
+  const payload = getDeepNotificationPayload(item);
+
+  const slug = getStringField(payload, [
+    "slug",
+    "articleSlug",
+    "newsSlug",
+  ]);
+
+  if (slug) return slug;
+
+  const articleId = getStringField(payload, ["articleId", "newsId"]);
+
+  return articleId ?? null;
+}
+
+function getNotificationType(item: AppNotification): string {
+  const payload = getDeepNotificationPayload(item);
+
+  const value =
+    getStringField(payload, [
+      "type",
+      "notificationType",
+      "category",
+      "screen",
+    ]) ?? "";
+
+  return value.toLowerCase();
+}
+
+function hasArticleMetadata(item: AppNotification): boolean {
+  const payload = getDeepNotificationPayload(item);
+
+  return Boolean(
+    getStringField(payload, [
+      "slug",
+      "articleSlug",
+      "newsSlug",
+      "articleId",
+      "newsId",
+    ])
+  );
+}
+
+function isNewsNotification(item: AppNotification): boolean {
+  const type = getNotificationType(item);
+
+  if (
+    type.includes("news") ||
+    type.includes("article") ||
+    type.includes("insight")
+  ) {
+    return true;
+  }
+
+  /**
+   * Current backend payload for news notifications includes slug/articleId
+   * inside the body JSON. Normal app notifications should not use these keys.
+   */
+  return hasArticleMetadata(item);
+}
+
+function normalizeInternalUrl(url?: string): string | null {
+  if (!url) return null;
+
+  const trimmed = url.trim();
+  const lower = trimmed.toLowerCase();
+
+  if (
+    !trimmed ||
+    trimmed === "/" ||
+    lower === "citizenmonitors:" ||
+    lower === "citizenmonitors://" ||
+    lower === "citizenmonitors:///"
+  ) {
+    return null;
+  }
+
+  if (trimmed.startsWith("/")) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith("citizenmonitors://")) {
+    const withoutScheme = trimmed.replace(/^citizenmonitors:\/+/, "/");
+
+    if (!withoutScheme || withoutScheme === "/") return null;
+
+    if (withoutScheme.startsWith("/news/")) {
+      return `/(app)${withoutScheme}`;
+    }
+
+    if (withoutScheme.startsWith("/notification/")) {
+      return `/(app)${withoutScheme}`;
+    }
+
+    if (withoutScheme.startsWith("/notifications")) {
+      return Paths.appNotifications;
+    }
+
+    return withoutScheme;
+  }
+
+  return null;
+}
+
+function openNotificationRoute(item: AppNotification): void {
+  const payload = getDeepNotificationPayload(item);
+
+  /**
+   * 1. News/article notifications go to news detail.
+   */
+  const articleKey = getArticleRouteKey(item);
+
+  if (isNewsNotification(item) && articleKey) {
+    router.push(Paths.newsDetails(articleKey) as never);
+    return;
+  }
+
+  /**
+   * 2. Other valid app deep links can still work.
+   */
+  const explicitUrl =
+    getStringField(payload, ["url", "deepLink", "link"]) ?? undefined;
+
+  const normalizedUrl = normalizeInternalUrl(explicitUrl);
+
+  if (normalizedUrl) {
+    router.push(normalizedUrl as never);
+    return;
+  }
+
+  /**
+   * 3. Normal non-news notifications go to the notification detail screen.
+   * Your actual route is singular:
+   * app/(app)/notification/[id].tsx
+   */
+  router.push(Paths.appNotificationDetails(item.id) as never);
+}
 
 export default function NotificationsScreen() {
   const notificationsQuery = useNotificationsInfiniteQuery();
@@ -54,14 +385,11 @@ export default function NotificationsScreen() {
   const handleOpenNotification = (item: AppNotification): void => {
     if (!item.isRead) {
       void markReadMutation.mutateAsync(item.id).catch(() => {
-        // Detail endpoint also marks read, so navigation should not be blocked.
+        // Navigation should not be blocked by read-status update failure.
       });
     }
 
-    router.push({
-      pathname: "/notifications/[id]" as never,
-      params: { id: item.id },
-    });
+    openNotificationRoute(item);
   };
 
   const handleMarkAllRead = (): void => {

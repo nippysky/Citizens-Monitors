@@ -10,7 +10,9 @@
 import { Alert } from "react-native";
 import { router } from "expo-router";
 import { useCallback, useEffect, useRef } from "react";
+import type { NotificationResponse } from "expo-notifications";
 
+import { Paths } from "@/constants/paths";
 import { useAuth } from "@/context/AuthContext";
 import { registerPushToken } from "@/lib/api/pushToken.api";
 import {
@@ -62,14 +64,214 @@ function serializeNativePushToken(token: unknown): string | null {
   }
 }
 
+function tryParseJsonObject(value: unknown): AppNotificationData | null {
+  if (!value) return null;
+
+  if (typeof value === "object" && !Array.isArray(value)) {
+    return value as AppNotificationData;
+  }
+
+  if (typeof value !== "string") return null;
+
+  const trimmed = value.trim();
+
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as AppNotificationData;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function getStringFromData(
+  data: AppNotificationData | null | undefined,
+  keys: string[]
+): string | null {
+  if (!data) return null;
+
+  for (const key of keys) {
+    const value = data[key];
+
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+function getRouteDataFromNotificationResponse(
+  response: NotificationResponse | null | undefined
+): AppNotificationData | null {
+  if (!response) return null;
+
+  const content = response.notification.request.content;
+
+  /**
+   * Correct push payloads should put route metadata inside `data`.
+   * But the current backend appears to be putting a JSON object inside the
+   * visible push body, e.g.
+   * body: {"slug":"...","articleId":"..."}
+   *
+   * So we merge both:
+   *   - parsed body/title/subtitle if they contain JSON
+   *   - content.data from Expo
+   *
+   * Explicit Expo data wins over parsed visible text.
+   */
+  const expoData = getNotificationDataFromResponse(response) ?? {};
+  const parsedBody = tryParseJsonObject(content.body);
+  const parsedSubtitle = tryParseJsonObject(content.subtitle);
+  const parsedTitle = tryParseJsonObject(content.title);
+
+  const nestedPayload =
+    tryParseJsonObject(expoData.payload) ??
+    tryParseJsonObject(expoData.metadata) ??
+    tryParseJsonObject(expoData.meta) ??
+    tryParseJsonObject(expoData.notification);
+
+  const mergedData = {
+    ...(parsedTitle ?? {}),
+    ...(parsedSubtitle ?? {}),
+    ...(parsedBody ?? {}),
+    ...(nestedPayload ?? {}),
+    ...expoData,
+  } as AppNotificationData;
+
+  return Object.keys(mergedData).length > 0 ? mergedData : null;
+}
+
+function isBareCitizenMonitorsUrl(url: string): boolean {
+  const normalized = url.trim().toLowerCase();
+
+  return (
+    normalized === "citizenmonitors://" ||
+    normalized === "citizenmonitors:///" ||
+    normalized === "citizenmonitors:" ||
+    normalized === "/"
+  );
+}
+
+function normalizeInternalUrl(url: string): string | null {
+  const trimmed = url.trim();
+
+  if (!trimmed || isBareCitizenMonitorsUrl(trimmed)) {
+    return null;
+  }
+
+  if (trimmed.startsWith("/")) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith("citizenmonitors://")) {
+    const withoutScheme = trimmed.replace(/^citizenmonitors:\/+/, "/");
+
+    if (!withoutScheme || withoutScheme === "/") {
+      return null;
+    }
+
+    if (withoutScheme.startsWith("/(app)") || withoutScheme.startsWith("/(public)")) {
+      return withoutScheme;
+    }
+
+    /**
+     * Friendly fallback if backend sends something like:
+     * citizenmonitors://news/article-slug
+     */
+    if (withoutScheme.startsWith("/news/")) {
+      return `/(app)${withoutScheme}`;
+    }
+
+    if (withoutScheme.startsWith("/notifications")) {
+      return `/(app)${withoutScheme}`;
+    }
+
+    return withoutScheme;
+  }
+
+  return null;
+}
+
+function getArticleRouteKey(data: AppNotificationData | null): string | null {
+  return getStringFromData(data, [
+    "slug",
+    "articleSlug",
+    "newsSlug",
+    "articleId",
+    "newsId",
+    "id",
+  ]);
+}
+
+function isArticleNotification(data: AppNotificationData | null): boolean {
+  if (!data) return false;
+
+  const type =
+    typeof data.type === "string" ? data.type.trim().toLowerCase() : "";
+
+  const screen =
+    typeof data.screen === "string" ? data.screen.trim().toLowerCase() : "";
+
+  if (
+    type.includes("news") ||
+    type.includes("article") ||
+    type.includes("insight") ||
+    screen.includes("news") ||
+    screen.includes("article") ||
+    screen.includes("insight")
+  ) {
+    return true;
+  }
+
+  return Boolean(
+    getStringFromData(data, [
+      "slug",
+      "articleSlug",
+      "newsSlug",
+      "articleId",
+      "newsId",
+    ])
+  );
+}
+
 // ─── Notification tap routing ────────────────────────────────────────────────
 
 function handleNotificationRoute(data: AppNotificationData | null): void {
   if (!data) return;
 
-  if (typeof data.url === "string" && data.url.length > 0) {
-    router.push(data.url as never);
-    return;
+  /**
+   * News/article notifications should go directly to the article details page.
+   * This is intentionally checked before `url`, because the current backend
+   * can send a bad bare URL like citizenmonitors:/// together with useful
+   * article metadata.
+   */
+  if (isArticleNotification(data)) {
+    const articleKey = getArticleRouteKey(data);
+
+    if (articleKey) {
+      router.push(Paths.newsDetails(articleKey) as never);
+      return;
+    }
+  }
+
+  const explicitUrl = getStringFromData(data, ["url", "deepLink", "link"]);
+
+  if (explicitUrl) {
+    const normalizedUrl = normalizeInternalUrl(explicitUrl);
+
+    if (normalizedUrl) {
+      router.push(normalizedUrl as never);
+      return;
+    }
   }
 
   if (data.type === "result-submitted" && typeof data.collationId === "string") {
@@ -216,7 +418,7 @@ export default function NotificationsGate(): null {
         const lastResponse = await getLastNotificationResponseAsync();
 
         if (mounted && lastResponse) {
-          const data = getNotificationDataFromResponse(lastResponse);
+          const data = getRouteDataFromNotificationResponse(lastResponse);
           handleNotificationRoute(data);
           await clearLastNotificationResponseAsync();
         }
@@ -243,7 +445,7 @@ export default function NotificationsGate(): null {
 
     // Tap response: user tapped a notification from tray, banner, or lock screen.
     const responseSub = addNotificationResponseListener((response) => {
-      const data = getNotificationDataFromResponse(response);
+      const data = getRouteDataFromNotificationResponse(response);
       handleNotificationRoute(data);
     });
 

@@ -7,7 +7,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 type Props = {
   children: ReactNode;
@@ -15,7 +15,7 @@ type Props = {
   footer?: ReactNode;
   /**
    * Change this value to force the ScrollView to remount and reset
-   * its scroll offset back to the top.  Typically pass the current
+   * its scroll offset back to the top. Typically pass the current
    * step number so every navigation resets the position.
    */
   scrollKey?: string | number;
@@ -27,21 +27,35 @@ export default function AppPageShell({
   footer,
   scrollKey,
 }: Props) {
+  const insets = useSafeAreaInsets();
+
   const content = scroll ? (
     <ScrollView
       key={scrollKey}
-      contentContainerStyle={styles.scrollContent}
+      contentContainerStyle={[
+        styles.scrollContent,
+        {
+          paddingBottom: Math.max(insets.bottom + 28, 44),
+        },
+      ]}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+      automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+      contentInsetAdjustmentBehavior="never"
       bounces={false}
+      overScrollMode="never"
     >
       <View style={styles.inner}>{children}</View>
+
       {footer ? <View style={styles.footer}>{footer}</View> : null}
     </ScrollView>
   ) : (
-    <View style={styles.inner}>
-      {children}
-      {footer ? <View style={styles.footer}>{footer}</View> : null}
+    <View style={styles.nonScrollContent}>
+      <View style={styles.inner}>
+        {children}
+        {footer ? <View style={styles.footerNoScroll}>{footer}</View> : null}
+      </View>
     </View>
   );
 
@@ -54,9 +68,11 @@ export default function AppPageShell({
         end={{ x: 0.5, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
+
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
       >
         {content}
       </KeyboardAvoidingView>
@@ -75,7 +91,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 18,
+  },
+  nonScrollContent: {
+    flex: 1,
   },
   inner: {
     flex: 1,
@@ -84,6 +102,11 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
+  },
+  footerNoScroll: {
+    paddingTop: 12,
     paddingBottom: 12,
   },
 });

@@ -2,12 +2,21 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   FlatList,
   Linking,
   ListRenderItemInfo,
   Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
   Pressable,
   ScrollView,
@@ -109,21 +118,92 @@ function getPollingUnitAddress(item: PollingUnitLookupItem): string {
   );
 }
 
-function getPollingUnitMapUrl(item: PollingUnitLookupItem): string {
-  const directUrl = item.location?.google_map_url?.trim();
+function toCoordinate(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
 
-  if (directUrl) return directUrl;
-
-  const latitude = item.location?.latitude;
-  const longitude = item.location?.longitude;
-
-  if (typeof latitude === "number" && typeof longitude === "number") {
-    return `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
   }
 
-  const query = encodeURIComponent(getPollingUnitAddress(item));
+  return null;
+}
 
-  return `https://www.google.com/maps/search/?api=1&query=${query}`;
+function getPollingUnitCoordinates(item: PollingUnitLookupItem): {
+  latitude: number;
+  longitude: number;
+} | null {
+  const latitude = toCoordinate(item.location?.latitude);
+  const longitude = toCoordinate(item.location?.longitude);
+
+  if (latitude === null || longitude === null) return null;
+
+  return { latitude, longitude };
+}
+
+function getPollingUnitMapCandidates(item: PollingUnitLookupItem): string[] {
+  const candidates: string[] = [];
+  const coordinates = getPollingUnitCoordinates(item);
+  const directUrl = item.location?.google_map_url?.trim();
+  const address = getPollingUnitAddress(item);
+  const label = getPollingUnitName(item);
+  const query = coordinates
+    ? `${coordinates.latitude},${coordinates.longitude}`
+    : address;
+
+  const encodedQuery = encodeURIComponent(query);
+  const encodedLabel = encodeURIComponent(label);
+
+  if (Platform.OS === "android") {
+    if (coordinates) {
+      candidates.push(
+        `geo:${coordinates.latitude},${coordinates.longitude}?q=${coordinates.latitude},${coordinates.longitude}(${encodedLabel})`
+      );
+    } else {
+      candidates.push(`geo:0,0?q=${encodedQuery}`);
+    }
+  }
+
+  if (Platform.OS === "ios") {
+    candidates.push(`comgooglemaps://?q=${encodedQuery}`);
+    candidates.push(`maps://?q=${encodedQuery}`);
+  }
+
+  if (directUrl) {
+    candidates.push(directUrl);
+  }
+
+  candidates.push(
+    `https://www.google.com/maps/search/?api=1&query=${encodedQuery}`
+  );
+
+  return Array.from(new Set(candidates));
+}
+
+async function openPollingUnitMap(item: PollingUnitLookupItem): Promise<boolean> {
+  const candidates = getPollingUnitMapCandidates(item);
+
+  for (const url of candidates) {
+    try {
+      const isWebUrl = url.startsWith("http://") || url.startsWith("https://");
+
+      if (isWebUrl) {
+        await Linking.openURL(url);
+        return true;
+      }
+
+      const canOpen = await Linking.canOpenURL(url);
+
+      if (canOpen) {
+        await Linking.openURL(url);
+        return true;
+      }
+    } catch {
+      // Try the next candidate.
+    }
+  }
+
+  return false;
 }
 
 function pollingUnitMatchesSearch(
@@ -489,7 +569,12 @@ function PollingUnitResultsModal({
 }) {
   const insets = useSafeAreaInsets();
   const { showToast } = useToastContext();
+
+  const listRef = useRef<FlatList<PollingUnitLookupItem>>(null);
+  const showBackToTopRef = useRef(false);
+
   const [searchQuery, setSearchQuery] = useState("");
+  const [showBackToTop, setShowBackToTop] = useState(false);
 
   const filteredResults = useMemo(
     () => results.filter((item) => pollingUnitMatchesSearch(item, searchQuery)),
@@ -499,105 +584,62 @@ function PollingUnitResultsModal({
   useEffect(() => {
     if (visible) {
       setSearchQuery("");
+      setShowBackToTop(false);
+      showBackToTopRef.current = false;
+
+      requestAnimationFrame(() => {
+        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      });
     }
   }, [visible]);
 
-  const handleOpenMap = async (item: PollingUnitLookupItem): Promise<void> => {
-    const url = getPollingUnitMapUrl(item);
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    });
+  }, [searchQuery]);
 
-    try {
-      const canOpen = await Linking.canOpenURL(url);
+  const handleOpenMap = useCallback(
+    async (item: PollingUnitLookupItem): Promise<void> => {
+      const opened = await openPollingUnitMap(item);
 
-      if (!canOpen) {
+      if (!opened) {
         showToast({
           type: "error",
-          message: "Unable to open maps on this device.",
+          message: "Unable to open map location on this device.",
         });
-        return;
       }
-
-      await Linking.openURL(url);
-    } catch {
-      showToast({
-        type: "error",
-        message: "Unable to open map location.",
-      });
-    }
-  };
-
-  const renderItem = ({
-    item,
-    index,
-  }: ListRenderItemInfo<PollingUnitLookupItem>) => (
-    <PollingUnitResultCard
-      item={item}
-      index={index}
-      onOpenMap={() => {
-        void handleOpenMap(item);
-      }}
-    />
+    },
+    [showToast]
   );
 
-  const renderHeader = () => (
-    <View style={styles.resultsHeader}>
-      <View style={styles.modalHeaderRow}>
-        <View style={styles.modalHeaderSpacer} />
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const shouldShow = event.nativeEvent.contentOffset.y > 420;
 
-        <Pressable onPress={onClose} style={styles.modalCloseBtn}>
-          <Ionicons name="close" size={28} color={Theme.colors.textMuted} />
-        </Pressable>
-      </View>
+      if (showBackToTopRef.current === shouldShow) return;
 
-      <View style={styles.modalHeaderBlock}>
-        <View style={styles.modalTitleRow}>
-          <View style={styles.modalBadge}>
-            <Ionicons
-              name="location"
-              size={16}
-              color={Theme.colors.primary}
-            />
-            <AppText style={styles.modalBadgeText}>
-              Live INEC Directory
-            </AppText>
-          </View>
+      showBackToTopRef.current = shouldShow;
+      setShowBackToTop(shouldShow);
+    },
+    []
+  );
 
-          <AppText style={styles.modalTitle}>{title}</AppText>
-        </View>
+  const scrollToTop = useCallback(() => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, []);
 
-        <AppText style={styles.modalSubtitle}>{subtitle}</AppText>
-      </View>
-
-      <View style={styles.searchWrap}>
-        <AppInput
-          placeholder="Search polling unit name, code, or area"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          startIcon={
-            <Ionicons
-              name="search-outline"
-              size={20}
-              color={Theme.colors.textSoft}
-            />
-          }
-        />
-      </View>
-
-      <View style={styles.resultsMetaRow}>
-        <AppText style={styles.resultsMetaText}>
-          Showing {filteredResults.length} of {results.length}
-        </AppText>
-
-        {searchQuery ? (
-          <Pressable
-            onPress={() => setSearchQuery("")}
-            hitSlop={8}
-            style={styles.clearSearchButton}
-          >
-            <AppText style={styles.clearSearchText}>Clear</AppText>
-          </Pressable>
-        ) : null}
-      </View>
-    </View>
+  const renderItem = useCallback(
+    ({ item, index }: ListRenderItemInfo<PollingUnitLookupItem>) => (
+      <PollingUnitResultCard
+        item={item}
+        index={index}
+        onOpenMap={() => {
+          void handleOpenMap(item);
+        }}
+      />
+    ),
+    [handleOpenMap]
   );
 
   return (
@@ -610,28 +652,104 @@ function PollingUnitResultsModal({
     >
       <View style={styles.modalRoot}>
         <LinearGradient
-          colors={["#EEF5DB", "#F5F2DE", "#FAF8EE", "#F7F7F2"]}
-          locations={[0, 0.24, 0.6, 1]}
+          colors={["#F6F2DC", "#FAF8EE", "#FFFFFF", "#FFFFFF"]}
+          locations={[0, 0.28, 0.58, 1]}
           style={styles.modalGradient}
         />
 
+        <View
+          style={[
+            styles.stickyResultsHeader,
+            {
+              paddingTop: insets.top + 12,
+            },
+          ]}
+        >
+          <View style={styles.modalHeaderRow}>
+            <View style={styles.modalHeaderSpacer} />
+
+            <Pressable onPress={onClose} style={styles.modalCloseBtn}>
+              <Ionicons name="close" size={28} color={Theme.colors.textMuted} />
+            </Pressable>
+          </View>
+
+          <View style={styles.modalHeaderBlock}>
+            <View style={styles.modalBadge}>
+              <Ionicons
+                name="location"
+                size={16}
+                color={Theme.colors.primary}
+              />
+              <AppText style={styles.modalBadgeText}>
+                Live INEC Directory
+              </AppText>
+            </View>
+
+            <AppText style={styles.modalTitle}>{title}</AppText>
+            <AppText style={styles.modalSubtitle}>{subtitle}</AppText>
+          </View>
+
+          <View style={styles.searchWrap}>
+            <AppInput
+              placeholder="Search polling unit name, code, or area"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              startIcon={
+                <Ionicons
+                  name="search-outline"
+                  size={20}
+                  color={Theme.colors.textSoft}
+                />
+              }
+              endIcon={
+                searchQuery ? (
+                  <Ionicons
+                    name="close-circle"
+                    size={20}
+                    color={Theme.colors.textSoft}
+                  />
+                ) : undefined
+              }
+              onPressEndIcon={() => setSearchQuery("")}
+            />
+          </View>
+
+          <View style={styles.resultsMetaRow}>
+            <AppText style={styles.resultsMetaText}>
+              Showing {filteredResults.length} of {results.length}
+            </AppText>
+
+            {searchQuery ? (
+              <Pressable
+                onPress={() => setSearchQuery("")}
+                hitSlop={8}
+                style={styles.clearSearchButton}
+              >
+                <AppText style={styles.clearSearchText}>Clear search</AppText>
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+
         <FlatList
+          ref={listRef}
           data={filteredResults}
           keyExtractor={getPollingUnitKey}
           renderItem={renderItem}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
           initialNumToRender={10}
           maxToRenderPerBatch={10}
           updateCellsBatchingPeriod={50}
           windowSize={9}
           removeClippedSubviews={Platform.OS === "android"}
-          ListHeaderComponent={renderHeader}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           contentContainerStyle={[
             styles.resultsContent,
             {
-              paddingTop: insets.top + 12,
-              paddingBottom: Math.max(insets.bottom + 22, 28),
+              paddingBottom: Math.max(insets.bottom + 104, 128),
             },
           ]}
           ListEmptyComponent={
@@ -653,6 +771,21 @@ function PollingUnitResultsModal({
             </View>
           }
         />
+
+        {showBackToTop ? (
+          <Pressable
+            onPress={scrollToTop}
+            hitSlop={10}
+            style={[
+              styles.backToTopButton,
+              {
+                bottom: Math.max(insets.bottom + 24, 34),
+              },
+            ]}
+          >
+            <Ionicons name="arrow-up" size={18} color="#FFFFFF" />
+          </Pressable>
+        ) : null}
       </View>
     </Modal>
   );
@@ -675,8 +808,6 @@ const PollingUnitResultCard = memo(function PollingUnitResultCard({
 
   return (
     <View style={styles.resultCard}>
-      <View style={styles.resultCardGlow} />
-
       <View style={styles.resultTopRow}>
         <View style={styles.resultIndexPill}>
           <AppText style={styles.resultIndexText}>
@@ -686,6 +817,7 @@ const PollingUnitResultCard = memo(function PollingUnitResultCard({
 
         <View style={styles.resultTitleWrap}>
           <AppText style={styles.resultName}>{name}</AppText>
+
           <View style={styles.codeRow}>
             <AppText style={styles.codeLabel}>Code</AppText>
             <AppText style={styles.codeValue}>{code}</AppText>
@@ -694,7 +826,9 @@ const PollingUnitResultCard = memo(function PollingUnitResultCard({
 
         <View style={styles.statusPill}>
           <View style={styles.statusDot} />
-          <AppText style={styles.statusPillText}>{status}</AppText>
+          <AppText numberOfLines={1} style={styles.statusPillText}>
+            {status}
+          </AppText>
         </View>
       </View>
 
@@ -704,7 +838,7 @@ const PollingUnitResultCard = memo(function PollingUnitResultCard({
             <Ionicons
               name="location-outline"
               size={17}
-              color={Theme.colors.primary}
+              color={Theme.colors.textMuted}
             />
           </View>
           <AppText style={styles.resultMetaText}>{area}</AppText>
@@ -715,7 +849,7 @@ const PollingUnitResultCard = memo(function PollingUnitResultCard({
             <Ionicons
               name="map-outline"
               size={17}
-              color={Theme.colors.primary}
+              color={Theme.colors.textMuted}
             />
           </View>
           <AppText style={styles.resultMetaText}>{address}</AppText>
@@ -730,7 +864,9 @@ const PollingUnitResultCard = memo(function PollingUnitResultCard({
             color={Theme.colors.primary}
           />
         </View>
+
         <AppText style={styles.mapButtonText}>Open Google Maps</AppText>
+
         <Ionicons
           name="chevron-forward"
           size={15}
@@ -790,17 +926,18 @@ const styles = StyleSheet.create({
 
   modalRoot: {
     flex: 1,
-    backgroundColor: "#F7F7F2",
+    backgroundColor: "#FFFFFF",
   },
   modalGradient: {
     ...StyleSheet.absoluteFillObject,
   },
-  resultsContent: {
-    gap: 14,
+  stickyResultsHeader: {
     paddingHorizontal: 16,
-  },
-  resultsHeader: {
-    gap: 0,
+    paddingBottom: 10,
+    backgroundColor: "rgba(250,248,238,0.96)",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(17,26,50,0.06)",
+    zIndex: 5,
   },
   modalHeaderRow: {
     minHeight: 44,
@@ -816,7 +953,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "rgba(255,255,255,0.76)",
+    backgroundColor: "rgba(255,255,255,0.86)",
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#0F172A",
@@ -827,11 +964,8 @@ const styles = StyleSheet.create({
   },
   modalHeaderBlock: {
     gap: 10,
-    paddingTop: 16,
-    paddingBottom: 16,
-  },
-  modalTitleRow: {
-    gap: 10,
+    paddingTop: 14,
+    paddingBottom: 14,
   },
   modalBadge: {
     alignSelf: "flex-start",
@@ -865,11 +999,11 @@ const styles = StyleSheet.create({
     color: Theme.colors.textMuted,
   },
   searchWrap: {
-    paddingBottom: 10,
+    paddingTop: 2,
   },
   resultsMetaRow: {
-    minHeight: 28,
-    paddingBottom: 8,
+    minHeight: 30,
+    paddingTop: 8,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -894,27 +1028,23 @@ const styles = StyleSheet.create({
     fontFamily: Theme.fonts.body.semibold,
   },
 
+  resultsContent: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    gap: 14,
+  },
+
   resultCard: {
     borderRadius: 22,
-    backgroundColor: "rgba(255,255,255,0.76)",
+    backgroundColor: "rgba(255,255,255,0.92)",
     borderWidth: 1,
     borderColor: "rgba(17,26,50,0.08)",
     padding: 14,
-    overflow: "hidden",
     shadowColor: "#0F172A",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.06,
     shadowRadius: 22,
     elevation: 2,
-  },
-  resultCardGlow: {
-    position: "absolute",
-    left: -44,
-    top: -50,
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: "rgba(25,183,176,0.09)",
   },
   resultTopRow: {
     flexDirection: "row",
@@ -925,14 +1055,14 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 12,
-    backgroundColor: "rgba(25,183,176,0.12)",
+    backgroundColor: "rgba(17,26,50,0.06)",
     alignItems: "center",
     justifyContent: "center",
   },
   resultIndexText: {
     fontSize: 12,
     lineHeight: 16,
-    color: Theme.colors.primary,
+    color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
   },
   resultTitleWrap: {
@@ -970,9 +1100,9 @@ const styles = StyleSheet.create({
     maxWidth: 104,
     borderRadius: 999,
     paddingHorizontal: 8,
-    backgroundColor: "rgba(25,183,176,0.08)",
+    backgroundColor: "rgba(25,183,176,0.06)",
     borderWidth: 1,
-    borderColor: "rgba(25,183,176,0.2)",
+    borderColor: "rgba(25,183,176,0.16)",
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
@@ -1005,7 +1135,7 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: "rgba(25,183,176,0.08)",
+    backgroundColor: "rgba(17,26,50,0.045)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1019,7 +1149,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     borderRadius: 15,
     paddingHorizontal: 12,
-    backgroundColor: "rgba(25,183,176,0.08)",
+    backgroundColor: "rgba(25,183,176,0.06)",
     borderWidth: 1,
     borderColor: "rgba(25,183,176,0.18)",
     flexDirection: "row",
@@ -1030,7 +1160,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.8)",
+    backgroundColor: "rgba(255,255,255,0.9)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1041,10 +1171,28 @@ const styles = StyleSheet.create({
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.semibold,
   },
+
+  backToTopButton: {
+    position: "absolute",
+    right: 18,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: Theme.colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 6,
+    zIndex: 10,
+  },
+
   emptyResultsCard: {
     marginTop: 28,
     borderRadius: 22,
-    backgroundColor: "rgba(255,255,255,0.72)",
+    backgroundColor: "rgba(255,255,255,0.78)",
     borderWidth: 1,
     borderColor: "rgba(17,26,50,0.08)",
     paddingHorizontal: 22,

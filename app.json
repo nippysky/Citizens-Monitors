@@ -20,7 +20,9 @@
         "NSMicrophoneUsageDescription": "Citizen Monitor uses your microphone when recording live incident videos and cumulative result announcement videos.",
         "NSLocationWhenInUseUsageDescription": "Citizen Monitor uses your location to verify that reports and evidence are submitted from the correct polling area.",
         "LSApplicationQueriesSchemes": [
-          "mailto"
+          "mailto",
+          "comgooglemaps",
+          "maps"
         ],
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
@@ -28,6 +30,7 @@
       }
     },
     "android": {
+      "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "backgroundColor": "#05A39C",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

@@ -2,15 +2,23 @@ import {
   BottomSheetBackdrop,
   BottomSheetModal,
   BottomSheetScrollView,
+  BottomSheetTextInput,
 } from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
 import { forwardRef, useMemo, useState } from "react";
-import { Image, Pressable, StyleSheet, Switch, View } from "react-native";
+import {
+  Image,
+  Keyboard,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Switch,
+  View,
+} from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AppButton from "@/components/ui/AppButton";
-import AppInput from "@/components/ui/AppInput";
 import AppText from "@/components/ui/AppText";
 import ProfileAvatar from "@/svgs/app/profile/ProfileAvatar";
 import { useOfflineSync } from "@/context/OfflineSyncContext";
@@ -74,7 +82,7 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
       viewer?.anonymousUsername?.trim() ||
       "Anonymous Citizen";
 
-    const snaps = useMemo(() => ["85%"], []);
+    const snapPoints = useMemo(() => ["92%"], []);
 
     const isSubmitting =
       busy || createPostMutation.isPending || generateAnonymousMutation.isPending;
@@ -82,6 +90,8 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
     const canSubmit = body.trim().length > 3 && !isSubmitting;
 
     const close = () => {
+      Keyboard.dismiss();
+
       if (ref && typeof ref !== "function" && ref.current) {
         ref.current.dismiss();
       }
@@ -208,10 +218,12 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
     return (
       <BottomSheetModal
         ref={ref}
-        snapPoints={snaps}
+        snapPoints={snapPoints}
+        index={0}
         enablePanDownToClose
+        enableDynamicSizing={false}
         topInset={insets.top + 12}
-        keyboardBehavior="interactive"
+        keyboardBehavior="extend"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
         backdropComponent={(props) => (
@@ -229,9 +241,12 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
         <BottomSheetScrollView
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
           contentContainerStyle={[
             st.content,
-            { paddingBottom: insets.bottom + 18 },
+            {
+              paddingBottom: Math.max(insets.bottom + 28, 44),
+            },
           ]}
         >
           <View style={st.header}>
@@ -244,7 +259,7 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
                 )}
               </View>
 
-              <View>
+              <View style={st.headerTextWrap}>
                 <AppText style={st.headerTitle}>Share Your Opinion</AppText>
                 <AppText style={st.headerSubtitle}>
                   Posting within your ward
@@ -276,14 +291,17 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
           <View style={st.sec}>
             <AppText style={st.label}>Your Opinion</AppText>
 
-            <AppInput
-              placeholder="What's happening in your ward?"
-              value={body}
-              onChangeText={setBody}
-              multiline
-              inputWrapperStyle={st.taWrap}
-              style={st.ta}
-            />
+            <View style={st.textareaWrap}>
+              <BottomSheetTextInput
+                placeholder="What's happening in your ward?"
+                placeholderTextColor={Theme.colors.placeholder}
+                value={body}
+                onChangeText={setBody}
+                multiline
+                textAlignVertical="top"
+                style={st.textareaInput}
+              />
+            </View>
           </View>
 
           <View style={st.sec}>
@@ -356,7 +374,7 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
             }}
             disabled={!canSubmit}
             loading={isSubmitting}
-            style={{ marginVertical: 0 }}
+            style={st.submitButton}
           />
         </BottomSheetScrollView>
       </BottomSheetModal>
@@ -388,9 +406,16 @@ const st = StyleSheet.create({
     justifyContent: "space-between",
   },
   headerLeft: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    paddingRight: 12,
+  },
+  headerTextWrap: {
+    flex: 1,
+    minWidth: 0,
   },
   avatarWrap: {
     width: 36,
@@ -457,13 +482,23 @@ const st = StyleSheet.create({
     fontFamily: Theme.fonts.body.medium,
     color: Theme.colors.text,
   },
-  taWrap: {
-    minHeight: 140,
-    alignItems: "flex-start",
+  textareaWrap: {
+    minHeight: 150,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Theme.colors.primary,
+    backgroundColor: "rgba(255,255,255,0.58)",
+    paddingHorizontal: 16,
     paddingTop: 14,
+    paddingBottom: 14,
   },
-  ta: {
-    minHeight: 100,
+  textareaInput: {
+    minHeight: 116,
+    fontSize: 16,
+    lineHeight: 22,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.regular,
+    padding: 0,
     textAlignVertical: "top",
   },
   attachBtn: {
@@ -552,5 +587,8 @@ const st = StyleSheet.create({
   switchBold: {
     fontFamily: Theme.fonts.body.semibold,
     color: Theme.colors.text,
+  },
+  submitButton: {
+    marginVertical: 0,
   },
 });

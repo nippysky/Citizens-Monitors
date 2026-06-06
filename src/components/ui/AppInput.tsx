@@ -1,4 +1,5 @@
 import AppText from "@/components/ui/AppText";
+import { useKeyboardAwareInput } from "@/components/ui/AppKeyboardAwareScrollView";
 import { Theme } from "@/theme";
 import { Ionicons } from "@expo/vector-icons";
 import {
@@ -6,6 +7,7 @@ import {
   isValidElement,
   ReactNode,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -55,6 +57,9 @@ export default function AppInput({
   textareaMinHeight = 110,
   ...props
 }: Props) {
+  const inputRef = useRef<TextInput | null>(null);
+  const keyboardAware = useKeyboardAwareInput();
+
   const [isSecureVisible, setIsSecureVisible] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
 
@@ -161,6 +166,7 @@ export default function AppInput({
         {renderStartIcon()}
 
         <TextInput
+          ref={inputRef}
           {...props}
           editable={editable}
           multiline={multiline}
@@ -174,13 +180,14 @@ export default function AppInput({
             !editable && styles.inputDisabled,
             style,
           ]}
-          onFocus={(e) => {
+          onFocus={(event) => {
             setIsFocused(true);
-            onFocus?.(e);
+            keyboardAware?.notifyInputFocus(inputRef.current);
+            onFocus?.(event);
           }}
-          onBlur={(e) => {
+          onBlur={(event) => {
             setIsFocused(false);
-            onBlur?.(e);
+            onBlur?.(event);
           }}
         />
 

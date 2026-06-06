@@ -1,8 +1,16 @@
 import AuthBackground from "@/components/auth/AuthBackground";
 import { Theme } from "@/theme";
 import { ReactNode } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 type Props = {
   topSlot?: ReactNode;
@@ -17,25 +25,48 @@ export default function AuthShell({
   footer,
   scroll = true,
 }: Props) {
+  const insets = useSafeAreaInsets();
+
   const content = scroll ? (
     <ScrollView
-      contentContainerStyle={styles.scrollContent}
+      contentContainerStyle={[
+        styles.scrollContent,
+        {
+          paddingBottom: Math.max(insets.bottom + 24, 36),
+        },
+      ]}
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+      automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+      contentInsetAdjustmentBehavior="never"
       showsVerticalScrollIndicator={false}
       bounces={false}
+      overScrollMode="never"
+    >
+      <Pressable onPress={Keyboard.dismiss} accessible={false}>
+        <View style={styles.inner}>
+          {topSlot ? <View style={styles.top}>{topSlot}</View> : null}
+
+          <View style={styles.body}>{children}</View>
+
+          {footer ? <View style={styles.footer}>{footer}</View> : null}
+        </View>
+      </Pressable>
+    </ScrollView>
+  ) : (
+    <Pressable
+      style={styles.flex}
+      onPress={Keyboard.dismiss}
+      accessible={false}
     >
       <View style={styles.inner}>
         {topSlot ? <View style={styles.top}>{topSlot}</View> : null}
+
         <View style={styles.body}>{children}</View>
+
         {footer ? <View style={styles.footer}>{footer}</View> : null}
       </View>
-    </ScrollView>
-  ) : (
-    <View style={styles.inner}>
-      {topSlot ? <View style={styles.top}>{topSlot}</View> : null}
-      <View style={styles.body}>{children}</View>
-      {footer ? <View style={styles.footer}>{footer}</View> : null}
-    </View>
+    </Pressable>
   );
 
   return (
@@ -43,7 +74,8 @@ export default function AuthShell({
       <AuthBackground>
         <KeyboardAvoidingView
           style={styles.flex}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
         >
           {content}
         </KeyboardAvoidingView>
