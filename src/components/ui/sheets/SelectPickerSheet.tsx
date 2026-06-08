@@ -176,6 +176,7 @@ const SelectPickerSheet = forwardRef<BottomSheetModal, Props>(
         ref={ref}
         snapPoints={snapPoints}
         index={0}
+        stackBehavior="push"
         enableDynamicSizing={false}
         topInset={insets.top + 12}
         enablePanDownToClose

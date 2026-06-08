@@ -4,16 +4,13 @@ import { Linking, Pressable, StyleSheet, View } from "react-native";
 import AppText from "@/components/ui/AppText";
 import { Theme } from "@/theme";
 
-type Props = {
-  url?: string;
-};
+// Always points to the official Citizen Monitors YouTube channel.
+const YOUTUBE_CHANNEL_URL = "https://www.youtube.com/@CitizenMonitors";
 
-export default function TutorialBanner({
-  url = "https://www.youtube.com/",
-}: Props) {
+export default function TutorialBanner() {
   const handleOpen = async () => {
     try {
-      await Linking.openURL(url);
+      await Linking.openURL(YOUTUBE_CHANNEL_URL);
     } catch {
       // noop
     }

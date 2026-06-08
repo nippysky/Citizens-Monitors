@@ -260,6 +260,7 @@ const BirthdaySheet = forwardRef<BottomSheetModal, Props>(function BirthdaySheet
       ref={ref}
         onChange={handleSheetChange}
       snapPoints={["72%"]}
+      stackBehavior="push"
       topInset={insets.top + 12}
       enablePanDownToClose
       enableContentPanningGesture={false}

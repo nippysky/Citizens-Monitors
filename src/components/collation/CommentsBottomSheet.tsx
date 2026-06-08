@@ -99,10 +99,14 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
     const insets = useSafeAreaInsets();
 
     /**
-     * Single high snap point — keeps the input above the keyboard on both
-     * iOS and Android when keyboardBehavior="extend".
+     * Two snap points:
+     *  - 62% — default open position. When the keyboard appears,
+     *    keyboardBehavior="interactive" lifts the whole sheet above the
+     *    keyboard smoothly (Instagram/Facebook style). 62% gives the sheet
+     *    enough height so the comment list is still usable after the lift.
+     *  - 92% — expanded, for reading long threads.
      */
-    const snapPoints = useMemo(() => ["92%"], []);
+    const snapPoints = useMemo(() => ["62%", "92%"], []);
     const { handleSheetChange } = useBottomSheetBackHandler(
       ref as React.RefObject<BottomSheetModal | null>
     );
@@ -309,9 +313,18 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
         enablePanDownToClose
         enableDynamicSizing={false}
         topInset={insets.top + 12}
-        keyboardBehavior="extend"
+        /**
+         * "interactive" — the sheet slides up to sit just above the keyboard
+         * on both iOS and Android physical devices. This is the correct mode
+         * for any sheet with a pinned bottom input (comments, chat, etc.).
+         *
+         * Do NOT use "extend" + android_keyboardInputMode="adjustResize" here:
+         * adjustResize is deprecated on Android 11+ edge-to-edge layouts and
+         * fails silently on physical devices, leaving the input buried under
+         * the keyboard.
+         */
+        keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
-        android_keyboardInputMode="adjustResize"
         onChange={handleSheetChange}
         backdropComponent={(props) => (
           <BottomSheetBackdrop
@@ -447,9 +460,9 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
           <View
             style={[
               styles.inputContainer,
-              {
-                paddingBottom: Math.max(insets.bottom + 10, 18),
-              },
+              // With keyboardBehavior="interactive" the sheet sits above the
+              // keyboard, so just use safe-area insets for the bottom gap.
+              { paddingBottom: Math.max(insets.bottom, 8) },
             ]}
           >
             <View style={styles.inputRow}>
@@ -516,7 +529,6 @@ const styles = StyleSheet.create({
 
   sheetBody: {
     flex: 1,
-    overflow: "hidden",
   },
 
   header: {

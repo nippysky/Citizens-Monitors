@@ -86,7 +86,7 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
       viewer?.anonymousUsername?.trim() ||
       "Anonymous Citizen";
 
-    const snapPoints = useMemo(() => ["92%"], []);
+    const snapPoints = useMemo(() => ["62%", "92%"], []);
 
     const isSubmitting =
       busy || createPostMutation.isPending || generateAnonymousMutation.isPending;
@@ -227,9 +227,8 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
         enablePanDownToClose
         enableDynamicSizing={false}
         topInset={insets.top + 12}
-        keyboardBehavior="extend"
+        keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
-        android_keyboardInputMode="adjustResize"
         onChange={handleSheetChange}
         backdropComponent={(props) => (
           <BottomSheetBackdrop

@@ -42,6 +42,7 @@ const GenderSheet = forwardRef<BottomSheetModal, Props>(function GenderSheet(
       ref={ref}
         onChange={handleSheetChange}
       snapPoints={["46%"]}
+      stackBehavior="push"
       topInset={insets.top + 12}
       enablePanDownToClose
       backgroundStyle={styles.sheetBgTransparent}
