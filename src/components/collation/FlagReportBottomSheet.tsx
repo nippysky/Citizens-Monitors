@@ -8,6 +8,7 @@ import {
   BottomSheetModal,
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
+import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 import { Ionicons } from "@expo/vector-icons";
 import { forwardRef, useMemo, useState } from "react";
 import { ActivityIndicator, Image, Pressable, StyleSheet, View } from "react-native";
@@ -26,6 +27,9 @@ type Props = { onSubmitted?: () => void };
 const FlagReportBottomSheet = forwardRef<BottomSheetModal, Props>(
   function FlagReportBottomSheet({ onSubmitted }, ref) {
     const insets = useSafeAreaInsets();
+    const { handleSheetChange } = useBottomSheetBackHandler(
+      ref as React.RefObject<BottomSheetModal | null>
+    );
     const { showToast } = useAppToast();
     const { enqueue } = useOfflineSync();
     const media = useCollationMedia();

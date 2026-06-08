@@ -3,6 +3,7 @@ import {
   BottomSheetModal,
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
+import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 import { Ionicons } from "@expo/vector-icons";
 import { forwardRef, useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -49,6 +50,9 @@ const CommencementBottomSheet = forwardRef<BottomSheetModal, Props>(
     ref
   ) {
     const snapPoints = useMemo(() => ["78%"], []);
+    const { handleSheetChange } = useBottomSheetBackHandler(
+      ref as React.RefObject<BottomSheetModal | null>
+    );
 
     const [step, setStep] = useState<Step>("choice");
     const [selectedTime, setSelectedTime] = useState("");
@@ -95,6 +99,7 @@ const CommencementBottomSheet = forwardRef<BottomSheetModal, Props>(
     return (
       <BottomSheetModal
         ref={ref}
+        onChange={handleSheetChange}
         snapPoints={snapPoints}
         enablePanDownToClose
         onDismiss={reset}

@@ -4,6 +4,7 @@ import {
   BottomSheetModal,
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
+import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 import * as ImagePicker from "expo-image-picker";
 import {
   forwardRef,
@@ -69,6 +70,9 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
     const insets = useSafeAreaInsets();
     const { showToast } = useAppToast();
     const snapPoints = useMemo(() => ["82%"], []);
+    const { handleSheetChange } = useBottomSheetBackHandler(
+      ref as React.RefObject<BottomSheetModal | null>
+    );
 
     const [previewAvatarUri, setPreviewAvatarUri] = useState<string | null>(
       value.avatarUri || currentAvatarUri || null
@@ -127,6 +131,7 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
       <>
         <BottomSheetModal
           ref={ref}
+        onChange={handleSheetChange}
           snapPoints={snapPoints}
           enablePanDownToClose
           topInset={insets.top + 12}

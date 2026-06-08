@@ -7,6 +7,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { forwardRef, useMemo } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 
 import AppButton from "@/components/ui/AppButton";
 import AppInput from "@/components/ui/AppInput";
@@ -33,7 +34,10 @@ const FeedbackBottomSheet = forwardRef<BottomSheetModal, Props>(
     ref
   ) {
     const insets = useSafeAreaInsets();
-    const snapPoints = useMemo(() => ["72%", "90%"], []);
+    const snapPoints = useMemo(() => ["90%"], []);
+    const { handleSheetChange } = useBottomSheetBackHandler(
+      ref as React.RefObject<BottomSheetModal | null>
+    );
 
     const title = value.title.trim();
     const message = value.message.trim();
@@ -53,10 +57,12 @@ const FeedbackBottomSheet = forwardRef<BottomSheetModal, Props>(
         snapPoints={snapPoints}
         index={0}
         enablePanDownToClose
+        enableDynamicSizing={false}
         topInset={insets.top + 12}
-        keyboardBehavior="interactive"
+        keyboardBehavior="extend"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
+        onChange={handleSheetChange}
         backdropComponent={(props) => (
           <BottomSheetBackdrop
             {...props}

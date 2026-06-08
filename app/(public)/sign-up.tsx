@@ -147,12 +147,29 @@ export default function SignUpScreen() {
       });
       router.replace(Paths.appHome);
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Unable to continue with Google.";
+      const raw =
+        error instanceof Error ? error.message : "Unable to continue with Google.";
 
-      showToast({ type: "error", message });
+      // Backend returns "already registered" when the Google email matches an
+      // existing email/password account. Guide the user to sign in instead of
+      // showing a confusing raw error message.
+      const isExistingAccount =
+        raw.toLowerCase().includes("already registered") ||
+        raw.toLowerCase().includes("already exists") ||
+        raw.toLowerCase().includes("please sign in");
+
+      if (isExistingAccount) {
+        showToast({
+          type: "success",
+          message:
+            "You already have an account with this email. Signing you in…",
+        });
+        // Brief pause so the user can read the toast, then go to sign-in.
+        setTimeout(() => router.replace(Paths.signIn), 1400);
+      } else {
+        showToast({ type: "error", message: raw });
+      }
+
       console.log("Google sign-up error:", error);
     } finally {
       setIsGoogleSigningIn(false);

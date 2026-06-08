@@ -4,6 +4,7 @@ import {
   BottomSheetModal,
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
+import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 import * as ImagePicker from "expo-image-picker";
 import { forwardRef, useCallback, useMemo } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
@@ -106,6 +107,9 @@ const ObserverRegistrationBottomSheet = forwardRef<BottomSheetModal, Props>(
     const { showToast } = useAppToast();
 
     const snapPoints = useMemo(() => ["88%"], []);
+    const { handleSheetChange } = useBottomSheetBackHandler(
+      ref as React.RefObject<BottomSheetModal | null>
+    );
 
     const canSubmit = Boolean(
       value.phoneNumber.trim().length >= 7 &&
@@ -198,6 +202,7 @@ const ObserverRegistrationBottomSheet = forwardRef<BottomSheetModal, Props>(
     return (
       <BottomSheetModal
         ref={ref}
+        onChange={handleSheetChange}
         snapPoints={snapPoints}
         enablePanDownToClose={!submitting}
         topInset={insets.top + 12}

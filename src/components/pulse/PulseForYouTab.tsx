@@ -16,6 +16,7 @@ import AppText from "@/components/ui/AppText";
 import CommentsBottomSheet from "@/components/collation/CommentsBottomSheet";
 import LiveDiscussionCarousel from "@/components/pulse/LiveDiscussionCarousel";
 import PulseDiscussionCard from "@/components/pulse/PulseDiscussionCard";
+import PulseWelcomeCard from "@/components/pulse/PulseWelcomeCard";
 import { PulseDiscussionPost } from "@/data/pulse";
 import { Paths } from "@/constants/paths";
 import { useAppToast } from "@/hooks/useAppToast";
@@ -369,19 +370,28 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
   // header keeps its identity across parent re-renders, so the carousel
   // preserves its scroll state.
   const headerElement = useMemo(() => {
-    if (liveCarouselQuery.isLoading && !liveCarouselQuery.data) {
-      return <LiveCarouselSkeleton />;
-    }
+    const carousel = (() => {
+      if (liveCarouselQuery.isLoading && !liveCarouselQuery.data) {
+        return <LiveCarouselSkeleton />;
+      }
 
-    if (!liveElections.length) {
-      return null;
-    }
+      if (!liveElections.length) {
+        return null;
+      }
+
+      return (
+        <LiveDiscussionCarousel
+          items={liveElections}
+          onJoinDiscussion={handleJoinDiscussion}
+        />
+      );
+    })();
 
     return (
-      <LiveDiscussionCarousel
-        items={liveElections}
-        onJoinDiscussion={handleJoinDiscussion}
-      />
+      <>
+        <PulseWelcomeCard />
+        {carousel}
+      </>
     );
   }, [
     liveCarouselQuery.isLoading,

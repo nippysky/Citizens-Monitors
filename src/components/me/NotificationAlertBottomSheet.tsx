@@ -7,6 +7,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { forwardRef, useMemo } from "react";
 import { Pressable, StyleSheet, Switch, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 
 import AppButton from "@/components/ui/AppButton";
 import AppText from "@/components/ui/AppText";
@@ -43,6 +44,9 @@ const NotificationAlertBottomSheet = forwardRef<BottomSheetModal, Props>(
   ) {
     const insets = useSafeAreaInsets();
     const snapPoints = useMemo(() => ["88%"], []);
+    const { handleSheetChange } = useBottomSheetBackHandler(
+      ref as React.RefObject<BottomSheetModal | null>
+    );
 
     const close = () => {
       if (ref && typeof ref !== "function" && ref.current) {
@@ -122,8 +126,10 @@ const NotificationAlertBottomSheet = forwardRef<BottomSheetModal, Props>(
       <BottomSheetModal
         ref={ref}
         snapPoints={snapPoints}
+        index={0}
         enablePanDownToClose
         topInset={insets.top + 12}
+        onChange={handleSheetChange}
         backdropComponent={(props) => (
           <BottomSheetBackdrop
             {...props}

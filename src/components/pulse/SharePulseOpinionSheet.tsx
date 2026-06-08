@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AppButton from "@/components/ui/AppButton";
 import AppText from "@/components/ui/AppText";
 import ProfileAvatar from "@/svgs/app/profile/ProfileAvatar";
+import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 import { useOfflineSync } from "@/context/OfflineSyncContext";
 import { PickedMedia, useCollationMedia } from "@/hooks/useCollationMedia";
 import { useAppToast } from "@/hooks/useAppToast";
@@ -58,6 +59,9 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
   function SharePulseOpinionSheet({ onSubmitted }, ref) {
     const insets = useSafeAreaInsets();
     const queryClient = useQueryClient();
+    const { handleSheetChange } = useBottomSheetBackHandler(
+      ref as React.RefObject<BottomSheetModal | null>
+    );
 
     const { showToast } = useAppToast();
     const { enqueue, isOnline } = useOfflineSync();
@@ -226,6 +230,7 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
         keyboardBehavior="extend"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
+        onChange={handleSheetChange}
         backdropComponent={(props) => (
           <BottomSheetBackdrop
             {...props}

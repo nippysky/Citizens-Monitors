@@ -4,6 +4,7 @@ import {
     BottomSheetModal,
     BottomSheetView,
 } from "@gorhom/bottom-sheet";
+import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 import { forwardRef } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -26,6 +27,9 @@ const GenderSheet = forwardRef<BottomSheetModal, Props>(function GenderSheet(
   ref
 ) {
   const insets = useSafeAreaInsets();
+    const { handleSheetChange } = useBottomSheetBackHandler(
+      ref as React.RefObject<BottomSheetModal | null>
+    );
 
   const dismiss = () => {
     if (ref && typeof ref !== "function" && ref.current) {
@@ -36,6 +40,7 @@ const GenderSheet = forwardRef<BottomSheetModal, Props>(function GenderSheet(
   return (
     <BottomSheetModal
       ref={ref}
+        onChange={handleSheetChange}
       snapPoints={["46%"]}
       topInset={insets.top + 12}
       enablePanDownToClose

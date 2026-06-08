@@ -3,6 +3,7 @@ import {
   BottomSheetModal,
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
+import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { forwardRef, useCallback, useMemo, useState } from "react";
@@ -39,6 +40,9 @@ const PVCVerificationBottomSheet = forwardRef<BottomSheetModal, Props>(
     const insets = useSafeAreaInsets();
     const { showToast } = useAppToast();
     const snapPoints = useMemo(() => ["85%"], []);
+    const { handleSheetChange } = useBottomSheetBackHandler(
+      ref as React.RefObject<BottomSheetModal | null>
+    );
 
     const [frontUri, setFrontUri] = useState<string | null>(null);
     const [backUri, setBackUri] = useState<string | null>(null);
@@ -219,6 +223,7 @@ const PVCVerificationBottomSheet = forwardRef<BottomSheetModal, Props>(
     return (
       <BottomSheetModal
         ref={ref}
+        onChange={handleSheetChange}
         snapPoints={snapPoints}
         enablePanDownToClose={!isSubmitting}
         topInset={insets.top + 12}

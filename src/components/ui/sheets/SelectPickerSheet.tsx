@@ -8,6 +8,7 @@ import { forwardRef, useCallback, useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import countries from "world-countries";
+import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 
 import AppInput from "@/components/ui/AppInput";
 import AppText from "@/components/ui/AppText";
@@ -89,7 +90,11 @@ const SelectPickerSheet = forwardRef<BottomSheetModal, Props>(
     ref
   ) {
     const insets = useSafeAreaInsets();
-    const snapPoints = useMemo(() => ["55%", "92%"], []);
+    // Open at 92% immediately so the search box is never hidden by the keyboard
+    const snapPoints = useMemo(() => ["92%"], []);
+    const { handleSheetChange } = useBottomSheetBackHandler(
+      ref as React.RefObject<BottomSheetModal | null>
+    );
 
     const listData = useMemo(() => {
       const q = normalizeSearch(query);
@@ -177,6 +182,7 @@ const SelectPickerSheet = forwardRef<BottomSheetModal, Props>(
         keyboardBehavior="extend"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
+        onChange={handleSheetChange}
         backgroundStyle={styles.sheetBgTransparent}
         handleIndicatorStyle={styles.sheetHandle}
         backdropComponent={renderBackdrop}

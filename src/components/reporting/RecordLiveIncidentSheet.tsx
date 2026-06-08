@@ -4,6 +4,7 @@ import {
   BottomSheetModal,
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
+import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 import { forwardRef, useMemo } from "react";
 import {
   Pressable,
@@ -92,6 +93,9 @@ const RecordLiveIncidentSheet = forwardRef<BottomSheetModal, Props>(
     const { width } = useWindowDimensions();
 
     const snapPoints = useMemo(() => ["86%"], []);
+    const { handleSheetChange } = useBottomSheetBackHandler(
+      ref as React.RefObject<BottomSheetModal | null>
+    );
 
     const metrics = useMemo(() => {
       const sidePadding = 20;
@@ -122,6 +126,7 @@ const RecordLiveIncidentSheet = forwardRef<BottomSheetModal, Props>(
     return (
       <BottomSheetModal
         ref={ref}
+        onChange={handleSheetChange}
         snapPoints={snapPoints}
         enablePanDownToClose
         onDismiss={onClose}

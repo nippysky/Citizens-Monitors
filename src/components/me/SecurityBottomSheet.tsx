@@ -7,6 +7,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { forwardRef, useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 
 import AppButton from "@/components/ui/AppButton";
 import AppInput from "@/components/ui/AppInput";
@@ -29,7 +30,10 @@ type Props = {
 const SecurityBottomSheet = forwardRef<BottomSheetModal, Props>(
   function SecurityBottomSheet({ value, onChange, onSave, saving = false }, ref) {
     const insets = useSafeAreaInsets();
-    const snapPoints = useMemo(() => ["64%"], []);
+    const snapPoints = useMemo(() => ["82%"], []);
+    const { handleSheetChange } = useBottomSheetBackHandler(
+      ref as React.RefObject<BottomSheetModal | null>
+    );
 
     const closeSheet = () => {
       if (ref && typeof ref !== "function" && ref.current) {
@@ -41,11 +45,14 @@ const SecurityBottomSheet = forwardRef<BottomSheetModal, Props>(
       <BottomSheetModal
         ref={ref}
         snapPoints={snapPoints}
+        index={0}
         enablePanDownToClose
+        enableDynamicSizing={false}
         topInset={insets.top + 12}
-        keyboardBehavior="interactive"
+        keyboardBehavior="extend"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
+        onChange={handleSheetChange}
         backdropComponent={(props) => (
           <BottomSheetBackdrop
             {...props}

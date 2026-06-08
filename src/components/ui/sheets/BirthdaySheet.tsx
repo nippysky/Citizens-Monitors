@@ -4,6 +4,7 @@ import {
   BottomSheetModal,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
+import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 import {
   forwardRef,
   useCallback,
@@ -197,6 +198,9 @@ const BirthdaySheet = forwardRef<BottomSheetModal, Props>(function BirthdaySheet
   ref
 ) {
   const insets = useSafeAreaInsets();
+    const { handleSheetChange } = useBottomSheetBackHandler(
+      ref as React.RefObject<BottomSheetModal | null>
+    );
 
   const dayOptions = useMemo(() => {
     const daysInMonth = getDaysInMonth(value.month, value.year);
@@ -254,6 +258,7 @@ const BirthdaySheet = forwardRef<BottomSheetModal, Props>(function BirthdaySheet
   return (
     <BottomSheetModal
       ref={ref}
+        onChange={handleSheetChange}
       snapPoints={["72%"]}
       topInset={insets.top + 12}
       enablePanDownToClose

@@ -1,12 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { VideoView, useVideoPlayer } from "expo-video";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Image,
   LayoutAnimation,
   Linking,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -14,7 +12,6 @@ import {
   UIManager,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AppGradientScreen from "@/components/app/AppGradientScreen";
 import { useToastContext } from "@/components/feedback/ToastProvider";
@@ -42,7 +39,10 @@ type HelpFaqItem = {
   videoUrl: string;
 };
 
+// Placeholder — replace individual videoUrl values with actual hosted MP4/HLS links.
+// Tapping a video thumbnail opens the Citizen Monitors YouTube channel.
 const FAQ_VIDEO_URL = "https://www.w3schools.com/html/mov_bbb.mp4";
+const YOUTUBE_CHANNEL_URL = "https://www.youtube.com/@CitizenMonitors";
 
 const GENERAL_FAQS: HelpFaqItem[] = [
   {
@@ -222,19 +222,14 @@ export default function HelpSupportScreen() {
   const [expandedId, setExpandedId] = useState<string | null>(
     getFaqsForTab(defaultTab)[0]?.id ?? null
   );
-  const [playerItem, setPlayerItem] = useState<HelpFaqItem | null>(null);
 
+  // Only reset the active tab when it's no longer available (e.g. role changed).
+  // Do NOT force back to defaultTab when user intentionally switches to "general".
   useEffect(() => {
     if (!availableTabs.includes(activeTab)) {
       const nextTab = defaultTab;
       setActiveTab(nextTab);
       setExpandedId(getFaqsForTab(nextTab)[0]?.id ?? null);
-      return;
-    }
-
-    if (activeTab === "general" && defaultTab !== "general") {
-      setActiveTab(defaultTab);
-      setExpandedId(getFaqsForTab(defaultTab)[0]?.id ?? null);
     }
   }, [activeTab, availableTabs, defaultTab]);
 
@@ -252,71 +247,64 @@ export default function HelpSupportScreen() {
   };
 
   return (
-    <>
-      <AppGradientScreen>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-        >
-          <BackButton />
+    <AppGradientScreen>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <BackButton />
 
-          <View style={styles.headerBlock}>
-            <AppText style={styles.screenTitle}>Help & Support</AppText>
-            <AppText style={styles.screenSubtitle}>
-              Get quick answers and guides based on your account type.
-            </AppText>
-          </View>
-
-          <View style={styles.tabRow}>
-            <ScopeTab
-              title="GENERAL FAQ"
-              active={activeTab === "general"}
-              onPress={() => handleSwitchTab("general")}
-            />
-
-            {availableTabs.includes("observer") ? (
-              <ScopeTab
-                title="OBSERVER FAQ"
-                active={activeTab === "observer"}
-                onPress={() => handleSwitchTab("observer")}
-              />
-            ) : null}
-
-            {availableTabs.includes("volunteer") ? (
-              <ScopeTab
-                title="VOLUNTEER FAQ"
-                active={activeTab === "volunteer"}
-                onPress={() => handleSwitchTab("volunteer")}
-              />
-            ) : null}
-          </View>
-
-          <AppText style={styles.helperText}>
-            Here are quick guides to help you use Citizen Monitor better.
+        <View style={styles.headerBlock}>
+          <AppText style={styles.screenTitle}>Help & Support</AppText>
+          <AppText style={styles.screenSubtitle}>
+            Get quick answers and guides based on your account type.
           </AppText>
+        </View>
 
-          <View style={styles.faqList}>
-            {faqs.map((item) => (
-              <FaqAccordionCard
-                key={item.id}
-                item={item}
-                expanded={expandedId === item.id}
-                onToggle={() => handleToggleFaq(item.id)}
-                onOpenVideo={() => setPlayerItem(item)}
-              />
-            ))}
-          </View>
+        <View style={styles.tabRow}>
+          <ScopeTab
+            title="GENERAL FAQ"
+            active={activeTab === "general"}
+            onPress={() => handleSwitchTab("general")}
+          />
 
-          <StillNeedHelpCard />
-        </ScrollView>
-      </AppGradientScreen>
+          {availableTabs.includes("observer") ? (
+            <ScopeTab
+              title="OBSERVER FAQ"
+              active={activeTab === "observer"}
+              onPress={() => handleSwitchTab("observer")}
+            />
+          ) : null}
 
-      <FaqVideoPlayerModal
-        item={playerItem}
-        onClose={() => setPlayerItem(null)}
-      />
-    </>
+          {availableTabs.includes("volunteer") ? (
+            <ScopeTab
+              title="VOLUNTEER FAQ"
+              active={activeTab === "volunteer"}
+              onPress={() => handleSwitchTab("volunteer")}
+            />
+          ) : null}
+        </View>
+
+        <AppText style={styles.helperText}>
+          Here are quick guides to help you use Citizen Monitor better.
+        </AppText>
+
+        <View style={styles.faqList}>
+          {faqs.map((item) => (
+            <FaqAccordionCard
+              key={item.id}
+              item={item}
+              expanded={expandedId === item.id}
+              onToggle={() => handleToggleFaq(item.id)}
+              onOpenVideo={() => void Linking.openURL(YOUTUBE_CHANNEL_URL)}
+            />
+          ))}
+        </View>
+
+        <StillNeedHelpCard />
+      </ScrollView>
+    </AppGradientScreen>
   );
 }
 
@@ -352,7 +340,7 @@ function FaqAccordionCard({
   item: HelpFaqItem;
   expanded: boolean;
   onToggle: () => void;
-  onOpenVideo: () => void;
+  onOpenVideo: () => void; // opens YouTube channel
 }) {
   const rotate = useRef(new Animated.Value(expanded ? 1 : 0)).current;
 
@@ -410,23 +398,23 @@ function FaqAccordionCard({
 function StillNeedHelpCard() {
   const { showToast } = useToastContext();
 
-  const openWhatsApp = async () => {
-    const url = "https://wa.me/2348000000000";
+  const openResources = async () => {
+    const url = "https://www.citizenmonitors.com/resources";
 
     try {
       await Linking.openURL(url);
     } catch {
       showToast({
         type: "error",
-        message: "Unable to open WhatsApp right now.",
+        message: "Unable to open resources page right now.",
       });
     }
   };
 
   const openMail = async () => {
-    const email = "support@citizenmonitor.africa";
+    const email = "support@citizenmonitors.com";
     const url = `mailto:${email}?subject=${encodeURIComponent(
-      "Citizen Monitor Support"
+      "Citizen Monitors Support"
     )}`;
 
     try {
@@ -455,9 +443,9 @@ function StillNeedHelpCard() {
       </AppText>
 
       <View style={styles.supportActionRow}>
-        <Pressable style={styles.whatsappBtn} onPress={openWhatsApp}>
-          <Ionicons name="logo-whatsapp" size={18} color="#FFFFFF" />
-          <AppText style={styles.whatsappBtnText}>WHATSAPP US</AppText>
+        <Pressable style={styles.whatsappBtn} onPress={openResources}>
+          <Ionicons name="globe-outline" size={18} color="#FFFFFF" />
+          <AppText style={styles.whatsappBtnText}>RESOURCES</AppText>
         </Pressable>
 
         <Pressable style={styles.emailBtn} onPress={openMail}>
@@ -466,68 +454,6 @@ function StillNeedHelpCard() {
         </Pressable>
       </View>
     </View>
-  );
-}
-
-function FaqVideoPlayerModal({
-  item,
-  onClose,
-}: {
-  item: HelpFaqItem | null;
-  onClose: () => void;
-}) {
-  const insets = useSafeAreaInsets();
-
-  const player = useVideoPlayer(item?.videoUrl ?? null, (videoPlayer) => {
-    videoPlayer.loop = false;
-
-    if (item) {
-      videoPlayer.play();
-    }
-  });
-
-  return (
-    <Modal
-      visible={Boolean(item)}
-      animationType="slide"
-      presentationStyle="fullScreen"
-      onRequestClose={onClose}
-      statusBarTranslucent={Platform.OS === "android"}
-    >
-      <View style={styles.playerModalRoot}>
-        <View
-          style={[
-            styles.playerTopBar,
-            { paddingTop: Math.max(insets.top + 10, 18) },
-          ]}
-        >
-          <Pressable onPress={onClose} style={styles.playerCloseBtn}>
-            <Ionicons name="close" size={24} color="#FFFFFF" />
-          </Pressable>
-        </View>
-
-        {item ? (
-          <View style={styles.playerBody}>
-            <VideoView
-              player={player}
-              style={styles.playerVideo}
-              nativeControls
-              contentFit="contain"
-              allowsFullscreen
-              allowsPictureInPicture
-            />
-
-            <View style={styles.playerTextWrap}>
-              <AppText style={styles.playerTitle}>{item.videoTitle}</AppText>
-              <AppText style={styles.playerHint}>
-                Tap the native controls for fullscreen playback and media
-                actions.
-              </AppText>
-            </View>
-          </View>
-        ) : null}
-      </View>
-    </Modal>
   );
 }
 
@@ -755,52 +681,4 @@ const styles = StyleSheet.create({
     fontFamily: Theme.fonts.body.semibold,
   },
 
-  playerModalRoot: {
-    flex: 1,
-    backgroundColor: "#000000",
-  },
-
-  playerTopBar: {
-    paddingHorizontal: 16,
-    alignItems: "flex-end",
-  },
-
-  playerCloseBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.16)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  playerBody: {
-    flex: 1,
-    justifyContent: "center",
-  },
-
-  playerVideo: {
-    width: "100%",
-    height: 260,
-    backgroundColor: "#000000",
-  },
-
-  playerTextWrap: {
-    paddingHorizontal: 18,
-    paddingTop: 18,
-    gap: 6,
-  },
-
-  playerTitle: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    lineHeight: 24,
-    fontFamily: Theme.fonts.heading.bold,
-  },
-
-  playerHint: {
-    color: "rgba(255,255,255,0.75)",
-    fontSize: 13,
-    lineHeight: 19,
-  },
 });

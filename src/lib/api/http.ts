@@ -1,5 +1,6 @@
 import { getApiAccessToken } from "@/lib/api/authToken";
 import { ApiEnv } from "@/lib/api/env";
+import { emitSessionExpired } from "@/lib/authEvent";
 
 type ApiErrorPayload = {
   message?: string;
@@ -248,6 +249,9 @@ function apiMultipartRequest<T>({
       });
 
       if (!ok) {
+        if (status === 401) {
+          emitSessionExpired();
+        }
         reject(new Error(getApiErrorMessage(data as ApiErrorPayload | null)));
         return;
       }
@@ -387,6 +391,9 @@ export async function apiRequest<T>(
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      emitSessionExpired();
+    }
     throw new Error(getApiErrorMessage(data as ApiErrorPayload | null));
   }
 

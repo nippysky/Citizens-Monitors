@@ -10,6 +10,8 @@ import { Keyboard, Platform, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AppText from "@/components/ui/AppText";
+import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
+import { formatTimeAgo } from "@/lib/formatTimeAgo";
 import { useOfflineSync } from "@/context/OfflineSyncContext";
 import {
   useCreatePulseCommentMutation,
@@ -97,10 +99,13 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
     const insets = useSafeAreaInsets();
 
     /**
-     * Single high snap point by default.
-     * This prevents the sheet from opening halfway and hiding the input.
+     * Single high snap point — keeps the input above the keyboard on both
+     * iOS and Android when keyboardBehavior="extend".
      */
     const snapPoints = useMemo(() => ["92%"], []);
+    const { handleSheetChange } = useBottomSheetBackHandler(
+      ref as React.RefObject<BottomSheetModal | null>
+    );
 
     const postId = rawPostId ?? null;
 
@@ -307,6 +312,7 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
         keyboardBehavior="extend"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
+        onChange={handleSheetChange}
         backdropComponent={(props) => (
           <BottomSheetBackdrop
             {...props}
@@ -398,7 +404,7 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
                     <AppText style={styles.commentTime}>
                       {item.pendingSync
                         ? "Pending sync"
-                        : `${item.minutesAgo} min ago`}
+                        : formatTimeAgo(item.minutesAgo)}
                     </AppText>
                   </View>
 

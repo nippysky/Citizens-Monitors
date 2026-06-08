@@ -5,6 +5,7 @@ import {
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
 import { useCallback, useMemo } from "react";
+import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -43,6 +44,7 @@ export default function ElectionFiltersBottomSheet({
 }: Props) {
   const insets = useSafeAreaInsets();
   const snapPoints = useMemo(() => ["76%"], []);
+  const { handleSheetChange } = useBottomSheetBackHandler(sheetRef);
 
   const selectedTypeSet = useMemo(
     () => new Set(value.electionTypes),
@@ -87,11 +89,14 @@ export default function ElectionFiltersBottomSheet({
     <BottomSheetModal
       ref={sheetRef}
       snapPoints={snapPoints}
+      index={0}
       enablePanDownToClose
+      enableDynamicSizing={false}
       topInset={insets.top + 12}
-      keyboardBehavior="interactive"
+      keyboardBehavior="extend"
       keyboardBlurBehavior="restore"
       android_keyboardInputMode="adjustResize"
+      onChange={handleSheetChange}
       backdropComponent={renderBackdrop}
       handleIndicatorStyle={styles.handle}
       backgroundStyle={styles.sheetBackground}

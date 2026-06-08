@@ -3,6 +3,7 @@ import {
   BottomSheetModal,
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
+import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { forwardRef, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -61,7 +62,10 @@ const PollingUnitBottomSheet = forwardRef<BottomSheetModal, Props>(
     ref
   ) {
     const insets = useSafeAreaInsets();
-    const snapPoints = useMemo(() => ["78%"], []);
+    const snapPoints = useMemo(() => ["88%"], []);
+    const { handleSheetChange } = useBottomSheetBackHandler(
+      ref as React.RefObject<BottomSheetModal | null>
+    );
 
     const stateSheetRef = useRef<BottomSheetModal>(null);
     const lgaSheetRef = useRef<BottomSheetModal>(null);
@@ -140,11 +144,14 @@ const PollingUnitBottomSheet = forwardRef<BottomSheetModal, Props>(
         <BottomSheetModal
           ref={ref}
           snapPoints={snapPoints}
+          index={0}
           enablePanDownToClose
+          enableDynamicSizing={false}
           topInset={insets.top + 12}
-          keyboardBehavior="interactive"
+          keyboardBehavior="extend"
           keyboardBlurBehavior="restore"
           android_keyboardInputMode="adjustResize"
+          onChange={handleSheetChange}
           backdropComponent={(props) => (
             <BottomSheetBackdrop
               {...props}

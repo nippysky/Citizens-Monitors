@@ -4,6 +4,7 @@ import {
   BottomSheetModal,
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
+import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 import { Ionicons } from "@expo/vector-icons";
 import { forwardRef, useMemo, useState } from "react";
 import { Image, Pressable, StyleSheet, Switch, View } from "react-native";
@@ -31,6 +32,9 @@ type Props = {
 const ShareOpinionBottomSheet = forwardRef<BottomSheetModal, Props>(
   function ShareOpinionBottomSheet({ onSubmitted, onPayload }, ref) {
     const insets = useSafeAreaInsets();
+    const { handleSheetChange } = useBottomSheetBackHandler(
+      ref as React.RefObject<BottomSheetModal | null>
+    );
     const { showToast } = useAppToast();
     const { pickImageFromGallery, pickVideoFromGallery, busy } =
       useCollationMedia();
@@ -91,6 +95,7 @@ const ShareOpinionBottomSheet = forwardRef<BottomSheetModal, Props>(
     return (
       <BottomSheetModal
         ref={ref}
+        onChange={handleSheetChange}
         snapPoints={snaps}
         enablePanDownToClose
         topInset={insets.top + 12}

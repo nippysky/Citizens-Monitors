@@ -3,6 +3,7 @@ import {
   BottomSheetModal,
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
+import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 import { Ionicons } from "@expo/vector-icons";
 import {
   forwardRef,
@@ -40,7 +41,10 @@ const BankDetailsBottomSheet = forwardRef<BottomSheetModal, Props>(
     ref
   ) {
     const insets = useSafeAreaInsets();
-    const snapPoints = useMemo(() => ["78%"], []);
+    const snapPoints = useMemo(() => ["84%"], []);
+    const { handleSheetChange } = useBottomSheetBackHandler(
+      ref as React.RefObject<BottomSheetModal | null>
+    );
 
     const bankSheetRef = useState<RefObject<BottomSheetModal | null>>(
       () => ({ current: null })
@@ -59,11 +63,14 @@ const BankDetailsBottomSheet = forwardRef<BottomSheetModal, Props>(
         <BottomSheetModal
           ref={ref}
           snapPoints={snapPoints}
+          index={0}
           enablePanDownToClose
+          enableDynamicSizing={false}
           topInset={insets.top + 12}
-          keyboardBehavior="interactive"
+          keyboardBehavior="extend"
           keyboardBlurBehavior="restore"
           android_keyboardInputMode="adjustResize"
+          onChange={handleSheetChange}
           backdropComponent={(p) => (
             <BottomSheetBackdrop
               {...p}

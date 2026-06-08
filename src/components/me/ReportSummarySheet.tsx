@@ -3,6 +3,7 @@ import {
   BottomSheetModal,
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
+import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 import { Ionicons } from "@expo/vector-icons";
 import { forwardRef, useMemo } from "react";
 import { Image, Linking, Pressable, StyleSheet, View } from "react-native";
@@ -340,6 +341,9 @@ const ReportSummarySheet = forwardRef<BottomSheetModal, Props>(
   function ReportSummarySheet({ submission, onEditResult }, ref) {
     const insets = useSafeAreaInsets();
     const snapPoints = useMemo(() => ["86%", "96%"], []);
+    const { handleSheetChange } = useBottomSheetBackHandler(
+      ref as React.RefObject<BottomSheetModal | null>
+    );
 
     const close = () => {
       if (ref && typeof ref !== "function" && ref.current) {
@@ -350,6 +354,7 @@ const ReportSummarySheet = forwardRef<BottomSheetModal, Props>(
     return (
       <BottomSheetModal
         ref={ref}
+        onChange={handleSheetChange}
         snapPoints={snapPoints}
         enablePanDownToClose
         topInset={insets.top + 12}

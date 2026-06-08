@@ -3,6 +3,7 @@ import { Image, Pressable, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import AppText from "@/components/ui/AppText";
+import { formatTimeAgo } from "@/lib/formatTimeAgo";
 import { PulseDiscussionPost } from "@/data/pulse";
 import { Theme } from "@/theme";
 import ProfileAvatar from "@/svgs/app/profile/ProfileAvatar";
@@ -39,7 +40,7 @@ export default function PulseDiscussionCard({
         <View style={styles.authorInfo}>
           <View style={styles.authorNameRow}>
             <AppText style={styles.authorName}>{post.author}</AppText>
-            <AppText style={styles.timeText}>{post.minutesAgo} min ago</AppText>
+            <AppText style={styles.timeText}>{formatTimeAgo(post.minutesAgo)}</AppText>
           </View>
           <View style={styles.electionLabelRow}>
             <View style={styles.electionDot} />

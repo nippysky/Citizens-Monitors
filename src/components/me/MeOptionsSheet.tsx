@@ -3,6 +3,7 @@ import { forwardRef } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
+import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 import { Theme } from "@/theme";
 
 type Props = {
@@ -14,6 +15,10 @@ type Props = {
 
 const MeOptionsSheet = forwardRef<BottomSheetModal, Props>(
   function MeOptionsSheet({ title, options, selectedValue, onSelect }, ref) {
+    const { handleSheetChange } = useBottomSheetBackHandler(
+      ref as React.RefObject<BottomSheetModal | null>
+    );
+
     const handleSelect = (value: string) => {
       onSelect(value);
       if (ref && typeof ref !== "function" && ref.current) {
@@ -24,8 +29,9 @@ const MeOptionsSheet = forwardRef<BottomSheetModal, Props>(
     return (
       <BottomSheetModal
         ref={ref}
-        enableDynamicSizing // ✅ THIS replaces CONTENT_HEIGHT
+        enableDynamicSizing
         enablePanDownToClose
+        onChange={handleSheetChange}
         backgroundStyle={styles.sheetBg}
         handleIndicatorStyle={styles.handle}
       >

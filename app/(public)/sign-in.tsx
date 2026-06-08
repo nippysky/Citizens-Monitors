@@ -138,12 +138,23 @@ export default function SignInScreen() {
       });
       router.replace(Paths.appHome);
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Unable to sign in with Google.";
+      const raw =
+        error instanceof Error ? error.message : "Unable to sign in with Google.";
 
-      showToast({ type: "error", message });
+      // If the backend says the account needs email/password, guide the user
+      // rather than showing the raw error.
+      const isPasswordAccount =
+        raw.toLowerCase().includes("already registered") ||
+        raw.toLowerCase().includes("already exists") ||
+        raw.toLowerCase().includes("please sign in");
+
+      showToast({
+        type: "error",
+        message: isPasswordAccount
+          ? "This account uses email and password. Please enter your credentials below."
+          : raw,
+      });
+
       console.log("Google sign-in error:", error);
     } finally {
       setIsGoogleSigningIn(false);

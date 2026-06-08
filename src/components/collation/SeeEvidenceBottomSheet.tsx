@@ -4,6 +4,7 @@ import {
   BottomSheetModal,
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
+import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 import { Ionicons } from "@expo/vector-icons";
 import { forwardRef, useMemo, useState } from "react";
 import {
@@ -49,6 +50,9 @@ const SeeEvidenceBottomSheet = forwardRef<BottomSheetModal, Props>(
   function SeeEvidenceBottomSheet({ evidence }, ref) {
     const insets = useSafeAreaInsets();
     const snapPoints = useMemo(() => ["90%"], []);
+    const { handleSheetChange } = useBottomSheetBackHandler(
+      ref as React.RefObject<BottomSheetModal | null>
+    );
     const [imgLoading, setImgLoading] = useState(true);
     const [imgFailed, setImgFailed] = useState(false);
 
@@ -66,6 +70,7 @@ const SeeEvidenceBottomSheet = forwardRef<BottomSheetModal, Props>(
     return (
       <BottomSheetModal
         ref={ref}
+        onChange={handleSheetChange}
         snapPoints={snapPoints}
         enablePanDownToClose
         topInset={insets.top + 12}
