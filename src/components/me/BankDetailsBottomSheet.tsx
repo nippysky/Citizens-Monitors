@@ -67,9 +67,8 @@ const BankDetailsBottomSheet = forwardRef<BottomSheetModal, Props>(
           enablePanDownToClose
           enableDynamicSizing={false}
           topInset={insets.top + 12}
-          keyboardBehavior="extend"
+          keyboardBehavior="interactive"
           keyboardBlurBehavior="restore"
-          android_keyboardInputMode="adjustResize"
           onChange={handleSheetChange}
           backdropComponent={(p) => (
             <BottomSheetBackdrop
@@ -133,8 +132,11 @@ const BankDetailsBottomSheet = forwardRef<BottomSheetModal, Props>(
               }
             />
 
-            <AppButton title="Submit" onPress={onSave} />
           </BottomSheetScrollView>
+
+          <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
+            <AppButton title="Submit" onPress={onSave} style={styles.submitButton} />
+          </View>
         </BottomSheetModal>
 
         {/* ✅ FIXED SELECT SHEET */}
@@ -159,7 +161,8 @@ export default BankDetailsBottomSheet;
 const styles = StyleSheet.create({
   bg: { backgroundColor: Theme.colors.background, borderTopLeftRadius: 28, borderTopRightRadius: 28 },
   handle: { backgroundColor: "rgba(17,26,50,0.12)", width: 44 },
-  content: { paddingHorizontal: 16, paddingTop: 8, gap: 16 },
+  content: { paddingHorizontal: 16, paddingTop: 8,
+    paddingBottom: 16, gap: 16 },
   header: { minHeight: 58, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   headerTitle: { fontSize: 18, lineHeight: 24, fontFamily: Theme.fonts.heading.semibold, color: Theme.colors.text },
   closeBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(255,255,255,0.74)", alignItems: "center", justifyContent: "center" },
@@ -174,4 +177,14 @@ const styles = StyleSheet.create({
   section: { gap: 6 },
   sectionTitle: { fontSize: 16, lineHeight: 22, color: Theme.colors.text, fontFamily: Theme.fonts.body.semibold },
   sectionSub: { fontSize: 13, lineHeight: 18, color: Theme.colors.textMuted },
+  submitButton: {
+    marginVertical: 0,
+  },
+  footer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(17,26,50,0.07)",
+    backgroundColor: Theme.colors.background,
+  },
 });

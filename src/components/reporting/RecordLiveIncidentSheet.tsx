@@ -239,6 +239,9 @@ const RecordLiveIncidentSheet = forwardRef<BottomSheetModal, Props>(
             </View>
           ) : null}
 
+        </BottomSheetScrollView>
+
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
           <AppButton
             title={canStart ? "◉ Start Recording" : "Select Incident Type First"}
             onPress={onStartRecording}
@@ -248,7 +251,7 @@ const RecordLiveIncidentSheet = forwardRef<BottomSheetModal, Props>(
             ]}
             disabled={!canStart}
           />
-        </BottomSheetScrollView>
+        </View>
       </BottomSheetModal>
     );
   }
@@ -406,5 +409,12 @@ const styles = StyleSheet.create({
 
   startRecordingBtnDisabled: {
     backgroundColor: "#C9CCD3",
+  },
+  footer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(17,26,50,0.07)",
+    backgroundColor: Theme.colors.background,
   },
 });

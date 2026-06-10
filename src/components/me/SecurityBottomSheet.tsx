@@ -49,9 +49,8 @@ const SecurityBottomSheet = forwardRef<BottomSheetModal, Props>(
         enablePanDownToClose
         enableDynamicSizing={false}
         topInset={insets.top + 12}
-        keyboardBehavior="extend"
+        keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
-        android_keyboardInputMode="adjustResize"
         onChange={handleSheetChange}
         backdropComponent={(props) => (
           <BottomSheetBackdrop
@@ -114,6 +113,9 @@ const SecurityBottomSheet = forwardRef<BottomSheetModal, Props>(
             secureToggle
           />
 
+        </BottomSheetScrollView>
+
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
           <AppButton
             title="Save Changes"
             onPress={onSave}
@@ -121,7 +123,7 @@ const SecurityBottomSheet = forwardRef<BottomSheetModal, Props>(
             disabled={saving}
             style={styles.saveButton}
           />
-        </BottomSheetScrollView>
+        </View>
       </BottomSheetModal>
     );
   }
@@ -142,6 +144,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     paddingTop: 8,
+    paddingBottom: 16,
     gap: 16,
   },
   header: {
@@ -171,5 +174,12 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     marginVertical: 0,
+  },
+  footer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(17,26,50,0.07)",
+    backgroundColor: Theme.colors.background,
   },
 });

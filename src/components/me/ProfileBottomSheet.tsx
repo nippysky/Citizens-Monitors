@@ -69,7 +69,7 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
   ) {
     const insets = useSafeAreaInsets();
     const { showToast } = useAppToast();
-    const snapPoints = useMemo(() => ["82%"], []);
+    const snapPoints = useMemo(() => ["92%"], []);
     const { handleSheetChange } = useBottomSheetBackHandler(
       ref as React.RefObject<BottomSheetModal | null>
     );
@@ -137,7 +137,6 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
           topInset={insets.top + 12}
           keyboardBehavior="interactive"
           keyboardBlurBehavior="restore"
-          android_keyboardInputMode="adjustResize"
           backdropComponent={(props) => (
             <BottomSheetBackdrop
               {...props}
@@ -153,10 +152,7 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
           <BottomSheetScrollView
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={[
-              styles.content,
-              { paddingBottom: insets.bottom + 22 },
-            ]}
+            contentContainerStyle={styles.content}
           >
             <View style={styles.header}>
               <AppText style={styles.headerTitle}>
@@ -288,6 +284,15 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
               </Pressable>
             </View>
 
+          </BottomSheetScrollView>
+
+          {/* Sticky save — always visible above keyboard */}
+          <View
+            style={[
+              styles.footer,
+              { paddingBottom: Math.max(insets.bottom + 8, 20) },
+            ]}
+          >
             <AppButton
               title="Save Changes"
               onPress={onSave}
@@ -295,7 +300,7 @@ const ProfileBottomSheet = forwardRef<BottomSheetModal, Props>(
               disabled={saving}
               style={styles.saveButton}
             />
-          </BottomSheetScrollView>
+          </View>
         </BottomSheetModal>
 
         <BirthdaySheet
@@ -471,6 +476,13 @@ const styles = StyleSheet.create({
   },
   actionDisabled: {
     opacity: 0.58,
+  },
+  footer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(17,26,50,0.07)",
+    backgroundColor: Theme.colors.background,
   },
   saveButton: {
     marginVertical: 0,

@@ -8,6 +8,21 @@ type ApiErrorPayload = {
   errors?: string[] | Record<string, string[] | string>;
 };
 
+/**
+ * Thrown by apiRequest when the server returns a non-2xx status.
+ * Carries the HTTP status code so callers can handle 404 (not implemented)
+ * differently from 400 (bad request) or 500 (server error).
+ */
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 type ApiRequestOptions = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
@@ -135,20 +150,7 @@ function logRequest({
   isMultipart: boolean;
   body: unknown;
 }) {
-  if (!__DEV__) return;
-
-  console.log("[API Request]", {
-    method,
-    url,
-    hasInhouseToken: Boolean(ApiEnv.inhouseAccessToken),
-    hasAuthToken: Boolean(headers.Authorization),
-    tokenPreview: `${ApiEnv.inhouseAccessToken.slice(
-      0,
-      6
-    )}...${ApiEnv.inhouseAccessToken.slice(-6)}`,
-    bodyType: isMultipart ? "FormData" : "JSON",
-    body: isMultipart ? "[multipart form-data]" : body,
-  });
+  // Request logging suppressed — only errors are logged.
 }
 
 function logResponse({
@@ -168,17 +170,7 @@ function logResponse({
   raw: string;
   transport: "fetch" | "xhr";
 }) {
-  if (!__DEV__) return;
-
-  console.log("[API Response]", {
-    method,
-    url,
-    status,
-    ok,
-    transport,
-    data,
-    raw,
-  });
+  // Response logging suppressed — only errors are logged.
 }
 
 function logNetworkError({
@@ -252,7 +244,7 @@ function apiMultipartRequest<T>({
         if (status === 401) {
           emitSessionExpired();
         }
-        reject(new Error(getApiErrorMessage(data as ApiErrorPayload | null)));
+        reject(new ApiError(getApiErrorMessage(data as ApiErrorPayload | null), status));
         return;
       }
 
@@ -394,7 +386,10 @@ export async function apiRequest<T>(
     if (response.status === 401) {
       emitSessionExpired();
     }
-    throw new Error(getApiErrorMessage(data as ApiErrorPayload | null));
+    throw new ApiError(
+      getApiErrorMessage(data as ApiErrorPayload | null),
+      response.status
+    );
   }
 
   return data as T;

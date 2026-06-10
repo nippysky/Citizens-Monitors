@@ -1,12 +1,42 @@
 // ─── src/components/pulse/PulseDiscussionCard.tsx ─────────────────────────────
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useEffect, useState } from "react";
 
 import AppText from "@/components/ui/AppText";
 import { formatTimeAgo } from "@/lib/formatTimeAgo";
 import { PulseDiscussionPost } from "@/data/pulse";
 import { Theme } from "@/theme";
 import ProfileAvatar from "@/svgs/app/profile/ProfileAvatar";
+
+/** Renders a post image at its natural aspect ratio (portrait/landscape/square). */
+function PostImage({ uri }: { uri: string }) {
+  const [aspectRatio, setAspectRatio] = useState<number | null>(null);
+
+  useEffect(() => {
+    Image.getSize(
+      uri,
+      (w, h) => {
+        if (w > 0 && h > 0) setAspectRatio(w / h);
+        else setAspectRatio(16 / 9);
+      },
+      () => setAspectRatio(16 / 9)
+    );
+  }, [uri]);
+
+  if (!aspectRatio) {
+    // Skeleton placeholder while dimensions load
+    return <View style={[styles.postImage, { aspectRatio: 16 / 9 }]} />;
+  }
+
+  return (
+    <Image
+      source={{ uri }}
+      style={[styles.postImage, { aspectRatio }]}
+      resizeMode="cover"
+    />
+  );
+}
 
 type Props = {
   post: PulseDiscussionPost;
@@ -54,14 +84,8 @@ export default function PulseDiscussionCard({
       {/* Body */}
       <AppText style={styles.body}>{post.body}</AppText>
 
-      {/* Image */}
-      {post.imageUri ? (
-        <Image
-          source={{ uri: post.imageUri }}
-          style={styles.postImage}
-          resizeMode="cover"
-        />
-      ) : null}
+      {/* Image — displayed at natural aspect ratio */}
+      {post.imageUri ? <PostImage uri={post.imageUri} /> : null}
 
       {/* Actions */}
       <View style={styles.actionsRow}>
@@ -155,7 +179,6 @@ const styles = StyleSheet.create({
 
   postImage: {
     width: "100%",
-    height: 200,
     borderRadius: 14,
     backgroundColor: "#EEF2F6",
   },

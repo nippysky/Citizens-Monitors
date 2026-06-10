@@ -95,7 +95,6 @@ export default function ElectionFiltersBottomSheet({
       topInset={insets.top + 12}
       keyboardBehavior="extend"
       keyboardBlurBehavior="restore"
-      android_keyboardInputMode="adjustResize"
       onChange={handleSheetChange}
       backdropComponent={renderBackdrop}
       handleIndicatorStyle={styles.handle}
@@ -221,20 +220,22 @@ export default function ElectionFiltersBottomSheet({
           </View>
         </View>
 
-        <View style={styles.actions}>
-          <Pressable onPress={handleReset} style={styles.resetButton}>
-            <AppText style={styles.resetText}>Reset</AppText>
-          </Pressable>
-
-          <View style={styles.applyWrap}>
-            <AppButton
-              title="Apply Filters"
-              onPress={handleApply}
-              style={styles.applyButton}
-            />
-          </View>
-        </View>
       </BottomSheetScrollView>
+
+      {/* Sticky actions row */}
+      <View style={[styles.actions, { paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
+        <Pressable onPress={handleReset} style={styles.resetButton}>
+          <AppText style={styles.resetText}>Reset</AppText>
+        </Pressable>
+
+        <View style={styles.applyWrap}>
+          <AppButton
+            title="Apply Filters"
+            onPress={handleApply}
+            style={styles.applyButton}
+          />
+        </View>
+      </View>
     </BottomSheetModal>
   );
 }
@@ -254,6 +255,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     paddingTop: 8,
+    paddingBottom: 16,
     gap: 18,
   },
 
@@ -355,6 +357,9 @@ const styles = StyleSheet.create({
   },
 
   actions: {
+    borderTopWidth: 1,
+    borderTopColor: "rgba(17,26,50,0.07)",
+    backgroundColor: Theme.colors.background,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,

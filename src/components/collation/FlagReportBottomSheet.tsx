@@ -104,12 +104,12 @@ const FlagReportBottomSheet = forwardRef<BottomSheetModal, Props>(
     return (
       <BottomSheetModal
         ref={ref} snapPoints={snaps} enablePanDownToClose topInset={insets.top + 12}
-        keyboardBehavior="interactive" keyboardBlurBehavior="restore" android_keyboardInputMode="adjustResize"
+        keyboardBehavior="interactive" keyboardBlurBehavior="restore"
         backdropComponent={(p) => <BottomSheetBackdrop {...p} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.32} pressBehavior="close" />}
         handleIndicatorStyle={s.handle} backgroundStyle={s.bg}
       >
         <BottomSheetScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled"
-          contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 22 }]}>
+          contentContainerStyle={s.content}>
 
           <View style={s.header}>
             <AppText style={s.headerTitle}>Flagging Report</AppText>
@@ -181,11 +181,12 @@ const FlagReportBottomSheet = forwardRef<BottomSheetModal, Props>(
             p1="Record Live" p2="Upload from Gallery" onP1={doRecordVideo} onP2={doPickVideo}
             asset={vid} type="video" busy={media.busy} onRemove={() => setVid(null)} />
 
-          <View style={{ gap: 8, paddingTop: 2 }}>
-            <AppButton title={submitting ? "Submitting..." : "Proceed To Report"} onPress={submit} loading={submitting} disabled={!canSubmit || media.busy} style={{ marginVertical: 0 }} />
-            <AppText style={s.submitHint}>Location metadata is attached when verified. Image evidence is required.</AppText>
-          </View>
         </BottomSheetScrollView>
+
+        <View style={[s.footer, { paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
+          <AppButton title={submitting ? "Submitting..." : "Proceed To Report"} onPress={submit} loading={submitting} disabled={!canSubmit || media.busy} style={{ marginVertical: 0 }} />
+          <AppText style={s.submitHint}>Location metadata is attached when verified. Image evidence is required.</AppText>
+        </View>
       </BottomSheetModal>
     );
   }
@@ -300,4 +301,12 @@ const s = StyleSheet.create({
   actBtnText: { fontSize: 13, lineHeight: 18, color: "#FFF", fontFamily: Theme.fonts.body.semibold },
   upSub: { fontSize: 11, lineHeight: 16, color: "#F04A1D" },
   submitHint: { fontSize: 11, lineHeight: 16, color: Theme.colors.textMuted, textAlign: "center" },
+  footer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    gap: 4,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(17,26,50,0.07)",
+    backgroundColor: Theme.colors.background,
+  },
 });

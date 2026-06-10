@@ -223,7 +223,7 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
       <BottomSheetModal
         ref={ref}
         snapPoints={snapPoints}
-        index={0}
+        index={1}
         enablePanDownToClose
         enableDynamicSizing={false}
         topInset={insets.top + 12}
@@ -320,7 +320,16 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
 
             {imgAsset?.uri ? (
               <View style={st.previewWrap}>
-                <Image source={{ uri: imgAsset.uri }} style={st.preview} />
+                <Image
+                  source={{ uri: imgAsset.uri }}
+                  style={[
+                    st.preview,
+                    imgAsset.width && imgAsset.height
+                      ? { aspectRatio: imgAsset.width / imgAsset.height, height: undefined }
+                      : null,
+                  ]}
+                  resizeMode="cover"
+                />
 
                 <Pressable
                   onPress={() => setImgAsset(null)}
@@ -371,6 +380,10 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
             />
           </View>
 
+        </BottomSheetScrollView>
+
+        {/* Sticky submit — always above keyboard */}
+        <View style={[st.footer, { paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
           <AppButton
             title={isOnline ? "Submit Post" : "Save Offline"}
             onPress={() => {
@@ -380,7 +393,7 @@ const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(
             loading={isSubmitting}
             style={st.submitButton}
           />
-        </BottomSheetScrollView>
+        </View>
       </BottomSheetModal>
     );
   }
@@ -524,10 +537,9 @@ const st = StyleSheet.create({
   },
   preview: {
     width: "100%",
-    height: 160,
     borderRadius: 16,
-    resizeMode: "cover",
     backgroundColor: "#EEF2F6",
+    minHeight: 120,
   },
   removePreview: {
     position: "absolute",
@@ -591,6 +603,13 @@ const st = StyleSheet.create({
   switchBold: {
     fontFamily: Theme.fonts.body.semibold,
     color: Theme.colors.text,
+  },
+  footer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(17,26,50,0.07)",
+    backgroundColor: Theme.colors.background,
   },
   submitButton: {
     marginVertical: 0,

@@ -14,6 +14,7 @@ import type { NotificationResponse } from "expo-notifications";
 
 import { Paths } from "@/constants/paths";
 import { useAuth } from "@/context/AuthContext";
+import { ApiError } from "@/lib/api/http";
 import { registerPushToken } from "@/lib/api/pushToken.api";
 import {
   AppNotificationData,
@@ -310,13 +311,33 @@ async function syncTokenToBackend(token: string): Promise<boolean> {
     await registerPushToken(token);
 
     if (__DEV__) {
-      console.log("[NotificationsGate] token synced to backend");
+      console.log("[NotificationsGate] token synced to backend ✓");
     }
 
     return true;
   } catch (err) {
     if (__DEV__) {
-      console.warn("[NotificationsGate] backend sync failed:", err);
+      const status = err instanceof ApiError ? err.status : null;
+
+      if (status === 404) {
+        // The push-token endpoint is not yet implemented on the backend.
+        // Push notifications will not work until the backend adds it.
+        // See: src/lib/api/pushToken.api.ts — confirm endpoint with backend engineer.
+        console.warn(
+          "[NotificationsGate] push token sync skipped — backend endpoint " +
+            "POST /profile/push-token returned 404 (not found). " +
+            "Confirm the correct endpoint path with the backend engineer."
+        );
+      } else if (status === 401) {
+        // Auth token expired between token acquisition and the sync POST.
+        // The auth system will handle re-login; this is not a push-notification bug.
+        console.warn("[NotificationsGate] push token sync skipped — 401 unauthorized (auth expired mid-sync).");
+      } else {
+        console.error(
+          `[NotificationsGate] push token sync failed (HTTP ${status ?? "network error"}):`,
+          err
+        );
+      }
     }
 
     return false;

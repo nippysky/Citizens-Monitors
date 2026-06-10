@@ -150,7 +150,6 @@ const PollingUnitBottomSheet = forwardRef<BottomSheetModal, Props>(
           topInset={insets.top + 12}
           keyboardBehavior="extend"
           keyboardBlurBehavior="restore"
-          android_keyboardInputMode="adjustResize"
           onChange={handleSheetChange}
           backdropComponent={(props) => (
             <BottomSheetBackdrop
@@ -272,6 +271,9 @@ const PollingUnitBottomSheet = forwardRef<BottomSheetModal, Props>(
               />
             </View>
 
+          </BottomSheetScrollView>
+
+          <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
             <AppButton
               title={
                 isElectionLive
@@ -283,7 +285,7 @@ const PollingUnitBottomSheet = forwardRef<BottomSheetModal, Props>(
               disabled={!canSave}
               style={styles.saveButton}
             />
-          </BottomSheetScrollView>
+          </View>
         </BottomSheetModal>
 
         <SelectPickerSheet
@@ -436,5 +438,12 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     marginVertical: 0,
+  },
+  footer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(17,26,50,0.07)",
+    backgroundColor: Theme.colors.background,
   },
 });

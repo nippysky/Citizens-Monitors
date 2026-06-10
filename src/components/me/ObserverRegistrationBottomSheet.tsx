@@ -208,7 +208,6 @@ const ObserverRegistrationBottomSheet = forwardRef<BottomSheetModal, Props>(
         topInset={insets.top + 12}
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
-        android_keyboardInputMode="adjustResize"
         backdropComponent={(props) => (
           <BottomSheetBackdrop
             {...props}
@@ -224,10 +223,7 @@ const ObserverRegistrationBottomSheet = forwardRef<BottomSheetModal, Props>(
         <BottomSheetScrollView
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: insets.bottom + 22 },
-          ]}
+          contentContainerStyle={styles.content}
         >
           <View style={styles.header}>
             <View style={styles.headerTextWrap}>
@@ -312,7 +308,15 @@ const ObserverRegistrationBottomSheet = forwardRef<BottomSheetModal, Props>(
               }
             />
           </View>
+        </BottomSheetScrollView>
 
+        {/* Sticky submit — always visible, never buried inside scroll */}
+        <View
+          style={[
+            styles.footer,
+            { paddingBottom: Math.max(insets.bottom + 8, 20) },
+          ]}
+        >
           <AppButton
             title="Submit Observer Application"
             onPress={handleSubmit}
@@ -320,7 +324,7 @@ const ObserverRegistrationBottomSheet = forwardRef<BottomSheetModal, Props>(
             disabled={!canSubmit}
             style={styles.submitButton}
           />
-        </BottomSheetScrollView>
+        </View>
       </BottomSheetModal>
     );
   }
@@ -341,6 +345,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     paddingTop: 8,
+    paddingBottom: 16,
     gap: 16,
   },
   header: {
@@ -482,6 +487,13 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 210,
     resizeMode: "cover",
+  },
+  footer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(17,26,50,0.07)",
+    backgroundColor: Theme.colors.background,
   },
   submitButton: {
     marginVertical: 0,

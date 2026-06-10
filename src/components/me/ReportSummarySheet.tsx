@@ -356,11 +356,11 @@ const ReportSummarySheet = forwardRef<BottomSheetModal, Props>(
         ref={ref}
         onChange={handleSheetChange}
         snapPoints={snapPoints}
+        index={1}
         enablePanDownToClose
         topInset={insets.top + 12}
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
-        android_keyboardInputMode="adjustResize"
         backdropComponent={(props) => (
           <BottomSheetBackdrop
             {...props}

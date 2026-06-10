@@ -2,10 +2,11 @@ import {
   BottomSheetBackdrop,
   BottomSheetModal,
   BottomSheetScrollView,
+  BottomSheetTextInput,
 } from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
 import { forwardRef, useMemo } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 
@@ -59,9 +60,8 @@ const FeedbackBottomSheet = forwardRef<BottomSheetModal, Props>(
         enablePanDownToClose
         enableDynamicSizing={false}
         topInset={insets.top + 12}
-        keyboardBehavior="extend"
+        keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
-        android_keyboardInputMode="adjustResize"
         onChange={handleSheetChange}
         backdropComponent={(props) => (
           <BottomSheetBackdrop
@@ -78,10 +78,7 @@ const FeedbackBottomSheet = forwardRef<BottomSheetModal, Props>(
         <BottomSheetScrollView
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: insets.bottom + 22 },
-          ]}
+          contentContainerStyle={styles.content}
         >
           <View style={styles.header}>
             <View style={styles.headerTextWrap}>
@@ -138,7 +135,7 @@ const FeedbackBottomSheet = forwardRef<BottomSheetModal, Props>(
               </AppText>
             </View>
 
-            <TextInput
+            <BottomSheetTextInput
               value={value.message}
               onChangeText={(messageValue) =>
                 onChange({
@@ -154,7 +151,15 @@ const FeedbackBottomSheet = forwardRef<BottomSheetModal, Props>(
               style={styles.messageInput}
             />
           </View>
+        </BottomSheetScrollView>
 
+        {/* Sticky submit button — always visible above keyboard */}
+        <View
+          style={[
+            styles.footer,
+            { paddingBottom: Math.max(insets.bottom + 8, 20) },
+          ]}
+        >
           <AppButton
             title="Submit Feedback"
             onPress={onSubmit}
@@ -162,7 +167,7 @@ const FeedbackBottomSheet = forwardRef<BottomSheetModal, Props>(
             disabled={!canSubmit}
             style={styles.submitButton}
           />
-        </BottomSheetScrollView>
+        </View>
       </BottomSheetModal>
     );
   }
@@ -183,6 +188,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     paddingTop: 8,
+    paddingBottom: 16,
     gap: 16,
   },
   header: {
@@ -286,6 +292,13 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.regular,
+  },
+  footer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(17,26,50,0.07)",
+    backgroundColor: Theme.colors.background,
   },
   submitButton: {
     marginVertical: 0,

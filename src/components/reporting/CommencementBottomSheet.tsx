@@ -7,6 +7,7 @@ import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 import { Ionicons } from "@expo/vector-icons";
 import { forwardRef, useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import TimePickerSheet from "@/components/reporting/TimePickerSheet";
 import AppButton from "@/components/ui/AppButton";
@@ -49,6 +50,7 @@ const CommencementBottomSheet = forwardRef<BottomSheetModal, Props>(
     { contextData, onProceedIncident, onProceedResult },
     ref
   ) {
+    const insets = useSafeAreaInsets();
     const snapPoints = useMemo(() => ["78%"], []);
     const { handleSheetChange } = useBottomSheetBackHandler(
       ref as React.RefObject<BottomSheetModal | null>
@@ -223,16 +225,20 @@ const CommencementBottomSheet = forwardRef<BottomSheetModal, Props>(
                 }}
               />
 
-              <View style={styles.bottomActionWrap}>
-                <AppButton
-                  title="Proceed To Report"
-                  onPress={handleProceed}
-                  disabled={!selectedTime}
-                />
-              </View>
             </>
           )}
         </BottomSheetScrollView>
+
+        {/* Sticky CTA — only shown when time-step is active */}
+        {step !== "choice" ? (
+          <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
+            <AppButton
+              title="Proceed To Report"
+              onPress={handleProceed}
+              disabled={!selectedTime}
+            />
+          </View>
+        ) : null}
       </BottomSheetModal>
     );
   }
@@ -377,5 +383,12 @@ const styles = StyleSheet.create({
   },
   bottomActionWrap: {
     paddingTop: 20,
+  },
+  footer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(17,26,50,0.07)",
+    backgroundColor: Theme.colors.background,
   },
 });

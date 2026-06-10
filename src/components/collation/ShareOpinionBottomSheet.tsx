@@ -101,7 +101,6 @@ const ShareOpinionBottomSheet = forwardRef<BottomSheetModal, Props>(
         topInset={insets.top + 12}
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
-        android_keyboardInputMode="adjustResize"
         backdropComponent={(p) => (
           <BottomSheetBackdrop
             {...p}
@@ -239,16 +238,17 @@ const ShareOpinionBottomSheet = forwardRef<BottomSheetModal, Props>(
             />
           </View>
 
-          <View style={{ paddingTop: 6 }}>
-            <AppButton
-              title="Submit Post"
-              onPress={submit}
-              disabled={!ok}
-              loading={busy}
-              style={{ marginVertical: 0 }}
-            />
-          </View>
         </BottomSheetScrollView>
+
+        <View style={[st.footer, { paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
+          <AppButton
+            title="Submit Post"
+            onPress={submit}
+            disabled={!ok}
+            loading={busy}
+            style={st.submitButton}
+          />
+        </View>
       </BottomSheetModal>
     );
   }
@@ -263,7 +263,8 @@ const st = StyleSheet.create({
     borderTopRightRadius: 28,
   },
   handle: { backgroundColor: "rgba(17,26,50,0.12)", width: 44 },
-  content: { paddingHorizontal: 16, paddingTop: 8, gap: 18 },
+  content: { paddingHorizontal: 16, paddingTop: 8,
+    paddingBottom: 16, gap: 18 },
   header: {
     minHeight: 58,
     flexDirection: "row",
@@ -379,4 +380,14 @@ const st = StyleSheet.create({
     gap: 12,
   },
   switchLabel: { flex: 1, fontSize: 15, lineHeight: 20, color: Theme.colors.text },
+  submitButton: {
+    marginVertical: 0,
+  },
+  footer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(17,26,50,0.07)",
+    backgroundColor: Theme.colors.background,
+  },
 });

@@ -76,7 +76,6 @@ const SeeEvidenceBottomSheet = forwardRef<BottomSheetModal, Props>(
         topInset={insets.top + 12}
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
-        android_keyboardInputMode="adjustResize"
         backdropComponent={(p) => (
           <BottomSheetBackdrop {...p} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.32} pressBehavior="close" />
         )}

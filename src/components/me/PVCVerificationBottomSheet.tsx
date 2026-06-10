@@ -242,10 +242,7 @@ const PVCVerificationBottomSheet = forwardRef<BottomSheetModal, Props>(
         <BottomSheetScrollView
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: insets.bottom + 22 },
-          ]}
+          contentContainerStyle={styles.content}
         >
           <View style={styles.header}>
             <AppText style={styles.headerTitle}>Update Your PVC</AppText>
@@ -366,6 +363,15 @@ const PVCVerificationBottomSheet = forwardRef<BottomSheetModal, Props>(
             onRemove={() => removeImage("back")}
           />
 
+        </BottomSheetScrollView>
+
+        {/* Sticky submit — stays visible above keyboard */}
+        <View
+          style={[
+            styles.footer,
+            { paddingBottom: Math.max(insets.bottom + 8, 20) },
+          ]}
+        >
           <AppButton
             title="Submit"
             onPress={() => {
@@ -375,7 +381,7 @@ const PVCVerificationBottomSheet = forwardRef<BottomSheetModal, Props>(
             disabled={!frontUri || !backUri || isSubmitting}
             style={styles.submitBtn}
           />
-        </BottomSheetScrollView>
+        </View>
       </BottomSheetModal>
     );
   }
@@ -476,6 +482,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     paddingTop: 8,
+    paddingBottom: 16,
     gap: 18,
   },
   header: {
@@ -710,6 +717,13 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     color: "#FFFFFF",
     fontFamily: Theme.fonts.body.semibold,
+  },
+  footer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(17,26,50,0.07)",
+    backgroundColor: Theme.colors.background,
   },
   submitBtn: {
     marginVertical: 0,

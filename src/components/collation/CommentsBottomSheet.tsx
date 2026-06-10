@@ -309,7 +309,7 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
       <BottomSheetModal
         ref={ref}
         snapPoints={snapPoints}
-        index={0}
+        index={1}
         enablePanDownToClose
         enableDynamicSizing={false}
         topInset={insets.top + 12}
@@ -318,7 +318,7 @@ const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
          * on both iOS and Android physical devices. This is the correct mode
          * for any sheet with a pinned bottom input (comments, chat, etc.).
          *
-         * Do NOT use "extend" + android_keyboardInputMode="adjustResize" here:
+         * Do NOT use "extend" + here:
          * adjustResize is deprecated on Android 11+ edge-to-edge layouts and
          * fails silently on physical devices, leaving the input buried under
          * the keyboard.

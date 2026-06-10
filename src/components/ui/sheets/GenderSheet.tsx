@@ -41,7 +41,7 @@ const GenderSheet = forwardRef<BottomSheetModal, Props>(function GenderSheet(
     <BottomSheetModal
       ref={ref}
         onChange={handleSheetChange}
-      snapPoints={["46%"]}
+      snapPoints={["72%"]}
       stackBehavior="push"
       topInset={insets.top + 12}
       enablePanDownToClose
@@ -55,6 +55,7 @@ const GenderSheet = forwardRef<BottomSheetModal, Props>(function GenderSheet(
           opacity={0.32}
         />
       )}
+      enableContentPanningGesture={false}
     >
       <BottomSheetView style={styles.sheetWrap}>
         <View style={styles.header}>
@@ -97,7 +98,10 @@ const GenderSheet = forwardRef<BottomSheetModal, Props>(function GenderSheet(
               ) : null}
             </Pressable>
           </View>
+        </View>
 
+        {/* Sticky confirm — always visible at bottom */}
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
           <AppButton
             title="Confirm Your Gender"
             disabled={!selected}
@@ -124,7 +128,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FBF8EA",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    overflow: "hidden",
   },
   header: {
     minHeight: 76,
@@ -152,10 +155,17 @@ const styles = StyleSheet.create({
     backgroundColor: "#D9DEE8",
   },
   content: {
+    flex: 1,
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 20,
     gap: 18,
+  },
+  footer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(17,26,50,0.07)",
+    backgroundColor: "#FBF8EA",
   },
   grid: {
     flexDirection: "row",

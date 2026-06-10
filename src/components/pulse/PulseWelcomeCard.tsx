@@ -11,23 +11,23 @@ import { Theme } from "@/theme";
 
 const WELCOME_IMAGE = require("../../../assets/images/pulse-welcome.png");
 
-const ARTICLE_BODY = `Welcome to Pulse. Your ward has been waiting for this.
+const ARTICLE_BODY = `Hi, my name is Ade. I built Pulse for you. Not for politicians, not for parties — for you: the ordinary Nigerian who is tired of being lied to, manipulated, and left in the dark every election cycle.
 
-For too long, information about elections, voting, and civic activity in your community has been scattered, noisy, or simply missing. Pulse changes that.
+Pulse is a civic space inside Citizen Monitors where you can share what you see, read what others are witnessing, and together build a real-time picture of what is actually happening across Nigeria — ward by ward, polling unit by polling unit.
 
-This is your real-time feed — a living conversation between citizens, observers, and volunteers in your ward. Every post here comes from someone physically present in your community: someone who saw what happened at the polling unit, who monitored the collation process, who wants the truth documented and shared.
+This is not Twitter. This is not WhatsApp. This is something different. Every post on Pulse is anchored to a real Nigerian community. When you speak here, you speak as a citizen — and your words carry weight.
 
-Pulse is not social media. It is civic intelligence. Every discussion, every update, every report you see here is tied to a real election, a real location, and a real moment in Nigerian democratic history.
+Here is what Pulse is for:
+• Share what you observe at your polling unit during elections — calmly, factually, and clearly.
+• Read updates from citizens in other wards across your state and Nigeria.
+• Like, comment, and engage — because democratic accountability is a conversation, not a broadcast.
+• Post anonymously if you need to — your safety matters.
 
-Here is how to use it:
-• Post your observations from your ward or LGA — what you saw, heard, and verified.
-• Like and engage with posts from other citizens near you.
-• Join Live Discussions when an election is active in your area.
-• Share updates to spread accurate information beyond the app.
+Here is what Pulse is NOT for: hate speech, misinformation, party propaganda, or incitement. The Electoral Act applies here. Respect it.
 
-Your voice matters. Your ward is watching. Let's get to work.
+We built Citizen Monitors because we believe that when ordinary Nigerians are organised, informed, and empowered — no election can be stolen in silence.
 
-— Ade Haastrup, Co-founder, Citizen Monitors`;
+Pulse is your voice. Use it well.`;
 
 export default function PulseWelcomeCard() {
   return (

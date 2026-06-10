@@ -637,7 +637,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#FFFFFF",
     paddingTop: 24,
-    gap: 32,
+    gap: 20,
   },
   errorState: {
     justifyContent: "center",

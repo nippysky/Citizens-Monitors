@@ -182,7 +182,6 @@ const SelectPickerSheet = forwardRef<BottomSheetModal, Props>(
         enablePanDownToClose
         keyboardBehavior="extend"
         keyboardBlurBehavior="restore"
-        android_keyboardInputMode="adjustResize"
         onChange={handleSheetChange}
         backgroundStyle={styles.sheetBgTransparent}
         handleIndicatorStyle={styles.sheetHandle}

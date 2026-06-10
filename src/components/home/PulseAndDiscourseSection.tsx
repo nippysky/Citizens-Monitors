@@ -71,21 +71,15 @@ function DiscussionCard({ item }: { item: DiscussionItem }) {
           </View>
         </View>
 
-        <View style={styles.thumbWrap}>
-          {item.imageUrl ? (
+        {item.imageUrl ? (
+          <View style={styles.thumbWrap}>
             <Image
               source={{ uri: item.imageUrl }}
               style={styles.thumb}
               resizeMode="cover"
             />
-          ) : (
-            <Ionicons
-              name="image-outline"
-              size={20}
-              color={Theme.colors.textMuted}
-            />
-          )}
-        </View>
+          </View>
+        ) : null}
 
         <Ionicons
           name="chevron-forward"
