@@ -72,5 +72,9 @@
     "expo-module-scripts": "^55.0.2",
     "typescript": "~5.9.2"
   },
-  "private": true
+  "private": true,
+  "allowScripts": {
+    "fsevents@2.3.3": true,
+    "unrs-resolver@1.12.2": true
+  }
 }
