@@ -103,10 +103,15 @@ export default function PressCoverageDetailsScreen() {
   const handleShare = async () => {
     if (!article) return;
 
+    const deepLink = `citizenmonitors://press-coverage/${slug}`;
+
     try {
       await Share.share({
         title: article.title,
-        message: `${article.title}\n\n${article.excerpt}`,
+        url: deepLink,
+        message: [article.title, "", article.excerpt, "", deepLink]
+          .filter(Boolean)
+          .join("\n"),
       });
     } catch {
       // Native share can be cancelled by the user; no noisy error needed.

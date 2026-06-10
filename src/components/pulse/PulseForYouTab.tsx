@@ -316,13 +316,7 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
   const handleShare = useCallback(
     async (post: PulseFeedItem) => {
       try {
-        await Share.share({
-          message: `💬 ${post.author}\n🗳 ${post.electionLabel}\n\n${
-            post.body
-          }\n\n👍 ${likeCounts[post.apiPostId] ?? post.likes} Likes · 💬 ${
-            post.commentCount
-          } Comments\n\nShared via Citizen Monitors`,
-        });
+        await Share.share({ message: post.body });
       } catch {
         showToast({ type: "error", message: "Unable to share." });
       }

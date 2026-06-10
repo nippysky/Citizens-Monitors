@@ -4,6 +4,7 @@ import { Theme } from "@/theme";
 import { Ionicons } from "@expo/vector-icons";
 import {
   cloneElement,
+  ComponentType,
   isValidElement,
   ReactNode,
   useMemo,
@@ -34,6 +35,9 @@ type Props = TextInputProps & {
   multiline?: boolean;
   numberOfLines?: number;
   textareaMinHeight?: number;
+  /** Override the underlying TextInput. Pass BottomSheetTextInput when using
+   *  AppInput inside a @gorhom/bottom-sheet to fix Android keyboard handling. */
+  InputComponent?: ComponentType<TextInputProps>;
 };
 
 export default function AppInput({
@@ -55,8 +59,12 @@ export default function AppInput({
   multiline = false,
   numberOfLines,
   textareaMinHeight = 110,
+  InputComponent,
   ...props
 }: Props) {
+  // Cast to typeof TextInput so ref and all native props typecheck correctly.
+  // BottomSheetTextInput is API-compatible and safe to pass here.
+  const ResolvedInput = (InputComponent ?? TextInput) as typeof TextInput;
   const inputRef = useRef<TextInput | null>(null);
   const keyboardAware = useKeyboardAwareInput();
 
@@ -165,7 +173,7 @@ export default function AppInput({
       >
         {renderStartIcon()}
 
-        <TextInput
+        <ResolvedInput
           ref={inputRef}
           {...props}
           editable={editable}

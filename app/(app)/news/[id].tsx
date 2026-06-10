@@ -38,17 +38,21 @@ export default function NewsDetailsScreen() {
   const handleShare = async () => {
     if (!article) return;
 
+    const articleSlug = slug ?? article.slug ?? article.id;
+    const deepLink = `citizenmonitors://news/${articleSlug}`;
+
     try {
       await Share.share({
         title: article.title,
+        // url is used on iOS (appears as a link attachment in the share sheet).
+        // message is used on Android — include the link inline so it's tappable.
+        url: deepLink,
         message: [
           article.title,
           "",
           article.excerpt,
           "",
-          `Published: ${formatNewsDate(article.publishedAt)}`,
-          "",
-          "Shared via Citizen Monitors",
+          deepLink,
         ]
           .filter(Boolean)
           .join("\n"),

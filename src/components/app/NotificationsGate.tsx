@@ -347,9 +347,10 @@ async function syncTokenToBackend(token: string): Promise<boolean> {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function NotificationsGate(): null {
-  const { isAuthenticated, token: authToken } = useAuth();
+  const { isAuthenticated, isOnboardingComplete, token: authToken } = useAuth();
 
   const isAuthenticatedRef = useRef(isAuthenticated);
+  const isOnboardingCompleteRef = useRef(isOnboardingComplete);
   const authTokenRef = useRef<string | null>(authToken ?? null);
 
   // Latest acquired Expo push token, updated on acquisition + true rotation.
@@ -371,13 +372,16 @@ export default function NotificationsGate(): null {
 
   useEffect(() => {
     isAuthenticatedRef.current = isAuthenticated;
+    isOnboardingCompleteRef.current = isOnboardingComplete;
     authTokenRef.current = authToken ?? null;
-  }, [isAuthenticated, authToken]);
+  }, [isAuthenticated, isOnboardingComplete, authToken]);
 
   const syncCurrentTokenIfNeeded = useCallback((): void => {
     const expoToken = currentExpoTokenRef.current;
 
     if (!isAuthenticatedRef.current) return;
+    // Backend only accepts push token after the user has fully completed registration.
+    if (!isOnboardingCompleteRef.current) return;
     if (!authTokenRef.current) return;
     if (!expoToken) return;
 
@@ -534,7 +538,7 @@ export default function NotificationsGate(): null {
 
   useEffect(() => {
     syncCurrentTokenIfNeeded();
-  }, [isAuthenticated, authToken, syncCurrentTokenIfNeeded]);
+  }, [isAuthenticated, isOnboardingComplete, authToken, syncCurrentTokenIfNeeded]);
 
   return null;
 }

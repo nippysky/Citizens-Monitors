@@ -2,6 +2,7 @@ import {
   BottomSheetBackdrop,
   BottomSheetModal,
   BottomSheetScrollView,
+  BottomSheetTextInput,
 } from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
 import { forwardRef, useMemo } from "react";
@@ -30,7 +31,7 @@ type Props = {
 const SecurityBottomSheet = forwardRef<BottomSheetModal, Props>(
   function SecurityBottomSheet({ value, onChange, onSave, saving = false }, ref) {
     const insets = useSafeAreaInsets();
-    const snapPoints = useMemo(() => ["82%"], []);
+    const snapPoints = useMemo(() => ["92%"], []);
     const { handleSheetChange } = useBottomSheetBackHandler(
       ref as React.RefObject<BottomSheetModal | null>
     );
@@ -91,6 +92,7 @@ const SecurityBottomSheet = forwardRef<BottomSheetModal, Props>(
             placeholder="Current password"
             secureTextEntry
             secureToggle
+            InputComponent={BottomSheetTextInput}
           />
 
           <AppInput
@@ -100,6 +102,7 @@ const SecurityBottomSheet = forwardRef<BottomSheetModal, Props>(
             placeholder="New password"
             secureTextEntry
             secureToggle
+            InputComponent={BottomSheetTextInput}
           />
 
           <AppInput
@@ -111,6 +114,7 @@ const SecurityBottomSheet = forwardRef<BottomSheetModal, Props>(
             placeholder="Confirm new password"
             secureTextEntry
             secureToggle
+            InputComponent={BottomSheetTextInput}
           />
 
         </BottomSheetScrollView>
