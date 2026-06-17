@@ -11,23 +11,21 @@ import { Theme } from "@/theme";
 
 const WELCOME_IMAGE = require("../../../assets/images/pulse-welcome.png");
 
-const ARTICLE_BODY = `Hi, my name is Ade. I built Pulse for you. Not for politicians, not for parties — for you: the ordinary Nigerian who is tired of being lied to, manipulated, and left in the dark every election cycle.
+const ARTICLE_BODY = `Hi, my name is Ade. I built Pulse for you. Not for politicians. Not for institutions. For the person on your street who has been watching things fall apart and wondering if anyone else sees it too. They do. And now you have somewhere to find each other.
 
-Pulse is a civic space inside Citizen Monitors where you can share what you see, read what others are witnessing, and together build a real-time picture of what is actually happening across Nigeria — ward by ward, polling unit by polling unit.
+This is your ward, finally in one place. A community of real people, your neighbours, your streets, your shared frustrations, with somewhere useful to put it all.
 
-This is not Twitter. This is not WhatsApp. This is something different. Every post on Pulse is anchored to a real Nigerian community. When you speak here, you speak as a citizen — and your words carry weight.
+Talk about the clinic with no drugs. The road that's been "under construction" since 2019. The extortion everyone experiences and nobody is officially reporting. The government announcement and what it actually means for your street. Governance isn't just elections; it's every broken thing in between.
 
-Here is what Pulse is for:
-• Share what you observe at your polling unit during elections — calmly, factually, and clearly.
-• Read updates from citizens in other wards across your state and Nigeria.
-• Like, comment, and engage — because democratic accountability is a conversation, not a broadcast.
-• Post anonymously if you need to — your safety matters.
+And here's where it gets interesting. When enough people from your ward are saying the same thing, it stops being a complaint and becomes a pattern. A pattern becomes evidence. And evidence? Evidence travels; to the right desks, the right authorities, the right people who suddenly can't pretend they didn't know.
 
-Here is what Pulse is NOT for: hate speech, misinformation, party propaganda, or incitement. The Electoral Act applies here. Respect it.
+Your gist has power. Use it.
 
-We built Citizen Monitors because we believe that when ordinary Nigerians are organised, informed, and empowered — no election can be stolen in silence.
+Post with your name or stay anonymous. Both work. Both matter.
 
-Pulse is your voice. Use it well.`;
+The magic happens when your whole ward is here. So don't come alone - bring your neighbours, your friends, the person on your street who notices everything. Every voice added makes this harder to ignore.
+
+Your ward has receipts. This is where you file them!`;
 
 export default function PulseWelcomeCard() {
   return (

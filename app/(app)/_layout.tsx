@@ -12,15 +12,25 @@ import { TourProvider } from "@/context/TourContext";
 import { onSessionExpired } from "@/lib/authEvent";
 
 export default function AppLayout() {
-  const { isAuthenticated, isOnboardingComplete, signOut } = useAuth();
+  const { isAuthenticated, isOnboardingComplete, isRestoring, signOut } =
+    useAuth();
 
-  // Auto-logout when any API call returns 401 (session expired / token revoked)
+  // Auto-logout when any API call returns 401 (session expired / token revoked).
+  // Registered early so it also catches events queued before mount (see authEvent.ts).
   useEffect(() => {
     const unsubscribe = onSessionExpired(() => {
       void signOut();
     });
     return unsubscribe;
   }, [signOut]);
+
+  // Wait for SecureStore restore to complete before making any auth routing
+  // decisions.  Without this guard, the component renders with isAuthenticated:
+  // false during the async restore and immediately redirects the user to the
+  // welcome screen — causing a flash or a stuck skeleton on every cold open.
+  if (isRestoring) {
+    return null;
+  }
 
   if (!isAuthenticated) {
     return <Redirect href="/(public)/welcome" />;

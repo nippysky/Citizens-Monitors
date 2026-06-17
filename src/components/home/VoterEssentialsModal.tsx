@@ -11,23 +11,17 @@ import { VoterEssentialItem } from "@/types/home";
 import CitizenAcademy from "@/svgs/app/voter-essentials/CitizenAcademy";
 import DigitalElectionVault from "@/svgs/app/voter-essentials/DigitalElectionVault";
 import DonateSupport from "@/svgs/app/voter-essentials/DonateSupport";
-import ElectionDayProcedure from "@/svgs/app/voter-essentials/ElectionDayProcedure";
 import NewsAndInsights from "@/svgs/app/voter-essentials/NewsAndInsights";
 import PollingUnitLocator from "@/svgs/app/voter-essentials/PollingUnitLocator";
-import PollStationConduct from "@/svgs/app/voter-essentials/PollStationConduct";
 import PressCoverage from "@/svgs/app/voter-essentials/PressCoverage";
-import VoterRegistration from "@/svgs/app/voter-essentials/VoterRegistration";
 
 const ICON_MAP: Record<string, React.FC<{ width: number; height: number }>> = {
   CitizenAcademy,
   DigitalElectionVault,
   DonateSupport,
-  ElectionDayProcedure,
   NewsAndInsights,
   PollingUnitLocator,
-  PollStationConduct,
   PressCoverage,
-  VoterRegistration,
 };
 
 type Props = {

@@ -33,16 +33,11 @@ export const Paths = {
   reportIncidentLive: "/(app)/reporting/report-incident-live",
   reportIncidentLiveReview: "/(app)/reporting/report-incident-live-review",
 
-  voterCitizenAcademy: "/(app)/voter-essentials/CitizenAcademy",
-  voterDonateSupport: "/(app)/voter-essentials/DonateSupport",
-  voterElectionDayProcedure: "/(app)/voter-essentials/ElectionDayProcedure",
-  voterNewsAndInsights: "/(app)/voter-essentials/NewsAndInsights",
   voterPollingUnitLocator: "/(app)/voter-essentials/PollingUnitLocator",
-  voterPollStationConduct: "/(app)/voter-essentials/PollStationConduct",
+  voterCitizenAcademy: "/(app)/voter-essentials/CitizenAcademy",
+  voterNewsAndInsights: "/(app)/voter-essentials/NewsAndInsights",
   voterPressCoverage: "/(app)/voter-essentials/PressCoverage",
-  voterVoterRegistration: "/(app)/voter-essentials/VoterRegistration",
-  voterRegistrationGuide: "/(app)/voter-essentials/RegistrationGuide",
-  voterUnderstandingTiers: "/(app)/voter-essentials/UnderstandingTiers",
+  voterDonateSupport: "/(app)/voter-essentials/DonateSupport",
 
   electionDetails: (id: string) =>
     ({

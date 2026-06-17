@@ -383,11 +383,14 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
 
     return (
       <>
-        <PulseWelcomeCard />
+        {/* Only show the welcome card when the feed is empty — once real posts
+            arrive it disappears automatically. */}
+        {!hasPosts ? <PulseWelcomeCard /> : null}
         {carousel}
       </>
     );
   }, [
+    hasPosts,
     liveCarouselQuery.isLoading,
     liveCarouselQuery.data,
     liveElections,
