@@ -10,7 +10,6 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.citizenmonitors.app",
-      "buildNumber": "1",
       "googleServicesFile": "./GoogleService-Info.plist",
       "config": {
         "usesNonExemptEncryption": false
@@ -32,7 +31,6 @@
     },
     "android": {
       "package": "com.citizenmonitors.app",
-      "versionCode": 1,
       "softwareKeyboardLayoutMode": "pan",
       "googleServicesFile": "./google-services.json",
       "predictiveBackGestureEnabled": false,
