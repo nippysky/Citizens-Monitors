@@ -9,8 +9,9 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { router } from "expo-router";
+import * as SecureStore from "expo-secure-store";
 
 import AppText from "@/components/ui/AppText";
 import CommentsBottomSheet from "@/components/collation/CommentsBottomSheet";
@@ -21,6 +22,7 @@ import { PulseDiscussionPost } from "@/data/pulse";
 import { Paths } from "@/constants/paths";
 import { useAppToast } from "@/hooks/useAppToast";
 import { useOfflineSync } from "@/context/OfflineSyncContext";
+import { useAuth } from "@/context/AuthContext";
 import {
   useLikePulsePostMutation,
   useLiveElectionCarouselQuery,
@@ -152,12 +154,38 @@ function PulseFeedSkeleton() {
   );
 }
 
+/** SecureStore key scoped per-user so each account gets its own first-visit flag. */
+function welcomeSeenKey(userId: string): string {
+  return `pulse_welcome_seen_${userId}`;
+}
+
 export default function PulseForYouTab({ onScrollStateChange }: Props) {
   const { showToast } = useAppToast();
   const { enqueue, isOnline, queue } = useOfflineSync();
+  const { user } = useAuth();
 
   const commentsRef = useRef<BottomSheetModal>(null);
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // null = still reading SecureStore (don't render card yet to avoid flash).
+  // true = user has already seen the welcome card → never show again.
+  // false = first visit → show card.
+  const [hasSeenWelcome, setHasSeenWelcome] = useState<boolean | null>(null);
+
+  // Read the per-user flag from SecureStore on mount.
+  useEffect(() => {
+    if (!user?.id) return;
+    const key = welcomeSeenKey(user.id);
+    SecureStore.getItemAsync(key)
+      .then((value) => setHasSeenWelcome(value === "1"))
+      .catch(() => setHasSeenWelcome(false)); // on error, show the card
+  }, [user?.id]);
+
+  const handleDismissWelcome = useCallback(() => {
+    if (!user?.id) return;
+    setHasSeenWelcome(true);
+    void SecureStore.setItemAsync(welcomeSeenKey(user.id), "1");
+  }, [user?.id]);
 
   const postsQuery = usePulsePostsInfiniteQuery();
   const viewerQuery = usePulseViewerQuery();
@@ -383,14 +411,18 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
 
     return (
       <>
-        {/* Only show the welcome card when the feed is empty — once real posts
-            arrive it disappears automatically. */}
-        {!hasPosts ? <PulseWelcomeCard /> : null}
+        {/* Show the welcome card exactly once per user (first visit only).
+            hasSeenWelcome === null means SecureStore hasn't resolved yet —
+            skip rendering to avoid a flash of the card on returning users. */}
+        {hasSeenWelcome === false ? (
+          <PulseWelcomeCard onDismiss={handleDismissWelcome} />
+        ) : null}
         {carousel}
       </>
     );
   }, [
-    hasPosts,
+    hasSeenWelcome,
+    handleDismissWelcome,
     liveCarouselQuery.isLoading,
     liveCarouselQuery.data,
     liveElections,

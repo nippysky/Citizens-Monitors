@@ -3,13 +3,17 @@
 // Written by Ade Haastrup (Co-founder, Citizen Monitors).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { Image, StyleSheet, View } from "react-native";
+import { useState } from "react";
+import { Image, Pressable, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import AppText from "@/components/ui/AppText";
 import { Theme } from "@/theme";
 
 const WELCOME_IMAGE = require("../../../assets/images/pulse-welcome.png");
+
+// Date this post was authored (shown as post metadata)
+const POST_DATE = "Jul 2, 2026";
 
 const ARTICLE_BODY = `Hi, my name is Ade. I built Pulse for you. Not for politicians. Not for institutions. For the person on your street who has been watching things fall apart and wondering if anyone else sees it too. They do. And now you have somewhere to find each other.
 
@@ -27,7 +31,13 @@ The magic happens when your whole ward is here. So don't come alone - bring your
 
 Your ward has receipts. This is where you file them!`;
 
-export default function PulseWelcomeCard() {
+type Props = {
+  onDismiss?: () => void;
+};
+
+export default function PulseWelcomeCard({ onDismiss }: Props) {
+  const [expanded, setExpanded] = useState(false);
+
   return (
     <View style={styles.card}>
       {/* ── Author row ── */}
@@ -45,6 +55,17 @@ export default function PulseWelcomeCard() {
           <Ionicons name="pin" size={11} color={Theme.colors.primary} />
           <AppText style={styles.pinnedText}>PINNED</AppText>
         </View>
+
+        {onDismiss ? (
+          <Pressable
+            onPress={onDismiss}
+            hitSlop={10}
+            style={styles.dismissBtn}
+            accessibilityLabel="Dismiss welcome card"
+          >
+            <Ionicons name="close" size={18} color={Theme.colors.textMuted} />
+          </Pressable>
+        ) : null}
       </View>
 
       {/* ── Hero image ── */}
@@ -55,13 +76,35 @@ export default function PulseWelcomeCard() {
       />
 
       {/* ── Article body ── */}
-      <AppText style={styles.body}>{ARTICLE_BODY}</AppText>
+      <View style={styles.bodyWrap}>
+        <AppText
+          style={styles.body}
+          numberOfLines={expanded ? undefined : 4}
+        >
+          {ARTICLE_BODY}
+        </AppText>
 
-      {/* ── Footer ── */}
+        <Pressable
+          onPress={() => setExpanded((prev) => !prev)}
+          style={styles.readMoreBtn}
+          hitSlop={8}
+        >
+          <AppText style={styles.readMoreText}>
+            {expanded ? "See less" : "Read more"}
+          </AppText>
+        </Pressable>
+      </View>
+
+      {/* ── Footer: tag + date ── */}
       <View style={styles.footer}>
         <View style={styles.footerTag}>
           <Ionicons name="megaphone-outline" size={13} color={Theme.colors.primary} />
           <AppText style={styles.footerTagText}>From the Team</AppText>
+        </View>
+
+        <View style={styles.metaRow}>
+          <Ionicons name="time-outline" size={12} color={Theme.colors.textMuted} />
+          <AppText style={styles.metaDate}>{POST_DATE}</AppText>
         </View>
       </View>
     </View>
@@ -78,7 +121,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(5,163,156,0.18)",
     overflow: "hidden",
-    gap: 0,
   },
 
   authorRow: {
@@ -137,18 +179,38 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
 
+  dismissBtn: {
+    marginLeft: 4,
+    padding: 2,
+  },
+
   heroImage: {
     width: "100%",
     height: 200,
+  },
+
+  bodyWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 4,
+    gap: 6,
   },
 
   body: {
     fontSize: 14,
     lineHeight: 23,
     color: Theme.colors.text,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 4,
+  },
+
+  readMoreBtn: {
+    alignSelf: "flex-start",
+  },
+
+  readMoreText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.body.semibold,
   },
 
   footer: {
@@ -156,6 +218,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
   },
 
   footerTag: {
@@ -173,5 +236,17 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.semibold,
+  },
+
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+
+  metaDate: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Theme.colors.textMuted,
   },
 });

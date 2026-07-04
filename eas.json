@@ -9,6 +9,9 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://dev.citizenmonitors.com/api/v1/mobile"
       }
     },
     "development-simulator": {
@@ -21,6 +24,9 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://dev.citizenmonitors.com/api/v1/mobile"
       }
     },
     "production": {
