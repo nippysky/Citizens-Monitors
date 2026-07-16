@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AppGradientScreen from "@/components/app/AppGradientScreen";
 import BackButton from "@/components/ui/BackButton";
 import AppText from "@/components/ui/AppText";
+import { buildNewsShareUrl } from "@/constants/links";
 import { useAppToast } from "@/hooks/useAppToast";
 import { useNewsInsightQuery } from "@/hooks/api/useNewsQueries";
 import { Theme } from "@/theme";
@@ -39,20 +40,23 @@ export default function NewsDetailsScreen() {
     if (!article) return;
 
     const articleSlug = slug ?? article.slug ?? article.id;
-    const deepLink = `citizenmonitors://news/${articleSlug}`;
+    // https link — custom schemes (citizenmonitors://) are NOT clickable in
+    // WhatsApp/SMS. This opens the app directly via Universal/App Links once
+    // the domain hosts the well-known association files.
+    const shareUrl = buildNewsShareUrl(articleSlug);
 
     try {
       await Share.share({
         title: article.title,
         // url is used on iOS (appears as a link attachment in the share sheet).
         // message is used on Android — include the link inline so it's tappable.
-        url: deepLink,
+        url: shareUrl,
         message: [
           article.title,
           "",
           article.excerpt,
           "",
-          deepLink,
+          shareUrl,
         ]
           .filter(Boolean)
           .join("\n"),

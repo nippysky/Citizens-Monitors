@@ -1,12 +1,29 @@
 import { Ionicons } from "@expo/vector-icons";
 import {
+  CameraType,
   CameraView,
   useCameraPermissions,
   useMicrophonePermissions,
 } from "expo-camera";
+import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+} from "react-native";
+import Animated, {
+  cancelAnimation,
+  Easing,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AppText from "@/components/ui/AppText";
@@ -17,6 +34,83 @@ import {
   saveIncidentDraft,
   saveLiveVideoUri,
 } from "@/lib/reporting";
+
+const MAX_RECORDING_SECONDS = 180;
+
+function formatClock(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+/** Pulsing red dot + elapsed timer — TikTok/IG-live style recording badge. */
+function RecordingBadge({ elapsedSec }: { elapsedSec: number }) {
+  const pulse = useSharedValue(1);
+
+  useEffect(() => {
+    pulse.value = withRepeat(
+      withTiming(0.25, { duration: 600, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      true
+    );
+
+    return () => cancelAnimation(pulse);
+  }, [pulse]);
+
+  const dotStyle = useAnimatedStyle(() => ({
+    opacity: pulse.value,
+  }));
+
+  return (
+    <View style={styles.recBadge}>
+      <Animated.View style={[styles.recDot, dotStyle]} />
+      <AppText style={styles.recBadgeText}>
+        {`${formatClock(elapsedSec)} / ${formatClock(MAX_RECORDING_SECONDS)}`}
+      </AppText>
+    </View>
+  );
+}
+
+/**
+ * Center record control — white ring with a red core that morphs from a
+ * circle (idle) into a rounded square (recording), like TikTok/Instagram.
+ */
+function RecordButton({
+  recording,
+  disabled,
+  onPress,
+}: {
+  recording: boolean;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    progress.value = withTiming(recording ? 1 : 0, {
+      duration: 240,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [progress, recording]);
+
+  const innerStyle = useAnimatedStyle(() => ({
+    width: interpolate(progress.value, [0, 1], [58, 30]),
+    height: interpolate(progress.value, [0, 1], [58, 30]),
+    borderRadius: interpolate(progress.value, [0, 1], [29, 8]),
+  }));
+
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={[styles.recordOuter, disabled && styles.recordOuterDisabled]}
+      accessibilityRole="button"
+      accessibilityLabel={recording ? "Stop recording" : "Start recording"}
+    >
+      <Animated.View style={[styles.recordInner, innerStyle]} />
+    </Pressable>
+  );
+}
 
 export default function ReportIncidentLiveScreen() {
   const cameraRef = useRef<CameraView>(null);
@@ -31,6 +125,8 @@ export default function ReportIncidentLiveScreen() {
   const [saving, setSaving] = useState(false);
   const [incidentType, setIncidentType] = useState("");
   const [permissionBusy, setPermissionBusy] = useState(false);
+  const [elapsedSec, setElapsedSec] = useState(0);
+  const [facing, setFacing] = useState<CameraType>("back");
 
   const isMountedRef = useRef(true);
   const discardRequestedRef = useRef(false);
@@ -60,6 +156,21 @@ export default function ReportIncidentLiveScreen() {
   useEffect(() => {
     savingRef.current = saving;
   }, [saving]);
+
+  // Recording timer — drives the REC badge.
+  useEffect(() => {
+    if (!recording) {
+      setElapsedSec(0);
+      return;
+    }
+
+    const startedAt = Date.now();
+    const interval = setInterval(() => {
+      setElapsedSec(Math.floor((Date.now() - startedAt) / 1000));
+    }, 250);
+
+    return () => clearInterval(interval);
+  }, [recording]);
 
   const requestAllPermissions = useCallback(async () => {
     if (permissionBusy) {
@@ -100,6 +211,8 @@ export default function ReportIncidentLiveScreen() {
     setSaving(true);
 
     try {
+      // stageMediaFile MOVES the file (same-volume rename) — effectively
+      // instant, so the review screen opens with the video immediately.
       const staged = await stageMediaFile({
         sourceUri: uri,
         kind: "video",
@@ -137,7 +250,10 @@ export default function ReportIncidentLiveScreen() {
       setRecording(true);
 
       const result = await cameraRef.current.recordAsync({
-        maxDuration: 180,
+        maxDuration: MAX_RECORDING_SECONDS,
+        // iOS: H.264 — universally playable and required for the
+        // videoBitrate prop on CameraView to take effect.
+        codec: Platform.OS === "ios" ? "avc1" : undefined,
       });
 
       if (isMountedRef.current) {
@@ -192,6 +308,11 @@ export default function ReportIncidentLiveScreen() {
     router.back();
   }, []);
 
+  const toggleFacing = useCallback(() => {
+    if (recordingRef.current || savingRef.current) return;
+    setFacing((current) => (current === "back" ? "front" : "back"));
+  }, []);
+
   const hasFullPermission =
     cameraPermission?.granted === true && microphonePermission?.granted === true;
 
@@ -202,12 +323,17 @@ export default function ReportIncidentLiveScreen() {
   if (!hasFullPermission) {
     return (
       <View style={styles.permissionWrap}>
+        <View style={styles.permissionIconCircle}>
+          <Ionicons name="videocam-outline" size={34} color="#05A39C" />
+        </View>
+
         <AppText style={styles.permissionTitle}>
           Camera and microphone needed
         </AppText>
 
         <AppText style={styles.permissionSubtitle}>
-          Please allow camera and microphone access so you can record live incident video with sound.
+          Please allow camera and microphone access so you can record live
+          incident video with sound.
         </AppText>
 
         <Pressable
@@ -226,101 +352,138 @@ export default function ReportIncidentLiveScreen() {
     );
   }
 
+  const statusText = saving
+    ? "Processing your video..."
+    : recording
+      ? "Recording — tap the button to stop"
+      : cameraReady
+        ? "Tap the record button to start"
+        : "Preparing camera...";
+
   return (
     <View style={styles.container}>
       <CameraView
         ref={cameraRef}
         style={styles.camera}
-        facing="back"
+        facing={facing}
         mode="video"
+        // 720p @ ~2.5 Mbps keeps a 3-minute clip around 50-60 MB — light
+        // enough to stage, preview and upload instantly (TikTok/IG-style)
+        // instead of freezing the app on a heavy 1080p/4K file.
+        videoQuality="720p"
+        videoBitrate={2_500_000}
         onCameraReady={() => setCameraReady(true)}
       />
 
-      <View
-        style={[
-          styles.topOverlay,
-          {
-            paddingTop: Math.max(insets.top, 12),
-          },
-        ]}
-      >
-        <Pressable onPress={discardRecording} style={styles.topBackBtn}>
+      {/* Legibility fades — content stays full-bleed, controls stay readable */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={["rgba(0,0,0,0.55)", "rgba(0,0,0,0.18)", "transparent"]}
+        style={styles.topFade}
+      />
+      <LinearGradient
+        pointerEvents="none"
+        colors={["transparent", "rgba(0,0,0,0.35)", "rgba(0,0,0,0.72)"]}
+        style={styles.bottomFade}
+      />
+
+      {/* Top bar */}
+      <View style={[styles.topBar, { paddingTop: Math.max(insets.top, 12) }]}>
+        <Pressable
+          onPress={discardRecording}
+          style={styles.glassCircle}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+        >
           <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
         </Pressable>
 
-        <View style={styles.topMeta}>
-          <AppText style={styles.topMetaTitle}>Live Incident Recording</AppText>
-          <AppText style={styles.topMetaSubtitle}>
+        <View style={styles.topTitleWrap}>
+          <AppText style={styles.topTitle}>Live Incident</AppText>
+          <AppText style={styles.topSubtitle} numberOfLines={1}>
             {incidentType || "Incident type not selected"}
           </AppText>
         </View>
+
+        <Pressable
+          onPress={toggleFacing}
+          style={[
+            styles.glassCircle,
+            (recording || saving) && styles.glassCircleDisabled,
+          ]}
+          disabled={recording || saving}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Flip camera"
+        >
+          <Ionicons name="camera-reverse-outline" size={20} color="#FFFFFF" />
+        </Pressable>
       </View>
 
+      {/* REC badge */}
+      {recording ? (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.recBadgeWrap,
+            { top: Math.max(insets.top, 12) + 64 },
+          ]}
+        >
+          <RecordingBadge elapsedSec={elapsedSec} />
+        </View>
+      ) : null}
+
+      {/* Camera warm-up */}
       {!cameraReady ? (
         <View style={styles.readyOverlay}>
+          <ActivityIndicator color="#FFFFFF" />
           <AppText style={styles.readyText}>Preparing camera...</AppText>
         </View>
       ) : null}
 
+      {/* Bottom controls */}
       <View
         style={[
           styles.bottomControls,
-          {
-            paddingBottom: Math.max(insets.bottom, 12),
-          },
+          { paddingBottom: Math.max(insets.bottom, 16) + 10 },
         ]}
       >
-        <View style={styles.statusRow}>
-          <View style={[styles.liveDot, recording && styles.liveDotActive]} />
-          <AppText style={styles.statusText}>
-            {saving
-              ? "Saving video..."
-              : recording
-                ? "Recording live..."
-                : cameraReady
-                  ? "Camera ready"
-                  : "Preparing camera..."}
-          </AppText>
-        </View>
+        <AppText style={styles.statusText}>{statusText}</AppText>
 
-        <View style={styles.recordingControlsRow}>
-          {!recording ? (
-            <Pressable
-              onPress={startRecording}
-              style={[
-                styles.startBtn,
-                (!cameraReady || saving || permissionBusy) &&
-                  styles.startBtnDisabled,
-              ]}
-              disabled={!cameraReady || saving || permissionBusy}
-            >
-              <Ionicons name="radio-button-on" size={14} color="#FFFFFF" />
-              <AppText style={styles.startText}>
-                {saving
-                  ? "Saving..."
-                  : permissionBusy
-                    ? "Preparing..."
-                    : "Start Recording"}
-              </AppText>
-            </Pressable>
-          ) : (
-            <Pressable onPress={stopRecording} style={styles.stopBtn}>
-              <Ionicons name="square" size={11} color="#FFFFFF" />
-              <AppText style={styles.stopText}>Stop & Submit</AppText>
-            </Pressable>
-          )}
-
+        <View style={styles.controlsRow}>
           <Pressable
             onPress={discardRecording}
-            style={[styles.discardBtn, saving && styles.discardBtnDisabled]}
             disabled={saving}
+            style={[styles.sideBtn, saving && styles.sideBtnDisabled]}
+            accessibilityRole="button"
+            accessibilityLabel={recording ? "Discard recording" : "Cancel"}
           >
-            <Ionicons name="close" size={18} color="#5C6470" />
-            <AppText style={styles.discardText}>
-              {recording ? "Discard" : "Cancel"}
-            </AppText>
+            <Ionicons name="close" size={24} color="#FFFFFF" />
           </Pressable>
+
+          <RecordButton
+            recording={recording}
+            disabled={!cameraReady || saving || permissionBusy}
+            onPress={recording ? stopRecording : () => void startRecording()}
+          />
+
+          <View style={styles.sideBtn}>
+            {saving ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <AppText style={styles.maxLenText}>
+                {formatClock(MAX_RECORDING_SECONDS)}
+              </AppText>
+            )}
+          </View>
         </View>
+
+        <AppText style={styles.hintText}>
+          {recording
+            ? "Your video is recording with sound"
+            : "Video records with sound · up to 3 minutes"}
+        </AppText>
       </View>
     </View>
   );
@@ -341,7 +504,23 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  topOverlay: {
+  topFade: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 160,
+  },
+
+  bottomFade: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 240,
+  },
+
+  topBar: {
     position: "absolute",
     top: 0,
     left: 0,
@@ -352,42 +531,84 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
-  topBackBtn: {
+  glassCircle: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "rgba(15, 23, 42, 0.5)",
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.28)",
     alignItems: "center",
     justifyContent: "center",
   },
 
-  topMeta: {
+  glassCircleDisabled: {
+    opacity: 0.4,
+  },
+
+  topTitleWrap: {
     flex: 1,
-    borderRadius: 16,
-    backgroundColor: "rgba(15, 23, 42, 0.5)",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    alignItems: "center",
+    gap: 1,
   },
 
-  topMetaTitle: {
+  topTitle: {
     color: "#FFFFFF",
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 15,
+    lineHeight: 20,
     fontFamily: "Inter-SemiBold",
+    letterSpacing: 0.2,
   },
 
-  topMetaSubtitle: {
-    color: "rgba(255,255,255,0.88)",
+  topSubtitle: {
+    color: "rgba(255,255,255,0.72)",
     fontSize: 12,
     lineHeight: 16,
     fontFamily: "Inter-Medium",
+    maxWidth: 220,
+  },
+
+  recBadgeWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+
+  recBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(15,23,42,0.62)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.22)",
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+
+  recDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: "#FF3B30",
+  },
+
+  recBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    lineHeight: 17,
+    fontFamily: "Inter-SemiBold",
+    letterSpacing: 0.6,
+    fontVariant: ["tabular-nums"],
   },
 
   readyOverlay: {
     ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.18)",
+    gap: 10,
+    backgroundColor: "rgba(0,0,0,0.35)",
   },
 
   readyText: {
@@ -402,107 +623,73 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    backgroundColor: "rgba(247, 246, 242, 0.94)",
-    gap: 10,
-  },
-
-  statusRow: {
-    flexDirection: "row",
+    paddingHorizontal: 24,
     alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-
-  liveDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#B8BDC7",
-  },
-
-  liveDotActive: {
-    backgroundColor: "#F84C00",
+    gap: 16,
   },
 
   statusText: {
-    color: "#3D4652",
+    color: "rgba(255,255,255,0.92)",
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: "Inter-SemiBold",
+    letterSpacing: 0.2,
+  },
+
+  controlsRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+  },
+
+  sideBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.28)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  sideBtnDisabled: {
+    opacity: 0.4,
+  },
+
+  maxLenText: {
+    color: "rgba(255,255,255,0.85)",
     fontSize: 12,
     lineHeight: 16,
     fontFamily: "Inter-SemiBold",
+    fontVariant: ["tabular-nums"],
   },
 
-  recordingControlsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-
-  startBtn: {
-    flex: 1,
-    minHeight: 50,
-    borderRadius: 16,
-    backgroundColor: "#05A39C",
+  recordOuter: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    borderWidth: 4,
+    borderColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    gap: 10,
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
 
-  startBtnDisabled: {
-    backgroundColor: "#8DBFBC",
+  recordOuterDisabled: {
+    opacity: 0.45,
   },
 
-  startText: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    lineHeight: 20,
-    fontFamily: "Inter-SemiBold",
+  recordInner: {
+    backgroundColor: "#FF3B30",
   },
 
-  stopBtn: {
-    flex: 1,
-    minHeight: 50,
-    borderRadius: 16,
-    backgroundColor: "#F84C00",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    gap: 10,
-  },
-
-  stopText: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    lineHeight: 20,
-    fontFamily: "Inter-SemiBold",
-  },
-
-  discardBtn: {
-    flex: 1,
-    minHeight: 50,
-    borderRadius: 16,
-    backgroundColor: "#F7F7F5",
-    borderWidth: 1.2,
-    borderColor: "#6B7280",
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 8,
-    paddingHorizontal: 14,
-  },
-
-  discardBtnDisabled: {
-    opacity: 0.7,
-  },
-
-  discardText: {
-    color: "#5C6470",
-    fontSize: 15,
-    lineHeight: 20,
+  hintText: {
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 12,
+    lineHeight: 16,
     fontFamily: "Inter-Medium",
   },
 
@@ -511,8 +698,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
-    gap: 12,
+    gap: 14,
     backgroundColor: "#F7F4EA",
+  },
+
+  permissionIconCircle: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: "rgba(5,163,156,0.10)",
+    borderWidth: 1.5,
+    borderColor: "rgba(5,163,156,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
   },
 
   permissionTitle: {

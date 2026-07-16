@@ -14,6 +14,7 @@ import {
 import AppGradientScreen from "@/components/app/AppGradientScreen";
 import BackButton from "@/components/ui/BackButton";
 import AppText from "@/components/ui/AppText";
+import { buildPressCoverageShareUrl } from "@/constants/links";
 import {
   formatPressCoverageDate,
   htmlToParagraphs,
@@ -103,13 +104,14 @@ export default function PressCoverageDetailsScreen() {
   const handleShare = async () => {
     if (!article) return;
 
-    const deepLink = `citizenmonitors://press-coverage/${slug}`;
+    // https link — custom schemes are not clickable in WhatsApp/SMS.
+    const shareUrl = buildPressCoverageShareUrl(slug);
 
     try {
       await Share.share({
         title: article.title,
-        url: deepLink,
-        message: [article.title, "", article.excerpt, "", deepLink]
+        url: shareUrl,
+        message: [article.title, "", article.excerpt, "", shareUrl]
           .filter(Boolean)
           .join("\n"),
       });

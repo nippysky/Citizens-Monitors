@@ -91,7 +91,17 @@ export async function stageMediaFile(params: {
     }
   }
 
-  sourceFile.copy(destinationFile);
+  // Prefer MOVE over COPY: both the camera/picker output and our staging dir
+  // live in the app cache (same volume), so a move is a filesystem rename —
+  // effectively instant even for large recorded videos. A byte-for-byte copy
+  // here used to block the JS thread for many seconds after recording,
+  // freezing the whole app on "Saving video...". Copy remains as a fallback
+  // for exotic cross-volume sources.
+  try {
+    sourceFile.move(destinationFile);
+  } catch {
+    sourceFile.copy(destinationFile);
+  }
 
   return {
     uri: params.sourceUri,

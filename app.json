@@ -10,6 +10,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.citizenmonitors.app",
+      "associatedDomains": [
+        "applinks:www.citizenmonitors.com",
+        "applinks:citizenmonitors.com"
+      ],
       "googleServicesFile": "./GoogleService-Info.plist",
       "config": {
         "usesNonExemptEncryption": false
@@ -35,6 +39,35 @@
     },
     "android": {
       "package": "com.citizenmonitors.app",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "www.citizenmonitors.com",
+              "pathPrefix": "/insights"
+            },
+            {
+              "scheme": "https",
+              "host": "www.citizenmonitors.com",
+              "pathPrefix": "/press"
+            },
+            {
+              "scheme": "https",
+              "host": "citizenmonitors.com",
+              "pathPrefix": "/insights"
+            },
+            {
+              "scheme": "https",
+              "host": "citizenmonitors.com",
+              "pathPrefix": "/press"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
       "softwareKeyboardLayoutMode": "pan",
       "googleServicesFile": "./google-services.json",
       "predictiveBackGestureEnabled": false,
