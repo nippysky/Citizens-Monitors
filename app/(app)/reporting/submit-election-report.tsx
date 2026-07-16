@@ -23,11 +23,14 @@ import ReportingOutcomeState from "@/components/reporting/ReportingOutcomeState"
 import AppButton from "@/components/ui/AppButton";
 import AppText from "@/components/ui/AppText";
 import SelectPickerSheet from "@/components/ui/sheets/SelectPickerSheet";
+import CollationAnimatedProgressBar from "@/components/collation/CollationAnimatedProgressBar";
 import { Paths } from "@/constants/paths";
 import { useNetwork } from "@/context/NetworkContext";
 import { useOfflineSync } from "@/context/OfflineSyncContext";
 import { useAppToast } from "@/hooks/useAppToast";
 import { reportingQueryKeys } from "@/hooks/api/useReportingMutations";
+import { useElectionCollationQuery } from "@/hooks/api/useCollationQueries";
+import { buildCollationItem } from "@/data/collation";
 import {
   mapDraftToElectionResultPayload,
   submitElectionResult,
@@ -62,7 +65,7 @@ import NNPP from "@/svgs/app/collation/NNPP";
 import OtherParties from "@/svgs/app/collation/OtherParties";
 import PDP from "@/svgs/app/collation/PDP";
 
-type ViewState = "form" | "success" | "invalid";
+type ViewState = "form" | "review-sentiment" | "success" | "invalid";
 
 type FeedbackState = {
   rating: "good" | "manageable" | "poor" | "";
@@ -512,6 +515,10 @@ export default function SubmitElectionReportScreen() {
 
   const isOffline = !isConnected || isInternetReachable === false;
 
+  // Fetch election collation for the sentiment step
+  const collationQuery = useElectionCollationQuery(draft?.electionId ?? null);
+  const collationItem = buildCollationItem(collationQuery.data ?? undefined);
+
   useEffect(() => {
     let mounted = true;
 
@@ -814,11 +821,52 @@ export default function SubmitElectionReportScreen() {
     });
   };
 
+  // Step 1: validate + if offline queue immediately; if online go to sentiment step
   const handleSubmit = async () => {
     if (!draft) return;
 
     const validation = validateElectionResult(draft);
 
+    if (!validation.valid) {
+      setInvalidReason(validation.reason ?? "");
+      setViewState("invalid");
+      return;
+    }
+
+    // Offline path: queue immediately, skip sentiment step
+    if (isOffline) {
+      const queuePayload = {
+        ...(draft as unknown as Record<string, unknown>),
+        totalValidVotes: validation.totalValidVotes,
+        rating: feedback.rating,
+        intimidationToday: feedback.intimidationToday,
+        voteBuyingToday: feedback.voteBuyingToday,
+      };
+
+      enqueue({ type: "submit-election-report", payload: queuePayload });
+      await clearResultDraft();
+      setViewState("success");
+
+      showToast({
+        type: "success",
+        message:
+          "Report saved offline. It will sync automatically when you're back online.",
+      });
+
+      return;
+    }
+
+    // Online path: show sentiment overview before final submit
+    setViewState("review-sentiment");
+  };
+
+  // Step 2: actual API call — triggered from the sentiment confirmation screen
+  const doSubmit = async () => {
+    if (!draft) return;
+
+    const validation = validateElectionResult(draft);
+
+    // Re-run validation defensively (draft hasn't changed)
     if (!validation.valid) {
       setInvalidReason(validation.reason ?? "");
       setViewState("invalid");
@@ -835,47 +883,18 @@ export default function SubmitElectionReportScreen() {
 
     setLoading(true);
 
-    if (isOffline) {
-      enqueue({
-        type: "submit-election-report",
-        payload: queuePayload,
-      });
-
-      await clearResultDraft();
-      setLoading(false);
-      setViewState("success");
-
-      showToast({
-        type: "success",
-        message:
-          "Report saved offline. It will sync automatically when you're back online.",
-      });
-
-      return;
-    }
-
     try {
       await submitElectionResult(
-        mapDraftToElectionResultPayload({
-          draft,
-          feedback,
-        })
+        mapDraftToElectionResultPayload({ draft, feedback })
       );
 
       await clearResultDraft();
       invalidateReportingData(draft.electionId);
       setViewState("success");
 
-      showToast({
-        type: "success",
-        message: "Report submitted successfully.",
-      });
+      showToast({ type: "success", message: "Report submitted successfully." });
     } catch (error) {
-      enqueue({
-        type: "submit-election-report",
-        payload: queuePayload,
-      });
-
+      enqueue({ type: "submit-election-report", payload: queuePayload });
       setViewState("success");
 
       showToast({
@@ -889,6 +908,135 @@ export default function SubmitElectionReportScreen() {
       setLoading(false);
     }
   };
+
+  if (viewState === "review-sentiment") {
+    const healthScore = collationItem.sentiment?.score ?? 0;
+    const healthLegend = collationItem.sentiment?.legend ?? [];
+    const resultsIn = collationItem.resultsUploaded ?? 0;
+    const incidentsIn = collationItem.incidentsReported ?? 0;
+    const progress = collationItem.progressPercent ?? 0;
+    const parties = collationItem.parties ?? [];
+
+    return (
+      <AppGradientScreen>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.sentimentContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Header />
+
+          <View style={styles.sentimentHeaderWrap}>
+            <View style={styles.sentimentIconCircle}>
+              <Ionicons name="analytics-outline" size={28} color={Theme.colors.primary} />
+            </View>
+            <AppText style={styles.sentimentHeading}>
+              Election Overview
+            </AppText>
+            <AppText style={styles.sentimentSubheading}>
+              Here&apos;s how this election is looking before you submit your report.
+            </AppText>
+          </View>
+
+          {/* Health score */}
+          <View style={styles.sentimentCard}>
+            <AppText style={styles.sentimentCardTitle}>Overall Process Health</AppText>
+
+            <View style={styles.sentimentHealthRow}>
+              <View style={styles.sentimentScoreCircle}>
+                <AppText style={styles.sentimentScoreValue}>{healthScore}%</AppText>
+                <AppText style={styles.sentimentScoreLabel}>Good</AppText>
+              </View>
+
+              <View style={styles.sentimentLegend}>
+                {healthLegend.map((item) => (
+                  <View key={item.label} style={styles.sentimentLegendRow}>
+                    <View style={[styles.sentimentLegendDot, { backgroundColor: item.color }]} />
+                    <AppText style={styles.sentimentLegendLabel}>{item.label}</AppText>
+                    <AppText style={styles.sentimentLegendValue}>{item.value}%</AppText>
+                  </View>
+                ))}
+              </View>
+            </View>
+          </View>
+
+          {/* Stats */}
+          <View style={styles.sentimentStatsRow}>
+            <View style={styles.sentimentStat}>
+              <AppText style={[styles.sentimentStatValue, { color: Theme.colors.primary }]}>
+                {resultsIn}
+              </AppText>
+              <AppText style={styles.sentimentStatLabel}>Results In</AppText>
+            </View>
+            <View style={styles.sentimentStatDivider} />
+            <View style={styles.sentimentStat}>
+              <AppText style={[styles.sentimentStatValue, { color: "#F04A1D" }]}>
+                {incidentsIn}
+              </AppText>
+              <AppText style={styles.sentimentStatLabel}>Incidents</AppText>
+            </View>
+            <View style={styles.sentimentStatDivider} />
+            <View style={styles.sentimentStat}>
+              <AppText style={[styles.sentimentStatValue, { color: Theme.colors.text }]}>
+                {progress}%
+              </AppText>
+              <AppText style={styles.sentimentStatLabel}>Progress</AppText>
+            </View>
+          </View>
+
+          {/* Collation progress bar */}
+          <View style={styles.sentimentProgressWrap}>
+            <CollationAnimatedProgressBar
+              progress={progress}
+              height={8}
+              color={Theme.colors.primary}
+              trackColor="#DADFE7"
+            />
+            <AppText style={styles.sentimentProgressLabel}>
+              Collation progress — {collationItem.coveredUnits ?? 0}/{collationItem.totalUnits ?? 0} polling units
+            </AppText>
+          </View>
+
+          {/* Party breakdown if available */}
+          {parties.length > 0 ? (
+            <View style={styles.sentimentCard}>
+              <AppText style={styles.sentimentCardTitle}>Leading Parties</AppText>
+              {parties.slice(0, 4).map((p) => (
+                <View key={p.id} style={styles.sentimentPartyRow}>
+                  <View style={styles.sentimentPartyLeft}>
+                    <View style={[styles.sentimentPartyDot, { backgroundColor: p.color }]} />
+                    <AppText style={styles.sentimentPartyName}>{p.shortName}</AppText>
+                  </View>
+                  <AppText style={styles.sentimentPartyPercent}>{p.percent}%</AppText>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          <AppText style={styles.sentimentNote}>
+            Your report will be added to these figures and help make this election more transparent.
+          </AppText>
+
+          <AppButton
+            title={loading ? "Submitting..." : "Confirm & Submit Report"}
+            onPress={() => void doSubmit()}
+            loading={loading}
+            disabled={loading}
+            style={styles.submitBtn}
+          />
+
+          <Pressable
+            onPress={() => setViewState("form")}
+            style={styles.sentimentBackBtn}
+            accessibilityRole="button"
+          >
+            <Ionicons name="arrow-back-outline" size={16} color={Theme.colors.textMuted} />
+            <AppText style={styles.sentimentBackText}>Go back and review</AppText>
+          </Pressable>
+        </ScrollView>
+      </AppGradientScreen>
+    );
+  }
 
   if (viewState === "success") {
     return (
@@ -1034,27 +1182,19 @@ export default function SubmitElectionReportScreen() {
 
         <View style={styles.adminGrid}>
           <View style={styles.adminGridRow}>
-            <CompactField
-              label="Accredited Voters"
-              value={draft.accreditedVoters}
-              onChangeText={(value) =>
-                void updateDraft({
-                  ...draft,
-                  accreditedVoters: value.replace(/[^\d]/g, ""),
-                })
-              }
-            />
-
-            <CompactField
-              label="Rejected Voters"
-              value={draft.rejectedVoters}
-              onChangeText={(value) =>
-                void updateDraft({
-                  ...draft,
-                  rejectedVoters: value.replace(/[^\d]/g, ""),
-                })
-              }
-            />
+            <View style={styles.halfField}>
+              <CompactField
+                label="Accredited Voters"
+                value={draft.accreditedVoters}
+                onChangeText={(value) =>
+                  void updateDraft({
+                    ...draft,
+                    accreditedVoters: value.replace(/[^\d]/g, ""),
+                  })
+                }
+              />
+            </View>
+            <View style={styles.halfFieldPlaceholder} />
           </View>
 
           <View style={styles.adminGridRow}>
@@ -1070,7 +1210,7 @@ export default function SubmitElectionReportScreen() {
             />
 
             <CompactField
-              label="Rejected Ballots"
+              label="Rejected Ballot Papers"
               value={draft.rejectedBallots}
               onChangeText={(value) =>
                 void updateDraft({
@@ -1569,5 +1709,197 @@ const styles = StyleSheet.create({
     marginBottom: 0,
     minHeight: 45,
     borderRadius: 12,
+  },
+
+  // ── Sentiment step styles ──────────────────────────────────────────────────
+  sentimentContent: {
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    paddingBottom: 40,
+    gap: 16,
+  },
+  sentimentHeaderWrap: {
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 8,
+  },
+  sentimentIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "rgba(5,163,156,0.10)",
+    borderWidth: 1.5,
+    borderColor: "rgba(5,163,156,0.20)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  sentimentHeading: {
+    fontSize: 22,
+    lineHeight: 26,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.heading.bold,
+    textAlign: "center",
+  },
+  sentimentSubheading: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: Theme.colors.textMuted,
+    textAlign: "center",
+    maxWidth: 280,
+  },
+  sentimentCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+    backgroundColor: Theme.colors.surface,
+    padding: 16,
+    gap: 14,
+  },
+  sentimentCardTitle: {
+    fontSize: 14,
+    lineHeight: 18,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+  sentimentHealthRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 20,
+  },
+  sentimentScoreCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 5,
+    borderColor: Theme.colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+  },
+  sentimentScoreValue: {
+    fontSize: 18,
+    lineHeight: 20,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.heading.bold,
+  },
+  sentimentScoreLabel: {
+    fontSize: 11,
+    lineHeight: 13,
+    color: Theme.colors.textMuted,
+  },
+  sentimentLegend: {
+    flex: 1,
+    gap: 8,
+  },
+  sentimentLegendRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  sentimentLegendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+  },
+  sentimentLegendLabel: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: Theme.colors.text,
+  },
+  sentimentLegendValue: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+  sentimentStatsRow: {
+    flexDirection: "row",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
+    backgroundColor: Theme.colors.surface,
+    overflow: "hidden",
+  },
+  sentimentStat: {
+    flex: 1,
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    gap: 4,
+  },
+  sentimentStatDivider: {
+    width: 1,
+    backgroundColor: Theme.colors.border,
+    marginVertical: 12,
+  },
+  sentimentStatValue: {
+    fontSize: 24,
+    lineHeight: 28,
+    fontFamily: Theme.fonts.heading.bold,
+  },
+  sentimentStatLabel: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: Theme.colors.textMuted,
+    fontFamily: Theme.fonts.body.medium,
+    textAlign: "center",
+  },
+  sentimentProgressWrap: {
+    gap: 8,
+  },
+  sentimentProgressLabel: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Theme.colors.textMuted,
+  },
+  sentimentPartyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  sentimentPartyLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  sentimentPartyDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+  },
+  sentimentPartyName: {
+    fontSize: 14,
+    lineHeight: 18,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.medium,
+  },
+  sentimentPartyPercent: {
+    fontSize: 14,
+    lineHeight: 18,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+  sentimentNote: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: Theme.colors.textMuted,
+    textAlign: "center",
+  },
+  sentimentBackBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 14,
+  },
+  sentimentBackText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: Theme.colors.textMuted,
+    fontFamily: Theme.fonts.body.medium,
   },
 });

@@ -6,7 +6,7 @@ import {
 import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 import { Ionicons } from "@expo/vector-icons";
 import { forwardRef, useMemo, useState } from "react";
-import { Alert, Pressable, StyleSheet, View } from "react-native";
+import { Alert, Image, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AppButton from "@/components/ui/AppButton";
@@ -400,17 +400,34 @@ function EditElectionResultForm({
         </View>
       </View>
 
-      <View style={styles.noticeCard}>
-        <Ionicons
-          name="information-circle-outline"
-          size={18}
-          color={Theme.colors.primary}
-        />
-        <AppText style={styles.noticeText}>
-          Evidence files are preserved from your original upload. Media editing
-          can be added once the backend confirms the multipart update contract.
-        </AppText>
-      </View>
+      {(result.resultPicture?.url || result.resultVideo?.url) ? (
+        <View style={styles.section}>
+          <AppText style={styles.sectionTitle}>Uploaded Evidence</AppText>
+
+          {result.resultPicture?.url ? (
+            <View style={styles.mediaBlock}>
+              <AppText style={styles.mediaLabel}>Signed Result Sheet</AppText>
+              <Image
+                source={{ uri: result.resultPicture.url }}
+                style={styles.mediaImage}
+                resizeMode="cover"
+              />
+            </View>
+          ) : null}
+
+          {result.resultVideo?.url ? (
+            <View style={[styles.mediaBlock, styles.videoCard]}>
+              <Ionicons name="videocam-outline" size={22} color={Theme.colors.primary} />
+              <View style={styles.videoTextWrap}>
+                <AppText style={styles.mediaLabel}>Cumulative Result Video</AppText>
+                <AppText style={styles.videoSubtext}>
+                  {result.resultVideo.name ?? "Video uploaded"}
+                </AppText>
+              </View>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
 
       <View style={styles.actionStack}>
         <AppButton
@@ -751,6 +768,41 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: "#F04A1D",
     fontFamily: Theme.fonts.body.semibold,
+  },
+  mediaBlock: {
+    gap: 8,
+  },
+  mediaLabel: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.medium,
+  },
+  mediaImage: {
+    width: "100%",
+    height: 200,
+    borderRadius: 14,
+    backgroundColor: "#F0F4F8",
+  },
+  videoCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(5,163,156,0.18)",
+    backgroundColor: "rgba(5,163,156,0.06)",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  videoTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  videoSubtext: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Theme.colors.textMuted,
   },
   emptyState: {
     alignItems: "center",

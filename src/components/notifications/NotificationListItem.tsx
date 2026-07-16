@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
 import { AppNotification } from "@/lib/api/notifications.api";
+import { humanizeInfoText } from "@/lib/humanizeInfoText";
 import { Theme } from "@/theme";
 
 type Props = {
@@ -87,11 +88,32 @@ export default function NotificationListItem({
 }: Props) {
   const unread = !item.isRead;
   const iconColor = getIconColor(item.type);
-  const metaText = item.info || item.message;
+  // Display only — raw ISO timestamps in `info` become readable local dates.
+  // (Routing below still uses the raw item.info value.)
+  const metaText = humanizeInfoText(item.info || item.message || "");
 
   const handlePress = (): void => {
     if (onPress) {
       onPress(item);
+      return;
+    }
+
+    // Election-related notifications → go to the election or collation screen
+    if (
+      item.type === "election" ||
+      item.type === "result-upload" ||
+      item.type === "incident-upload"
+    ) {
+      const electionId = item.info?.trim();
+      if (electionId) {
+        router.push(Paths.electionDetails(electionId));
+        return;
+      }
+    }
+
+    // Newsletter / announcement notifications → go to News & Insights
+    if (item.type === "announcement" || item.type === "update") {
+      router.push(Paths.voterNewsAndInsights);
       return;
     }
 

@@ -929,7 +929,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   modalGradient: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   stickyResultsHeader: {
     paddingHorizontal: 16,

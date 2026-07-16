@@ -1,6 +1,11 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useRef, useState } from "react";
-import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import Animated, {
+  FadeIn,
+  FadeInLeft,
+  FadeInRight,
+  FadeOut,
+} from "react-native-reanimated";
 
 import AppScreenLoader from "@/components/feedback/AppScreenLoader";
 import OnboardingHeader from "@/components/onboarding/OnboardingHeader";
@@ -19,6 +24,7 @@ import { useSelectRoleMutation } from "@/hooks/api/useSelectRoleMutation";
 import { useSubmitDetailsMutation } from "@/hooks/api/useSubmitDetailsMutation";
 import { useSubmitObserverRoleMutation } from "@/hooks/api/useSubmitObserverRoleMutation";
 import { mapMobileUserToAuthUser } from "@/lib/auth/mapMobileUserToAuthUser";
+import { markFreshBiometricLogin } from "@/hooks/useBiometricGate";
 import {
   buildSubmitDetailsFingerprint,
   buildSubmitDetailsPayload,
@@ -33,7 +39,6 @@ import {
 
 const DURATION = 260;
 const EXIT_DURATION = 160;
-const OFFSET = 18;
 
 type ScreenKey = 1 | 2 | 3 | 4 | 5;
 
@@ -178,10 +183,11 @@ export default function OnboardingIndexScreen() {
   const shouldShowFooterButton = screen !== 5;
   const isForward = animKey.dir === "forward";
 
-  const enteringAnimation = FadeIn.duration(DURATION).withInitialValues({
-    opacity: 0,
-    transform: [{ translateX: isForward ? OFFSET : -OFFSET }],
-  });
+  // Reanimated 4.x: FadeIn.withInitialValues only accepts opacity, so use the
+  // dedicated fade+slide builders for the same fade-with-horizontal-offset feel.
+  const enteringAnimation = (
+    isForward ? FadeInRight : FadeInLeft
+  ).duration(DURATION);
 
   const goToScreen = (nextScreen: ScreenKey, dir: "forward" | "back") => {
     directionRef.current = dir;
@@ -288,6 +294,7 @@ export default function OnboardingIndexScreen() {
           throw new Error("Registration completed but no session token was returned.");
         }
 
+        await markFreshBiometricLogin();
         await completeOnboarding(mapMobileUserToAuthUser(response.user, email), {
           token: response.token,
         });
@@ -382,6 +389,7 @@ export default function OnboardingIndexScreen() {
           "Observer details submitted successfully, pending admin verification.",
       });
 
+      await markFreshBiometricLogin();
       await completeOnboarding(mapMobileUserToAuthUser(response.user, email), {
         token: response.token,
       });

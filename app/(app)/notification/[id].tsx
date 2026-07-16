@@ -11,6 +11,7 @@ import {
   notificationQueryKeys,
   useNotificationDetailQuery,
 } from "@/hooks/api/useNotificationsQueries";
+import { humanizeInfoText } from "@/lib/humanizeInfoText";
 import { Theme } from "@/theme";
 
 function formatDetailDate(value?: string): string {
@@ -151,7 +152,7 @@ export default function NotificationDetailsScreen() {
                 <View style={styles.infoCard}>
                   <AppText style={styles.infoLabel}>Context</AppText>
                   <AppText style={styles.infoText}>
-                    {notification.info}
+                    {humanizeInfoText(notification.info)}
                   </AppText>
                 </View>
               ) : null}

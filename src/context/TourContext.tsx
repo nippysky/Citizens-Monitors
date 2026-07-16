@@ -13,6 +13,7 @@ import {
 import type { ScrollView } from "react-native";
 
 import { TOUR_STEPS, TourStep } from "@/components/tour/tourSteps";
+import { isTabPathname } from "@/constants/tabRoutes";
 
 const TOUR_STORAGE_KEY = "@citizen-monitors/tour-seen-v1";
 
@@ -146,6 +147,14 @@ export function TourProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isActive || !currentStep) return;
+
+    // Only redirect the user if they are currently inside the tabs layout.
+    // If they have navigated to a non-tab screen (e.g. /notifications,
+    // /help-support) we must NOT force them back — that's what was causing
+    // the notification bell to immediately bounce back to home.
+    // NOTE: usePathname() never includes group segments like "(tabs)", so we
+    // must match against the flat tab pathnames.
+    if (!isTabPathname(pathname)) return;
 
     const targetTab = tabFromRoute(currentStep.route);
     const currentTab = tabFromRoute(pathname);

@@ -19,6 +19,7 @@
         "NSPhotoLibraryUsageDescription": "Citizen Monitor uses your photo library so you can attach election photos and videos from your gallery.",
         "NSMicrophoneUsageDescription": "Citizen Monitor uses your microphone when recording live incident videos and cumulative result announcement videos.",
         "NSLocationWhenInUseUsageDescription": "Citizen Monitor uses your location to verify that reports and evidence are submitted from the correct polling area.",
+        "NSFaceIDUsageDescription": "Citizen Monitor uses Face ID to protect your account when you reopen the app.",
         "LSApplicationQueriesSchemes": [
           "mailto",
           "comgooglemaps",
@@ -54,12 +55,13 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      "./plugins/withModularHeaders",
       "expo-router",
       [
         "expo-build-properties",
         {
           "ios": {
-            "deploymentTarget": "15.1"
+            "deploymentTarget": "16.4"
           }
         }
       ],
@@ -91,6 +93,12 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "Citizen Monitor uses your location to verify that reports are submitted from the correct polling area."
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Citizen Monitor uses Face ID to protect your account when you reopen the app."
         }
       ],
       [

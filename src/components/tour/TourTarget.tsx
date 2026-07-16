@@ -1,11 +1,5 @@
 import { ReactNode, useCallback, useEffect, useRef } from "react";
-import {
-  Dimensions,
-  InteractionManager,
-  StyleProp,
-  View,
-  ViewStyle,
-} from "react-native";
+import { Dimensions, StyleProp, View, ViewStyle } from "react-native";
 
 import { useTour } from "@/context/TourContext";
 
@@ -42,16 +36,16 @@ export default function TourTarget({ id, children, style }: Props) {
   const scheduleMeasure = useCallback(() => {
     clearPending();
 
+    // InteractionManager is deprecated in RN 0.86 — staggered retries after a
+    // frame cover the same "wait for transitions to settle" purpose.
     rafRef.current = requestAnimationFrame(() => {
-      InteractionManager.runAfterInteractions(() => {
-        measureNow();
+      measureNow();
 
-        timeoutRefs.current = [
-          setTimeout(measureNow, 60),
-          setTimeout(measureNow, 140),
-          setTimeout(measureNow, 260),
-        ];
-      });
+      timeoutRefs.current = [
+        setTimeout(measureNow, 60),
+        setTimeout(measureNow, 140),
+        setTimeout(measureNow, 260),
+      ];
     });
   }, [clearPending, measureNow]);
 

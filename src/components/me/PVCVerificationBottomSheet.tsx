@@ -659,7 +659,7 @@ const styles = StyleSheet.create({
     resizeMode: "cover",
   },
   previewOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.18)",
   },
   previewTopBar: {

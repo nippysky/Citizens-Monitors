@@ -154,7 +154,9 @@ function buildVerificationStats(collation: CollationItem, _scope: ScopeFilter) {
 }
 
 export default function SentimentAnalysisSection({ collation }: Props) {
-  const empty = !collation.isAssignedToPollingUnit;
+  // Show empty state only when there is genuinely no data to analyse.
+  const empty =
+    collation.resultsUploaded === 0 && collation.incidentsReported === 0;
   const shouldShowStateScope = isPresidentialElection(collation);
 
   const defaultScope: ScopeFilter = shouldShowStateScope

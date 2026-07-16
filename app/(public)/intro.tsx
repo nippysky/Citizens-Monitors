@@ -128,14 +128,10 @@ export default function IntroScreen() {
       <View
         style={[styles.page, { width, height }]}
         {...panResponder.panHandlers}
-        renderToHardwareTextureAndroid
       >
         <View
           style={[styles.greenLayer, { top: greenTop, bottom: footerHeight - 8 }]}
-          renderToHardwareTextureAndroid
         >
-          <View style={styles.greenFill} />
-
           <LinearGradient
             colors={["rgba(255,255,255,0.07)", "transparent"]}
             style={StyleSheet.absoluteFill}
@@ -255,10 +251,8 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 1,
     overflow: "hidden",
-  },
-
-  greenFill: {
-    ...StyleSheet.absoluteFillObject,
+    // Background set directly here — absoluteFillObject children no longer
+    // auto-compute dimensions in the New Architecture (RN 0.86+).
     backgroundColor: Theme.colors.primary,
   },
 

@@ -42,7 +42,10 @@ function resolveUnitMeta(contextData: CommencementContext | null): string {
     .map((item) => item?.trim())
     .filter(Boolean);
 
-  return parts.length ? parts.join(" · ") : "Polling unit context will be attached to this report.";
+  // Deduplicate consecutive identical segments (e.g. "Nationwide · Nationwide · ...")
+  const deduped = [...new Set(parts)];
+
+  return deduped.length ? deduped.join(" · ") : "Polling unit context will be attached to this report.";
 }
 
 const CommencementBottomSheet = forwardRef<BottomSheetModal, Props>(

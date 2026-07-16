@@ -49,6 +49,7 @@ import {
   useStatesQuery,
   useWardsQuery,
 } from "@/hooks/api/useLocationQueries";
+import { useElectionVaultQuery } from "@/hooks/api/useElectionVaultQuery";
 import { useMyProfileQuery } from "@/hooks/api/useMyProfileQuery";
 import {
   useGenerateAnonymousUsernameMutation,
@@ -157,7 +158,10 @@ function getUsername(profile: MyProfileResponse): string {
   return fallback.replace(/[^a-zA-Z0-9_]/g, "").toLowerCase();
 }
 
-function buildMeUser(profile: MyProfileResponse): MeUser {
+function buildMeUser(
+  profile: MyProfileResponse,
+  vault?: { reportsCount: number; electionsCount: number; incidentsCount: number }
+): MeUser {
   return {
     fullName: getDisplayName(profile),
     username: getUsername(profile),
@@ -170,9 +174,9 @@ function buildMeUser(profile: MyProfileResponse): MeUser {
       profile.role === "observer" && !profile.pendingObserverVerification
         ? profile.updatedAt ?? profile.createdAt
         : undefined,
-    reportsCount: 0,
-    electionsCount: 0,
-    incidentsCount: 0,
+    reportsCount: vault?.reportsCount ?? 0,
+    electionsCount: vault?.electionsCount ?? 0,
+    incidentsCount: vault?.incidentsCount ?? 0,
   };
 }
 
@@ -414,6 +418,8 @@ export default function MeScreen() {
   const { profile, isInitialProfileLoading, isFetching, refetch, error } =
     useMyProfileQuery();
 
+  const vaultQuery = useElectionVaultQuery();
+
   const banksQuery = useBanksQuery();
   const notificationsQuery = useMobileNotificationSettingsQuery();
 
@@ -525,8 +531,20 @@ export default function MeScreen() {
   const meUser = useMemo(() => {
     if (!displayProfile) return null;
 
-    return buildMeUser(displayProfile);
-  }, [displayProfile]);
+    const vaultData = vaultQuery.data;
+    const vaultResults = vaultData?.results ?? [];
+    const vaultIncidents = vaultData?.incidents ?? [];
+    const uniqueElectionCount = new Set([
+      ...vaultResults.map((r) => r.election?._id).filter(Boolean),
+      ...vaultIncidents.map((r) => r.election?._id).filter(Boolean),
+    ]).size;
+
+    return buildMeUser(displayProfile, {
+      reportsCount: vaultData?.summary.totalSubmissions ?? 0,
+      electionsCount: uniqueElectionCount,
+      incidentsCount: vaultData?.summary.incidentsUploaded ?? 0,
+    });
+  }, [displayProfile, vaultQuery.data]);
 
   const banner = useMemo(() => {
     if (!meUser) return null;
@@ -1163,7 +1181,7 @@ const skeletonColor = "rgba(17,26,50,0.08)";
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#EEF5DB" },
   screen: { flex: 1, backgroundColor: "#F7F7F2" },
-  gradientBg: { ...StyleSheet.absoluteFillObject },
+  gradientBg: { ...StyleSheet.absoluteFill },
   content: {
     paddingHorizontal: 16,
     paddingTop: 16,

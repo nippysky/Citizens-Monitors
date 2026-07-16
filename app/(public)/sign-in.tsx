@@ -20,6 +20,7 @@ import { useAppToast } from "@/hooks/useAppToast";
 import { useSignInForm } from "@/hooks/useSignInForms";
 import { signInWithGoogle } from "@/lib/auth/googleAuth";
 import { mapMobileUserToAuthUser } from "@/lib/auth/mapMobileUserToAuthUser";
+import { markFreshBiometricLogin } from "@/hooks/useBiometricGate";
 import { Theme } from "@/theme";
 
 export default function SignInScreen() {
@@ -57,6 +58,9 @@ export default function SignInScreen() {
       if (!response.token) {
         throw new Error("Login succeeded but no session token was returned.");
       }
+
+      // Mark this as a fresh password login so the biometric gate skips once.
+      await markFreshBiometricLogin();
 
       await signIn(mapMobileUserToAuthUser(response.user, email), {
         token: response.token,
@@ -113,6 +117,7 @@ export default function SignInScreen() {
 
       // Persist the session so the set-password screen can use the token
       // for any authenticated calls it needs to make.
+      await markFreshBiometricLogin();
       await signIn(mapMobileUserToAuthUser(response.user, result.email), {
         token: response.token,
         hasCompletedOnboarding: !response.requiresPasswordSetup,

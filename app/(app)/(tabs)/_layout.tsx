@@ -5,13 +5,16 @@ import {
   MaterialCommunityIcons,
   Octicons,
 } from "@expo/vector-icons";
-import { BottomTabBar } from "@react-navigation/bottom-tabs";
+// expo-router SDK 57 ships its own fork of @react-navigation — import from
+// there so Metro's compatibility check (which blocks @react-navigation/core)
+// is never triggered.
+import { BottomTabBar } from "expo-router/build/react-navigation/bottom-tabs";
 import { Tabs } from "expo-router";
-import { Platform, StyleSheet, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StyleSheet, View } from "react-native";
 
 import TourTarget from "@/components/tour/TourTarget";
 import AppText from "@/components/ui/AppText";
+import { useTabBarLayout } from "@/hooks/useTabBarLayout";
 import { Theme } from "@/theme";
 
 type TabIconProps = {
@@ -46,11 +49,7 @@ function TabIcon({ focused, label, icon }: TabIconProps) {
 }
 
 export default function TabsLayout() {
-  const insets = useSafeAreaInsets();
-
-  const bottomInset =
-    Platform.OS === "ios" ? insets.bottom : Math.max(insets.bottom, 8);
-  const tabBarHeight = 64 + bottomInset;
+  const { bottomInset, tabBarHeight } = useTabBarLayout();
 
   return (
     <Tabs
@@ -176,11 +175,21 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   tabBarHost: {
-    position: "relative",
+    // position: 'absolute' + bottom/left/right restores SDK 54 behaviour:
+    // the tab bar overlays the bottom of the screen (MaybeScreenContainer gets
+    // full flex:1 height), so screens are not cut short and TabBarSpacer keeps
+    // working as before. Without this, the SDK 57 expo-router fork renders the
+    // tab bar in normal flow, stealing height from screens and leaving visible
+    // empty space at the bottom of every tab screen.
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "#FFFFFF",
   },
 
   tabBarTourLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     top: undefined,
     left: 0,
     right: 0,

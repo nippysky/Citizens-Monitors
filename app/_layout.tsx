@@ -51,11 +51,9 @@ export default function RootLayout() {
               <NotificationsGate />
 
               <ToastProvider>
-                <StatusBar
-                  style="dark"
-                  translucent
-                  backgroundColor="transparent"
-                />
+                {/* SDK 57: `translucent` / `backgroundColor` props were removed
+                    from expo-status-bar (Android is always edge-to-edge now). */}
+                <StatusBar style="dark" />
                 <Stack
                   screenOptions={{
                     headerShown: false,

@@ -1,9 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
+import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { router } from "expo-router";
+import { useRef } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
+import CommencementBottomSheet from "@/components/reporting/CommencementBottomSheet";
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
+import { buildCommencementContext } from "@/lib/reporting";
 import PresidentialElection from "@/svgs/app/PresidentialElection";
 import SenatorElection from "@/svgs/app/SenatorElection";
 import HouseOfRepsElection from "@/svgs/app/HouseOfRepsElection";
@@ -74,6 +78,21 @@ export default function LiveElectionCard({ item, width, viewerRole }: Props) {
   const activeElectionId = item.activeElectionId ?? item.id;
   const submitEnabled = canSubmitResult(viewerRole);
   const progress = getProgress(item);
+  const commencementRef = useRef<BottomSheetModal>(null);
+
+  const electionLocation = item.electionLocation?.trim() || item.location;
+  const state = item.state?.trim() || getSpecificLocation(electionLocation);
+
+  const commencementContext = buildCommencementContext({
+    electionId: activeElectionId,
+    electionTitle: item.title,
+    pollingUnitName: item.pollingUnitName ?? "",
+    pollingUnitCode: item.pollingUnitCode ?? "",
+    ward: item.ward ?? "",
+    lga: item.lga ?? "",
+    state,
+    uploadLocation: null,
+  });
 
   const handleOpenCollation = () => {
     router.push({
@@ -93,9 +112,11 @@ export default function LiveElectionCard({ item, width, viewerRole }: Props) {
       return;
     }
 
-    const electionLocation = item.electionLocation?.trim() || item.location;
-    const state = item.state?.trim() || getSpecificLocation(electionLocation);
-    const votingStartTime = item.votingStartTime?.trim() || item.startDate || "";
+    commencementRef.current?.present();
+  };
+
+  const handleProceedResult = (time: string) => {
+    const votingStartTime = time || item.votingStartTime?.trim() || item.startDate || "";
 
     router.push({
       pathname: Paths.submitElectionReport as never,
@@ -113,6 +134,16 @@ export default function LiveElectionCard({ item, width, viewerRole }: Props) {
         ward: item.ward ?? "",
         lga: item.lga ?? "",
         state,
+      },
+    });
+  };
+
+  const handleProceedIncident = () => {
+    router.push({
+      pathname: Paths.reportIncidentLive as never,
+      params: {
+        electionId: activeElectionId,
+        electionTitle: item.title,
       },
     });
   };
@@ -208,6 +239,13 @@ export default function LiveElectionCard({ item, width, viewerRole }: Props) {
           />
         </Pressable>
       </View>
+
+      <CommencementBottomSheet
+        ref={commencementRef}
+        contextData={commencementContext}
+        onProceedResult={handleProceedResult}
+        onProceedIncident={handleProceedIncident}
+      />
     </View>
   );
 }

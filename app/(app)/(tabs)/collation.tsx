@@ -30,9 +30,9 @@ import {
 } from "@/data/collation";
 import {
   collationQueryKeys,
-  getElectionCollation,
   useElectionCollationQuery,
 } from "@/hooks/api/useCollationQueries";
+import { getElectionCollation } from "@/lib/api/collation.api";
 import { useActiveElectionsQuery } from "@/hooks/api/useElectionQueries";
 import { buildCommencementContext } from "@/lib/reporting";
 import NoElection from "@/svgs/app/NoElection";

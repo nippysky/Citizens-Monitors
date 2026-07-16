@@ -18,8 +18,6 @@ import SentimentAnalysisSection from "@/components/collation/SentimentAnalysisSe
 import { CollationItem, formatCompactNumber } from "@/data/collation";
 import { Theme } from "@/theme";
 import NoElection from "@/svgs/app/NoElection";
-import INEC from "@/svgs/app/collation/INEC";
-import FullLogo from "@/svgs/app/FullLogo";
 
 type Props = {
   collation: CollationItem;
@@ -37,9 +35,11 @@ export default function CollationOverviewTab({
   const [lowerTab, setLowerTab] = useState<LowerTab>("geo");
   const [localRefreshing, setLocalRefreshing] = useState(false);
 
+  // Only show empty state when there is genuinely no data — not based on
+  // whether the viewer happens to be assigned to a specific polling unit.
   const hasNoData = useMemo(
-    () => !collation.isAssignedToPollingUnit,
-    [collation.isAssignedToPollingUnit]
+    () => collation.parties.length === 0 && collation.resultsUploaded === 0,
+    [collation.parties, collation.resultsUploaded]
   );
 
   const refreshing = externalRefreshing ?? localRefreshing;
@@ -150,23 +150,6 @@ export default function CollationOverviewTab({
         )}
       </View>
 
-      <View style={styles.promoCard}>
-        <View style={styles.promoHeader}>
-          <FullLogo />
-          <Ionicons name="trophy-outline" size={20} color="#FFB547" />
-        </View>
-
-        <AppText style={styles.promoTitle}>
-          Our observer voice will make this election transparent to the world!
-        </AppText>
-
-        <AppText style={styles.promoBody}>
-          Empowering citizens to hold elections accountable through crowdsourced
-          data. We&apos;re promoting transparency and trust in African elections
-          again.
-        </AppText>
-      </View>
-
       <View style={styles.section}>
         <AppText style={styles.sectionTitle}>
           Administrative Figures from EC8A Sheet
@@ -183,10 +166,6 @@ export default function CollationOverviewTab({
               <FigureItem
                 label="Accredited voter"
                 value={formatCompactNumber(collation.officialSummary.accreditedVoters)}
-              />
-              <FigureItem
-                label="Rejected Votes"
-                value={formatCompactNumber(collation.officialSummary.rejectedVotes)}
               />
               <FigureItem
                 label="Spoiled Ballot Papers"
@@ -213,24 +192,6 @@ export default function CollationOverviewTab({
           />
         )}
 
-        <Pressable style={styles.inecCard}>
-          <View style={styles.inecLeft}>
-            <INEC width={44} height={44} />
-
-            <View style={styles.inecTextWrap}>
-              <AppText style={styles.inecMeta}>Reported by INEC officially</AppText>
-
-              <View style={styles.inecValueRow}>
-                <AppText style={styles.inecValue}>
-                  {collation.officialSummary.aggregateVoters}
-                </AppText>
-                <AppText style={styles.inecLabel}>Aggregate Voters</AppText>
-              </View>
-            </View>
-          </View>
-
-          <Ionicons name="chevron-forward" size={18} color={Theme.colors.textMuted} />
-        </Pressable>
       </View>
 
       <View style={styles.lowerTabsRow}>
@@ -460,28 +421,6 @@ const styles = StyleSheet.create({
     color: Theme.colors.textMuted,
   },
   partyList: { gap: 10 },
-  promoCard: {
-    borderRadius: 18,
-    backgroundColor: "#DDF7E8",
-    padding: 16,
-    gap: 8,
-  },
-  promoHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  promoTitle: {
-    fontSize: 20,
-    lineHeight: 24,
-    color: Theme.colors.text,
-    fontFamily: Theme.fonts.heading.bold,
-  },
-  promoBody: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: Theme.colors.text,
-  },
   figureGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -503,50 +442,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textAlign: "center",
     fontSize: 11,
-    lineHeight: 16,
-    color: Theme.colors.textMuted,
-  },
-  inecCard: {
-    minHeight: 68,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
-    backgroundColor: Theme.colors.surface,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  inecLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    flex: 1,
-  },
-  inecTextWrap: {
-    flex: 1,
-    gap: 4,
-  },
-  inecMeta: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: Theme.colors.textMuted,
-  },
-  inecValueRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: 6,
-    flexWrap: "wrap",
-  },
-  inecValue: {
-    fontSize: 20,
-    lineHeight: 24,
-    color: Theme.colors.text,
-    fontFamily: Theme.fonts.heading.bold,
-  },
-  inecLabel: {
-    fontSize: 12,
     lineHeight: 16,
     color: Theme.colors.textMuted,
   },

@@ -591,9 +591,12 @@ function getHeroDateLabel(election: CollationItem): string {
   const parts = source.split("–").map((part) => part.trim());
 
   if (parts.length >= 2) {
+    // Strip ordinals and trailing dot from the left side, then also remove any
+    // trailing 4-digit year so we don't duplicate it when we append below.
     const leftClean = parts[0]
       .replace(/\.$/, "")
       .replace(/th|st|nd|rd/gi, "")
+      .replace(/,?\s*\d{4}\s*$/, "")
       .trim();
 
     const yearMatch = parts[1].match(/(\d{4})/);

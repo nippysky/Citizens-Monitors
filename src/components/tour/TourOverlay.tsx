@@ -1,3 +1,4 @@
+import { usePathname } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   Pressable,
@@ -12,6 +13,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { isTabPathname } from "@/constants/tabRoutes";
 import { useTour } from "@/context/TourContext";
 import TourSkipConfirmation from "./TourSkipConfirmation";
 import TourTooltipCard from "./TourTooltipCard";
@@ -26,6 +28,7 @@ const FADE_DURATION = 240;
 export default function TourOverlay() {
   const insets = useSafeAreaInsets();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const pathname = usePathname();
 
   const {
     isActive,
@@ -167,7 +170,14 @@ export default function TourOverlay() {
     insets.bottom,
   ]);
 
-  if (!isActive || !currentStep || !tooltipPosition) {
+  // Don't render the overlay when the user has navigated away from the tabs
+  // (e.g. to /notifications, /help-support, etc.). The tour stays "active" in
+  // state so it resumes correctly when they return to the tabs layout.
+  // NOTE: usePathname() never includes group segments like "(tabs)", so we
+  // must match against the flat tab pathnames.
+  const isInTabsLayout = isTabPathname(pathname);
+
+  if (!isActive || !currentStep || !tooltipPosition || !isInTabsLayout) {
     return null;
   }
 
@@ -180,9 +190,12 @@ export default function TourOverlay() {
     >
       <View style={styles.backdrop} pointerEvents="none" />
 
+      {/* Backdrop: tapping anywhere outside the tooltip advances the tour.
+          pointerEvents="auto" intentionally blocks underlying UI touches while
+          the tour is active so the user can't accidentally navigate away. */}
       <Pressable
-        style={StyleSheet.absoluteFillObject}
-        onPress={() => {}}
+        style={StyleSheet.absoluteFill}
+        onPress={next}
         pointerEvents="auto"
       />
 
@@ -262,11 +275,11 @@ export default function TourOverlay() {
 
 const styles = StyleSheet.create({
   root: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 9998,
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(10, 14, 28, 0.72)",
   },
   tooltipWrap: {
