@@ -19,6 +19,8 @@ type Props = {
   onPrimaryAction: () => void;
   secondaryActionLabel?: string;
   onSecondaryAction?: () => void;
+  /** Ionicons name for the secondary action (defaults to refresh). */
+  secondaryActionIcon?: keyof typeof Ionicons.glyphMap;
   showConfetti?: boolean;
   children?: ReactNode;
 };
@@ -71,6 +73,7 @@ export default function ReportingOutcomeState({
   onPrimaryAction,
   secondaryActionLabel,
   onSecondaryAction,
+  secondaryActionIcon = "refresh-outline",
   showConfetti = false,
   children,
 }: Props) {
@@ -110,10 +113,10 @@ export default function ReportingOutcomeState({
 
             {children ? <View style={styles.childrenWrap}>{children}</View> : null}
 
-            {!children && !isSuccess && secondaryActionLabel && onSecondaryAction ? (
+            {!children && secondaryActionLabel && onSecondaryAction ? (
               <Pressable onPress={onSecondaryAction} style={styles.secondaryBtn}>
                 <Ionicons
-                  name="refresh-outline"
+                  name={secondaryActionIcon}
                   size={20}
                   color={Theme.colors.primary}
                 />

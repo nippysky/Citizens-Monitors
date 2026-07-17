@@ -37,6 +37,8 @@ import {
 } from "@/lib/api/reporting.api";
 import {
   abandonResultDraft,
+  buildCommencementContext,
+  buildInitialIncidentDraft,
   buildInitialResultDraft,
   clearResultDraft,
   collectResultDraftMediaUris,
@@ -44,6 +46,7 @@ import {
   DEV_COMMENCEMENT_CONTEXT,
   ElectionResultDraft,
   getResultDraft,
+  saveIncidentDraft,
   saveResultDraft,
   validateElectionResult,
 } from "@/lib/reporting";
@@ -510,7 +513,7 @@ export default function SubmitElectionReportScreen() {
   const [loading, setLoading] = useState(false);
   const [viewState, setViewState] = useState<ViewState>("form");
   const [invalidReason, setInvalidReason] = useState("");
-  const [feedback] = useState<FeedbackState>(initialFeedbackState);
+  const [feedback, setFeedback] = useState<FeedbackState>(initialFeedbackState);
 
   const partyPickerRef = useRef<BottomSheetModal>(null);
   const [partyPickerQuery, setPartyPickerQuery] = useState("");
@@ -935,6 +938,41 @@ export default function SubmitElectionReportScreen() {
     const progress = collationItem.progressPercent ?? 0;
     const parties = collationItem.parties ?? [];
 
+    const feedbackComplete =
+      feedback.rating !== "" &&
+      feedback.intimidationToday !== "" &&
+      feedback.voteBuyingToday !== "";
+
+    const renderPills = <T extends string>(
+      options: { value: T; label: string }[],
+      selected: T | "",
+      onSelect: (value: T) => void
+    ) => (
+      <View style={styles.feedbackPillRow}>
+        {options.map((option) => {
+          const active = selected === option.value;
+          return (
+            <Pressable
+              key={option.value}
+              onPress={() => onSelect(option.value)}
+              style={[styles.feedbackPill, active && styles.feedbackPillActive]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+            >
+              <AppText
+                style={[
+                  styles.feedbackPillText,
+                  active && styles.feedbackPillTextActive,
+                ]}
+              >
+                {option.label}
+              </AppText>
+            </Pressable>
+          );
+        })}
+      </View>
+    );
+
     return (
       <AppGradientScreen>
         <ScrollView
@@ -1031,6 +1069,87 @@ export default function SubmitElectionReportScreen() {
             </View>
           ) : null}
 
+          {/* Your polling unit sentiment — required before submitting */}
+          <View style={styles.feedbackCard}>
+            <View style={styles.feedbackHeaderRow}>
+              <View style={styles.feedbackIconCircle}>
+                <Ionicons
+                  name="megaphone-outline"
+                  size={18}
+                  color={Theme.colors.primary}
+                />
+              </View>
+              <View style={styles.feedbackHeaderTextWrap}>
+                <AppText style={styles.feedbackTitle}>
+                  Your Polling Unit Verdict
+                </AppText>
+                <AppText style={styles.feedbackSubtitle}>
+                  Answer these 3 quick questions to complete your report.
+                </AppText>
+              </View>
+            </View>
+
+            <View style={styles.feedbackQuestionBlock}>
+              <AppText style={styles.feedbackQuestion}>
+                How was today&apos;s voting process?
+              </AppText>
+              {renderPills(
+                [
+                  { value: "good" as const, label: "Good" },
+                  { value: "manageable" as const, label: "Manageable" },
+                  { value: "poor" as const, label: "Poor" },
+                ],
+                feedback.rating,
+                (rating) => setFeedback((prev) => ({ ...prev, rating }))
+              )}
+            </View>
+
+            <View style={styles.feedbackQuestionBlock}>
+              <AppText style={styles.feedbackQuestion}>
+                Did you witness voter intimidation today?
+              </AppText>
+              {renderPills(
+                [
+                  { value: "yes" as const, label: "Yes" },
+                  { value: "no" as const, label: "No" },
+                ],
+                feedback.intimidationToday,
+                (intimidationToday) =>
+                  setFeedback((prev) => ({ ...prev, intimidationToday }))
+              )}
+            </View>
+
+            <View style={styles.feedbackQuestionBlock}>
+              <AppText style={styles.feedbackQuestion}>
+                Did you witness vote buying today?
+              </AppText>
+              {renderPills(
+                [
+                  { value: "yes" as const, label: "Yes" },
+                  { value: "no" as const, label: "No" },
+                ],
+                feedback.voteBuyingToday,
+                (voteBuyingToday) =>
+                  setFeedback((prev) => ({ ...prev, voteBuyingToday }))
+              )}
+            </View>
+
+            {feedback.intimidationToday === "yes" ||
+            feedback.voteBuyingToday === "yes" ? (
+              <View style={styles.feedbackNudge}>
+                <Ionicons
+                  name="information-circle-outline"
+                  size={16}
+                  color="#C2410C"
+                />
+                <AppText style={styles.feedbackNudgeText}>
+                  After submitting, you can back this up with an incident
+                  report — photos and video count as evidence.
+                </AppText>
+              </View>
+            ) : null}
+          </View>
+
           <AppText style={styles.sentimentNote}>
             Your report will be added to these figures and help make this election more transparent.
           </AppText>
@@ -1039,9 +1158,15 @@ export default function SubmitElectionReportScreen() {
             title={loading ? "Submitting..." : "Confirm & Submit Report"}
             onPress={() => void doSubmit()}
             loading={loading}
-            disabled={loading}
+            disabled={loading || !feedbackComplete}
             style={styles.submitBtn}
           />
+
+          {!feedbackComplete ? (
+            <AppText style={styles.feedbackGateHint}>
+              Answer the 3 verdict questions above to submit.
+            </AppText>
+          ) : null}
 
           <Pressable
             onPress={() => setViewState("form")}
@@ -1057,6 +1182,44 @@ export default function SubmitElectionReportScreen() {
   }
 
   if (viewState === "success") {
+    const flaggedIssue =
+      feedback.intimidationToday === "yes" || feedback.voteBuyingToday === "yes";
+
+    // The verdict flagged intimidation / vote buying — nudge the user to back
+    // it up with a proper incident report (type pre-selected when possible).
+    const handleReportIncidentFromSuccess = async () => {
+      if (!draft) return;
+
+      const ctx = buildCommencementContext({
+        electionId: draft.electionId,
+        electionTitle: draft.electionTitle,
+        pollingUnitName: draft.pollingUnitName,
+        pollingUnitCode: draft.pollingUnitCode,
+        ward: draft.ward,
+        lga: draft.lga,
+        state: draft.state,
+      });
+
+      await saveIncidentDraft({
+        ...buildInitialIncidentDraft(ctx),
+        incidentType:
+          feedback.intimidationToday === "yes" ? "Voter Intimidation" : "",
+      });
+
+      router.replace({
+        pathname: Paths.reportIncident as never,
+        params: {
+          electionId: ctx.electionId,
+          electionTitle: ctx.electionTitle,
+          pollingUnitName: ctx.pollingUnitName,
+          pollingUnitCode: ctx.pollingUnitCode,
+          ward: ctx.ward,
+          lga: ctx.lga,
+          state: ctx.state,
+        },
+      });
+    };
+
     return (
       <ReportingOutcomeState
         variant="success"
@@ -1065,6 +1228,18 @@ export default function SubmitElectionReportScreen() {
         subtitle="Your participation today makes a difference. Thank You. Nigerians are seeing it now."
         primaryActionLabel="Go To Collation"
         onPrimaryAction={() => router.replace(Paths.appCollation)}
+        secondaryActionLabel={
+          flaggedIssue ? "Report What You Witnessed" : undefined
+        }
+        secondaryActionIcon="warning-outline"
+        onSecondaryAction={
+          flaggedIssue ? () => void handleReportIncidentFromSuccess() : undefined
+        }
+        infoCardText={
+          flaggedIssue
+            ? "You flagged intimidation or vote buying — filing an incident report with photos or video makes your account count as evidence."
+            : undefined
+        }
       />
     );
   }
@@ -1199,20 +1374,29 @@ export default function SubmitElectionReportScreen() {
         </View>
 
         <View style={styles.adminGrid}>
+          {/* Clean 2×2 grid — no dangling half-rows */}
           <View style={styles.adminGridRow}>
-            <View style={styles.halfField}>
-              <CompactField
-                label="Accredited Voters"
-                value={draft.accreditedVoters}
-                onChangeText={(value) =>
-                  void updateDraft({
-                    ...draft,
-                    accreditedVoters: value.replace(/[^\d]/g, ""),
-                  })
-                }
-              />
-            </View>
-            <View style={styles.halfFieldPlaceholder} />
+            <CompactField
+              label="Accredited Voters"
+              value={draft.accreditedVoters}
+              onChangeText={(value) =>
+                void updateDraft({
+                  ...draft,
+                  accreditedVoters: value.replace(/[^\d]/g, ""),
+                })
+              }
+            />
+
+            <CompactField
+              label="Used Ballot Papers"
+              value={draft.usedBallotPapers}
+              onChangeText={(value) =>
+                void updateDraft({
+                  ...draft,
+                  usedBallotPapers: value.replace(/[^\d]/g, ""),
+                })
+              }
+            />
           </View>
 
           <View style={styles.adminGridRow}>
@@ -1237,23 +1421,6 @@ export default function SubmitElectionReportScreen() {
                 })
               }
             />
-          </View>
-
-          <View style={styles.adminGridRow}>
-            <View style={styles.halfField}>
-              <CompactField
-                label="Used Ballot Papers"
-                value={draft.usedBallotPapers}
-                onChangeText={(value) =>
-                  void updateDraft({
-                    ...draft,
-                    usedBallotPapers: value.replace(/[^\d]/g, ""),
-                  })
-                }
-              />
-            </View>
-
-            <View style={styles.halfFieldPlaceholder} />
           </View>
         </View>
 
@@ -1664,12 +1831,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 17,
   },
-  halfField: {
-    flex: 1,
-  },
-  halfFieldPlaceholder: {
-    flex: 1,
-  },
   compactFieldWrap: {
     flex: 1,
     gap: 7,
@@ -1906,6 +2067,110 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     color: Theme.colors.textMuted,
     textAlign: "center",
+  },
+  feedbackCard: {
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1.2,
+    borderColor: "rgba(5,163,156,0.28)",
+    padding: 16,
+    gap: 16,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  feedbackHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  feedbackIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(5,163,156,0.10)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  feedbackHeaderTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  feedbackTitle: {
+    fontSize: 16,
+    lineHeight: 21,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+  feedbackSubtitle: {
+    fontSize: 12.5,
+    lineHeight: 17,
+    color: Theme.colors.textMuted,
+  },
+  feedbackQuestionBlock: {
+    gap: 9,
+  },
+  feedbackQuestion: {
+    fontSize: 14,
+    lineHeight: 19,
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.body.medium,
+  },
+  feedbackPillRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  feedbackPill: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 12,
+    borderWidth: 1.2,
+    borderColor: "#D8DDE5",
+    backgroundColor: "#F8FAFB",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
+  feedbackPillActive: {
+    borderColor: Theme.colors.primary,
+    backgroundColor: "rgba(5,163,156,0.10)",
+  },
+  feedbackPillText: {
+    fontSize: 13.5,
+    lineHeight: 18,
+    color: Theme.colors.textMuted,
+    fontFamily: Theme.fonts.body.medium,
+  },
+  feedbackPillTextActive: {
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+  feedbackGateHint: {
+    fontSize: 12.5,
+    lineHeight: 17,
+    color: "#C2410C",
+    textAlign: "center",
+    marginTop: -6,
+  },
+  feedbackNudge: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: "rgba(194,65,12,0.07)",
+    borderWidth: 1,
+    borderColor: "rgba(194,65,12,0.18)",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  feedbackNudgeText: {
+    flex: 1,
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: "#9A3412",
+    fontFamily: Theme.fonts.body.medium,
   },
   sentimentBackBtn: {
     flexDirection: "row",
