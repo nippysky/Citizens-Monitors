@@ -34,7 +34,11 @@ import {
 } from "@/hooks/api/useCollationQueries";
 import { getElectionCollation } from "@/lib/api/collation.api";
 import { useActiveElectionsQuery } from "@/hooks/api/useElectionQueries";
-import { buildCommencementContext } from "@/lib/reporting";
+import { useMyProfileQuery } from "@/hooks/api/useMyProfileQuery";
+import {
+  asProfileLike,
+  buildProfileCommencementContext,
+} from "@/lib/profileCommencement";
 import NoElection from "@/svgs/app/NoElection";
 import { Theme } from "@/theme";
 
@@ -132,6 +136,9 @@ export default function CollationScreen() {
     () => resolveIncomingElectionId(params),
     [params]
   );
+
+  const { profile } = useMyProfileQuery();
+  const profileLike = asProfileLike(profile);
 
   const [activeTab, setActiveTab] = useState<CollationTabKey>(() =>
     normalizeTab(params.tab)
@@ -245,16 +252,16 @@ export default function CollationScreen() {
   const noticeContextData = useMemo(() => {
     if (!activeCollation) return null;
 
-    return buildCommencementContext({
+    // Polling unit ALWAYS comes from the user's profile (every user has
+    // exactly one polling unit regardless of election) — same shared builder
+    // used by the LiveNotice banner and the Elections FAB, so the
+    // commencement sheet shows identical details from every entry point.
+    return buildProfileCommencementContext({
       electionId: activeCollation.id,
       electionTitle: activeCollation.fullTitle,
-      pollingUnitName: activeCollation.location,
-      pollingUnitCode: activeCollation.location,
-      ward: activeCollation.location,
-      lga: activeCollation.location,
-      state: activeCollation.location,
+      profile: profileLike,
     });
-  }, [activeCollation]);
+  }, [activeCollation, profileLike]);
 
   useEffect(() => {
     if (

@@ -6,6 +6,9 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "citizenmonitors",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,

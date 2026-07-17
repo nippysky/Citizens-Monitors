@@ -36,8 +36,10 @@ import {
   submitElectionResult,
 } from "@/lib/api/reporting.api";
 import {
+  abandonResultDraft,
   buildInitialResultDraft,
   clearResultDraft,
+  collectResultDraftMediaUris,
   CommencementContext,
   DEV_COMMENCEMENT_CONTEXT,
   ElectionResultDraft,
@@ -49,7 +51,7 @@ import {
   ensureCameraPermission,
   ensureMediaLibraryPermission,
 } from "@/lib/permissions";
-import { stageMediaFile } from "@/lib/offlineMedia";
+import { deleteStagedMediaFiles, stageMediaFile } from "@/lib/offlineMedia";
 import {
   formatPartyPickerLabel,
   getPartyInfo,
@@ -519,6 +521,17 @@ export default function SubmitElectionReportScreen() {
   const collationQuery = useElectionCollationQuery(draft?.electionId ?? null);
   const collationItem = buildCollationItem(collationQuery.data ?? undefined);
 
+  // Deliberate exit wipes the draft + its staged media so nothing stale
+  // greets the user on re-entry and evidence files don't pile up in storage.
+  // Interruptions (app killed, phone call) never unmount this screen, so
+  // field resume still works. After a successful submit / offline enqueue the
+  // stored draft is already cleared, making this a safe no-op.
+  useEffect(() => {
+    return () => {
+      void abandonResultDraft();
+    };
+  }, []);
+
   useEffect(() => {
     let mounted = true;
 
@@ -889,12 +902,17 @@ export default function SubmitElectionReportScreen() {
       );
 
       await clearResultDraft();
+      // Upload done — staged evidence files are no longer needed.
+      deleteStagedMediaFiles(collectResultDraftMediaUris(draft));
       invalidateReportingData(draft.electionId);
       setViewState("success");
 
       showToast({ type: "success", message: "Report submitted successfully." });
     } catch (error) {
       enqueue({ type: "submit-election-report", payload: queuePayload });
+      // Clear the stored draft (like the offline path) but KEEP the staged
+      // files — the queued upload still needs them.
+      await clearResultDraft();
       setViewState("success");
 
       showToast({

@@ -26,8 +26,10 @@ import {
   mapDraftToIncidentReportPayload,
   submitIncidentReport,
 } from "@/lib/api/reporting.api";
+import { deleteStagedMediaFiles } from "@/lib/offlineMedia";
 import {
   clearIncidentDraft,
+  collectIncidentDraftMediaUris,
   getIncidentDraft,
   IncidentDraft,
   saveIncidentDraft,
@@ -69,6 +71,7 @@ export default function ReportIncidentLiveReviewScreen() {
   const { showToast } = useAppToast();
 
   const [draft, setDraft] = useState<IncidentDraft | null>(null);
+  const [draftLoaded, setDraftLoaded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [viewState, setViewState] = useState<ViewState>("form");
   const [previewPlaying, setPreviewPlaying] = useState(false);
@@ -76,9 +79,15 @@ export default function ReportIncidentLiveReviewScreen() {
   const isOffline = !isConnected || isInternetReachable === false;
 
   useEffect(() => {
-    void getIncidentDraft().then((data) => {
-      setDraft(data);
-    });
+    void getIncidentDraft()
+      .then((data) => {
+        setDraft(data);
+      })
+      .finally(() => {
+        // Always resolve the loading state — a missing draft must show the
+        // recovery screen below, never an infinite "Preparing report...".
+        setDraftLoaded(true);
+      });
   }, []);
 
   const liveVideoUri = draft?.liveVideoUri ?? null;
@@ -197,6 +206,8 @@ export default function ReportIncidentLiveReviewScreen() {
       await submitIncidentReport(mapDraftToIncidentReportPayload(draft));
 
       await clearIncidentDraft();
+      // Upload done — staged evidence files are no longer needed.
+      deleteStagedMediaFiles(collectIncidentDraftMediaUris(draft));
       invalidateReportingData(draft.electionId);
 
       showToast({
@@ -210,6 +221,10 @@ export default function ReportIncidentLiveReviewScreen() {
         type: "submit-incident-report",
         payload: queuePayload,
       });
+
+      // Clear the stored draft (like the offline path) but KEEP the staged
+      // files — the queued upload still needs them.
+      await clearIncidentDraft();
 
       showToast({
         type: "success",
@@ -242,10 +257,37 @@ export default function ReportIncidentLiveReviewScreen() {
   }
 
   if (!draft) {
+    // Still reading from storage → brief loading state.
+    if (!draftLoaded) {
+      return (
+        <AppGradientScreen>
+          <View style={styles.loadingWrap}>
+            <AppText style={styles.loadingText}>Preparing report...</AppText>
+          </View>
+        </AppGradientScreen>
+      );
+    }
+
+    // Loaded but no draft found — recover instead of hanging forever.
     return (
       <AppGradientScreen>
         <View style={styles.loadingWrap}>
-          <AppText style={styles.loadingText}>Preparing report...</AppText>
+          <Ionicons
+            name="document-outline"
+            size={40}
+            color={Theme.colors.textMuted}
+          />
+          <AppText style={styles.loadingText}>
+            We couldn't find your report draft.
+          </AppText>
+          <AppText style={styles.missingDraftSubtext}>
+            Please start the incident report again — your polling unit details
+            will be filled in automatically.
+          </AppText>
+          <AppButton
+            title="Start Incident Report"
+            onPress={() => router.replace(Paths.reportIncident as never)}
+          />
         </View>
       </AppGradientScreen>
     );
@@ -564,5 +606,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     color: Theme.colors.textMuted,
+  },
+  missingDraftSubtext: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: Theme.colors.textMuted,
+    textAlign: "center",
+    maxWidth: 300,
+    marginTop: 4,
+    marginBottom: 16,
   },
 });

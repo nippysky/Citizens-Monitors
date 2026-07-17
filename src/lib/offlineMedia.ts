@@ -113,6 +113,27 @@ export async function stageMediaFile(params: {
   };
 }
 
+/**
+ * Best-effort deletion of staged media files. Only touches files inside our
+ * own staging directory — never gallery/camera originals. Used when a report
+ * draft is abandoned (so evidence files don't bloat storage) and after a
+ * successful online submit.
+ */
+export function deleteStagedMediaFiles(
+  uris: (string | null | undefined)[]
+): void {
+  for (const uri of uris) {
+    if (!uri) continue;
+    if (!uri.startsWith(REPORTING_MEDIA_DIR.uri)) continue;
+
+    try {
+      new File(uri).delete();
+    } catch {
+      // Best effort — a missing file is fine.
+    }
+  }
+}
+
 export async function stageManyMediaFiles(
   items: {
     sourceUri: string;

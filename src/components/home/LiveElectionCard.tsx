@@ -7,7 +7,17 @@ import { Pressable, StyleSheet, View } from "react-native";
 import CommencementBottomSheet from "@/components/reporting/CommencementBottomSheet";
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
-import { buildCommencementContext } from "@/lib/reporting";
+import { useMyProfileQuery } from "@/hooks/api/useMyProfileQuery";
+import {
+  asProfileLike,
+  buildProfileCommencementContext,
+} from "@/lib/profileCommencement";
+import {
+  buildInitialIncidentDraft,
+  buildInitialResultDraft,
+  saveIncidentDraft,
+  saveResultDraft,
+} from "@/lib/reporting";
 import PresidentialElection from "@/svgs/app/PresidentialElection";
 import SenatorElection from "@/svgs/app/SenatorElection";
 import HouseOfRepsElection from "@/svgs/app/HouseOfRepsElection";
@@ -64,15 +74,6 @@ function getProgress(item: ElectionCardItem): number {
   );
 }
 
-function getSpecificLocation(value?: string): string {
-  const clean = value?.trim();
-
-  if (!clean) return "";
-  if (clean.toLowerCase() === "nationwide") return "";
-
-  return clean;
-}
-
 export default function LiveElectionCard({ item, width, viewerRole }: Props) {
   const ElectionIcon = getElectionIcon(item.electionType);
   const activeElectionId = item.activeElectionId ?? item.id;
@@ -80,18 +81,15 @@ export default function LiveElectionCard({ item, width, viewerRole }: Props) {
   const progress = getProgress(item);
   const commencementRef = useRef<BottomSheetModal>(null);
 
-  const electionLocation = item.electionLocation?.trim() || item.location;
-  const state = item.state?.trim() || getSpecificLocation(electionLocation);
-
-  const commencementContext = buildCommencementContext({
+  // Polling unit ALWAYS comes from the user's profile (every user has exactly
+  // one polling unit regardless of election) — same shared builder used by
+  // the LiveNotice banner, the Elections FAB and the Collation tab, so the
+  // commencement sheet shows identical details from every entry point.
+  const { profile } = useMyProfileQuery();
+  const commencementContext = buildProfileCommencementContext({
     electionId: activeElectionId,
     electionTitle: item.title,
-    pollingUnitName: item.pollingUnitName ?? "",
-    pollingUnitCode: item.pollingUnitCode ?? "",
-    ward: item.ward ?? "",
-    lga: item.lga ?? "",
-    state,
-    uploadLocation: null,
+    profile: asProfileLike(profile),
   });
 
   const handleOpenCollation = () => {
@@ -115,8 +113,14 @@ export default function LiveElectionCard({ item, width, viewerRole }: Props) {
     commencementRef.current?.present();
   };
 
-  const handleProceedResult = (time: string) => {
+  const handleProceedResult = async (time: string) => {
     const votingStartTime = time || item.votingStartTime?.trim() || item.startDate || "";
+    const electionLocation = item.electionLocation?.trim() || item.location;
+
+    // Persist the initial draft BEFORE navigating (same as every other entry
+    // point) so the report screens always hydrate correctly.
+    const draft = buildInitialResultDraft(commencementContext, votingStartTime);
+    await saveResultDraft(draft);
 
     router.push({
       pathname: Paths.submitElectionReport as never,
@@ -129,21 +133,33 @@ export default function LiveElectionCard({ item, width, viewerRole }: Props) {
         electionStartDate: item.startDate ?? "",
         electionEndDate: item.endDate ?? "",
         votingStartTime,
-        pollingUnitName: item.pollingUnitName ?? "",
-        pollingUnitCode: item.pollingUnitCode ?? "",
-        ward: item.ward ?? "",
-        lga: item.lga ?? "",
-        state,
+        pollingUnitName: commencementContext.pollingUnitName,
+        pollingUnitCode: commencementContext.pollingUnitCode,
+        ward: commencementContext.ward,
+        lga: commencementContext.lga,
+        state: commencementContext.state,
       },
     });
   };
 
-  const handleProceedIncident = () => {
+  const handleProceedIncident = async () => {
+    // Persist the initial incident draft BEFORE navigating — jumping straight
+    // to the camera with no stored draft is what left the review screen stuck
+    // on "Preparing report...". Route to the incident FORM first (same as the
+    // LiveNotice and Elections-FAB flows) so the user picks an incident type.
+    const draft = buildInitialIncidentDraft(commencementContext);
+    await saveIncidentDraft(draft);
+
     router.push({
-      pathname: Paths.reportIncidentLive as never,
+      pathname: Paths.reportIncident as never,
       params: {
-        electionId: activeElectionId,
-        electionTitle: item.title,
+        electionId: commencementContext.electionId,
+        electionTitle: commencementContext.electionTitle,
+        pollingUnitName: commencementContext.pollingUnitName,
+        pollingUnitCode: commencementContext.pollingUnitCode,
+        ward: commencementContext.ward,
+        lga: commencementContext.lga,
+        state: commencementContext.state,
       },
     });
   };

@@ -28,8 +28,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
+import { useAppToast } from "@/hooks/useAppToast";
 import { stageMediaFile } from "@/lib/offlineMedia";
 import {
+  buildCommencementContext,
+  buildInitialIncidentDraft,
   getIncidentDraft,
   saveIncidentDraft,
   saveLiveVideoUri,
@@ -128,6 +131,8 @@ export default function ReportIncidentLiveScreen() {
   const [elapsedSec, setElapsedSec] = useState(0);
   const [facing, setFacing] = useState<CameraType>("back");
 
+  const { showToast } = useAppToast();
+
   const isMountedRef = useRef(true);
   const discardRequestedRef = useRef(false);
   const recordingRef = useRef(false);
@@ -221,20 +226,31 @@ export default function ReportIncidentLiveScreen() {
 
       await saveLiveVideoUri(staged.localUri);
 
-      const draft = await getIncidentDraft();
-      if (draft) {
-        await saveIncidentDraft({
-          ...draft,
-          liveVideoUri: staged.localUri,
-        });
-      }
+      // Self-heal like submit-election-report: NEVER navigate to review
+      // without a persisted draft — a missing draft is what left the review
+      // screen hanging on "Preparing report..." forever. If storage came back
+      // empty for any reason, rebuild a baseline draft so the recorded video
+      // is never lost.
+      const stored = await getIncidentDraft();
+      const base = stored ?? buildInitialIncidentDraft(buildCommencementContext());
+
+      await saveIncidentDraft({
+        ...base,
+        liveVideoUri: staged.localUri,
+      });
 
       router.replace(Paths.reportIncidentLiveReview);
+    } catch {
+      showToast({
+        type: "error",
+        message: "Could not process the recording. Please try again.",
+      });
     } finally {
       if (isMountedRef.current) {
         setSaving(false);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const startRecording = useCallback(async () => {
@@ -310,6 +326,10 @@ export default function ReportIncidentLiveScreen() {
 
   const toggleFacing = useCallback(() => {
     if (recordingRef.current || savingRef.current) return;
+    // Force a full camera re-init (see key={facing} on CameraView) — simply
+    // flipping the `facing` prop is unreliable on some Android devices while
+    // mode="video", leaving the button seemingly dead.
+    setCameraReady(false);
     setFacing((current) => (current === "back" ? "front" : "back"));
   }, []);
 
@@ -363,6 +383,9 @@ export default function ReportIncidentLiveScreen() {
   return (
     <View style={styles.container}>
       <CameraView
+        // Remount on flip — guarantees the facing change takes effect on
+        // every device (prop-only changes are flaky on some Android models).
+        key={facing}
         ref={cameraRef}
         style={styles.camera}
         facing={facing}

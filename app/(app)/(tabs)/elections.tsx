@@ -27,7 +27,16 @@ import FloatingActionButton from "@/components/ui/FloatingActionButton";
 import { Paths } from "@/constants/paths";
 import { useElections } from "@/context/ElectionsContext";
 import { useMyProfileQuery } from "@/hooks/api/useMyProfileQuery";
-import { buildCommencementContext } from "@/lib/reporting";
+import {
+  buildInitialIncidentDraft,
+  buildInitialResultDraft,
+  saveIncidentDraft,
+  saveResultDraft,
+} from "@/lib/reporting";
+import {
+  asProfileLike,
+  buildProfileCommencementContext,
+} from "@/lib/profileCommencement";
 import {
   coerceStatusForApi,
   electionStatusPills,
@@ -149,6 +158,7 @@ export default function ElectionsScreen() {
   const { profile } = useMyProfileQuery();
   const canSubmit =
     profile?.role === "observer" || profile?.role === "volunteer";
+  const profileLike = asProfileLike(profile);
 
   const electionsQuery = useActiveElectionsQuery(
     coerceStatusForApi(filters.status)
@@ -176,20 +186,30 @@ export default function ElectionsScreen() {
     );
   }, [liveElectionsQuery.data]);
 
+  // Polling unit ALWAYS comes from the user's profile — same shared builder
+  // the LiveNotice banner uses, so the commencement sheet shows identical
+  // location details from every entry point.
   const commencementContext = useMemo(
     () =>
       firstLiveElection
-        ? buildCommencementContext({
-            electionId: firstLiveElection.activeElectionId || firstLiveElection.id,
+        ? buildProfileCommencementContext({
+            electionId:
+              firstLiveElection.activeElectionId || firstLiveElection.id,
             electionTitle: firstLiveElection.title,
+            profile: profileLike,
           })
         : null,
-    [firstLiveElection]
+    [firstLiveElection, profileLike]
   );
 
-  const handleProceedResult = (time: string) => {
-    if (!firstLiveElection) return;
+  const handleProceedResult = async (time: string) => {
+    if (!firstLiveElection || !commencementContext) return;
     const electionId = firstLiveElection.activeElectionId || firstLiveElection.id;
+
+    // Persist the initial draft BEFORE navigating — the reporting screens
+    // hydrate from this draft (same as the LiveNotice flow).
+    const draft = buildInitialResultDraft(commencementContext, time);
+    await saveResultDraft(draft);
 
     router.push({
       pathname: Paths.submitElectionReport as never,
@@ -198,20 +218,39 @@ export default function ElectionsScreen() {
         activeElectionId: electionId,
         electionTitle: firstLiveElection.title,
         votingStartTime: time,
+        pollingUnitName: commencementContext.pollingUnitName,
+        pollingUnitCode: commencementContext.pollingUnitCode,
+        ward: commencementContext.ward,
+        lga: commencementContext.lga,
+        state: commencementContext.state,
         location: firstLiveElection.location,
       },
     });
   };
 
-  const handleProceedIncident = () => {
-    if (!firstLiveElection) return;
-    const electionId = firstLiveElection.activeElectionId || firstLiveElection.id;
+  const handleProceedIncident = async () => {
+    if (!firstLiveElection || !commencementContext) return;
 
+    // The live recorder and its review screen read the persisted incident
+    // draft. Without saving it first, the review screen finds no draft and
+    // hangs on "Preparing report..." forever.
+    const draft = buildInitialIncidentDraft(commencementContext);
+    await saveIncidentDraft(draft);
+
+    // Go to the incident FORM (same as the LiveNotice flow) — the user picks
+    // the incident type there, then "Record Live" opens the camera. Jumping
+    // straight to the camera produced drafts without an incident type that
+    // could never pass review validation.
     router.push({
-      pathname: Paths.reportIncidentLive as never,
+      pathname: Paths.reportIncident as never,
       params: {
-        electionId,
-        electionTitle: firstLiveElection.title,
+        electionId: commencementContext.electionId,
+        electionTitle: commencementContext.electionTitle,
+        pollingUnitName: commencementContext.pollingUnitName,
+        pollingUnitCode: commencementContext.pollingUnitCode,
+        ward: commencementContext.ward,
+        lga: commencementContext.lga,
+        state: commencementContext.state,
       },
     });
   };

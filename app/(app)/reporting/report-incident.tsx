@@ -33,6 +33,7 @@ import {
   submitIncidentReport,
 } from "@/lib/api/reporting.api";
 import {
+  abandonIncidentDraft,
   clearIncidentDraft,
   getIncidentDraft,
   INCIDENT_OPTIONS,
@@ -383,6 +384,17 @@ export default function ReportIncidentScreen() {
         setDraft(data);
       }
     });
+  }, []);
+
+  // Deliberate exit wipes the draft + its staged media (fresh screen next
+  // time, no storage bloat). Pushing forward to the live recorder / review
+  // keeps this screen mounted, so mid-flow data is untouched; after a
+  // successful submit or offline enqueue the stored draft is already cleared,
+  // making this a safe no-op.
+  useEffect(() => {
+    return () => {
+      void abandonIncidentDraft();
+    };
   }, []);
 
   const updateDraft = async (next: IncidentDraft) => {

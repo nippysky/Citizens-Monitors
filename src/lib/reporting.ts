@@ -231,6 +231,63 @@ export async function clearLiveVideoUri() {
   await AsyncStorage.removeItem(LIVE_VIDEO_KEY);
 }
 
+/* ── Draft abandonment ────────────────────────────────────────────────────────
+ * Drafts are kept while a flow is merely INTERRUPTED (phone call, app killed,
+ * camera detour) — losing half-entered election evidence in the field is
+ * expensive. But when the user deliberately LEAVES a reporting screen, the
+ * draft AND its staged media files are wiped so nothing stale greets them on
+ * re-entry and evidence files don't bloat storage.
+ *
+ * Both helpers are storage-driven and idempotent: after a successful submit
+ * or offline enqueue the stored draft is already cleared, so calling these on
+ * unmount is a safe no-op (and queued uploads keep their staged files).
+ */
+
+export function collectResultDraftMediaUris(
+  draft: ElectionResultDraft
+): (string | null)[] {
+  return [draft.signedResultImageUri, draft.resultAnnouncementVideoUri];
+}
+
+export function collectIncidentDraftMediaUris(
+  draft: IncidentDraft
+): (string | null)[] {
+  return [
+    ...draft.imageEvidenceUris,
+    ...draft.videoEvidenceUris,
+    draft.liveVideoUri,
+  ];
+}
+
+export async function abandonResultDraft(): Promise<void> {
+  try {
+    const draft = await getResultDraft();
+    if (!draft) return;
+
+    const { deleteStagedMediaFiles } = await import("@/lib/offlineMedia");
+    deleteStagedMediaFiles(collectResultDraftMediaUris(draft));
+
+    await clearResultDraft();
+  } catch {
+    // Cleanup is best-effort — never crash a navigation over it.
+  }
+}
+
+export async function abandonIncidentDraft(): Promise<void> {
+  try {
+    const draft = await getIncidentDraft();
+    if (!draft) return;
+
+    const { deleteStagedMediaFiles } = await import("@/lib/offlineMedia");
+    deleteStagedMediaFiles(collectIncidentDraftMediaUris(draft));
+
+    await clearIncidentDraft();
+    await clearLiveVideoUri();
+  } catch {
+    // Cleanup is best-effort — never crash a navigation over it.
+  }
+}
+
 export function parseNumeric(value: string | number): number {
   if (typeof value === "number") return value;
 

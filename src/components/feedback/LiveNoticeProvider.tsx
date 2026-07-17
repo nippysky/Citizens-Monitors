@@ -18,6 +18,11 @@ import LocationPermissionModal from "@/components/reporting/LocationPermissionMo
 import { Paths } from "@/constants/paths";
 import { useMyProfileQuery } from "@/hooks/api/useMyProfileQuery";
 import {
+  asProfileLike,
+  buildProfileCommencementContext,
+  type ProfileLike,
+} from "@/lib/profileCommencement";
+import {
   buildCommencementContext,
   buildInitialIncidentDraft,
   buildInitialResultDraft,
@@ -54,24 +59,7 @@ type LiveElectionLike = {
   status?: string;
 };
 
-type ProfileLike = {
-  role?: string;
-  userType?: string;
-  state?: string | null;
-  lga?: string | null;
-  ward?: string | null;
-  pollingUnit?: string | null;
-  pollingUnitName?: string | null;
-  pollingUnitCode?: string | null;
-  user?: ProfileLike;
-};
-
 const LiveNoticeContext = createContext<LiveNoticeContextValue | null>(null);
-
-function asProfileLike(value: unknown): ProfileLike | null {
-  if (!value || typeof value !== "object") return null;
-  return value as ProfileLike;
-}
 
 function normalizeRole(profile: ProfileLike | null): string {
   const source =
@@ -90,22 +78,6 @@ function canReceiveReportingNotice(profile: ProfileLike | null): boolean {
 
 function clean(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function pickProfileText(
-  profile: ProfileLike | null,
-  keys: (keyof ProfileLike)[],
-  fallback: string,
-): string {
-  for (const key of keys) {
-    const direct = clean(profile?.[key]);
-    if (direct) return direct;
-
-    const nested = clean(profile?.user?.[key]);
-    if (nested) return nested;
-  }
-
-  return fallback;
 }
 
 function getElectionTitle(election: LiveElectionLike): string {
@@ -128,26 +100,12 @@ function buildContextFromLiveElection(params: {
   const electionId = clean(params.election.id);
   if (!electionId) return null;
 
-  const profile = params.profile;
-  const pollingUnitName = pickProfileText(
-    profile,
-    ["pollingUnitName", "pollingUnit"],
-    "Your Polling Unit",
-  );
-  const pollingUnitCode = pickProfileText(
-    profile,
-    ["pollingUnitCode", "pollingUnit"],
-    pollingUnitName,
-  );
-
-  return buildCommencementContext({
+  // Shared builder — the polling unit always comes from the user's profile
+  // so it is identical across every reporting entry point.
+  return buildProfileCommencementContext({
     electionId,
     electionTitle: getElectionTitle(params.election),
-    pollingUnitName,
-    pollingUnitCode,
-    ward: pickProfileText(profile, ["ward"], "Your Ward"),
-    lga: pickProfileText(profile, ["lga"], "Your LGA"),
-    state: pickProfileText(profile, ["state"], "Your State"),
+    profile: params.profile,
   });
 }
 
