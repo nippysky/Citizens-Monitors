@@ -45,7 +45,6 @@ import {
   CommencementContext,
   DEV_COMMENCEMENT_CONTEXT,
   ElectionResultDraft,
-  getResultDraft,
   saveIncidentDraft,
   saveResultDraft,
   validateElectionResult,
@@ -467,30 +466,6 @@ function normalizePartyList(draft: ElectionResultDraft): ElectionResultDraft {
   };
 }
 
-/**
- * Returns true when an existing stored draft belongs to the same election the
- * user just navigated in for. We use this to decide whether to resume the
- * stored draft (same election → user is continuing) or discard it (different
- * election → stored draft is stale and would render wrong data on screen).
- *
- * The bug this guards against: the result draft is single-slot in storage,
- * so without this check, tapping Submit on Senatorial after previously
- * starting Presidential would render the Presidential title/data because the
- * stored Presidential draft would short-circuit fresh hydration.
- */
-function draftMatchesContext(
-  stored: ElectionResultDraft | null,
-  ctx: CommencementContext
-): boolean {
-  if (!stored) return false;
-
-  const storedElectionId = stored.electionId?.trim() ?? "";
-  const ctxElectionId = ctx.electionId?.trim() ?? "";
-
-  if (!storedElectionId || !ctxElectionId) return false;
-
-  return storedElectionId === ctxElectionId;
-}
 
 export default function SubmitElectionReportScreen() {
   const params = useLocalSearchParams<{
@@ -553,26 +528,16 @@ export default function SubmitElectionReportScreen() {
         buildInitialResultDraft(ctx, params.votingStartTime?.trim() || "");
 
       try {
-        const stored = await getResultDraft();
+        // ALWAYS start fresh on entry. Backing out of this screen must leave
+        // nothing behind — abandon wipes any stored draft AND deletes its
+        // staged media files (also covers drafts orphaned by process death,
+        // where the unmount cleanup never had a chance to run).
+        await abandonResultDraft();
         if (!mounted) return;
 
-        // Resume the stored draft ONLY if it belongs to the election the
-        // user just tapped. Otherwise discard it and build a fresh draft
-        // from the new election's params — this is the fix that prevents
-        // stale election data from leaking across submit attempts.
-        const canResumeStored = draftMatchesContext(stored, ctx);
-
-        const base = canResumeStored && stored ? stored : freshDraft();
-
-        const normalized = normalizePartyList(base);
+        const normalized = normalizePartyList(freshDraft());
         setDraft(normalized);
-
-        // Persist whenever:
-        //  - we just built a fresh draft (replacing stale storage), or
-        //  - normalization changed the resumed draft's shape.
-        if (!canResumeStored || normalized !== base) {
-          await saveResultDraft(normalized);
-        }
+        await saveResultDraft(normalized);
       } catch {
         if (!mounted) return;
 
@@ -837,7 +802,37 @@ export default function SubmitElectionReportScreen() {
     });
   };
 
-  // Step 1: validate + if offline queue immediately; if online go to sentiment step
+  // Submit gating — the button stays disabled until every required piece is
+  // present, so an empty/partial form can never be submitted.
+  const missingRequirement = ((): string | null => {
+    if (!draft) return "Preparing form...";
+
+    if (!draft.accreditedVoters.trim()) return "Enter the accredited voters figure.";
+    if (!draft.usedBallotPapers.trim()) return "Enter the used ballot papers figure.";
+    if (!draft.spoiledBallotPapers.trim()) return "Enter the spoiled ballot papers figure.";
+    if (!draft.rejectedBallots.trim()) return "Enter the rejected ballot papers figure.";
+
+    if (!draft.signedResultImageUri && !draft.resultAnnouncementVideoUri) {
+      return "Attach the signed result sheet photo or announcement video.";
+    }
+
+    if (!validateElectionResult(draft).valid) {
+      return "Valid + rejected + spoiled votes must equal accredited voters (EC8A).";
+    }
+
+    if (!draft.confirmTruthfulness) {
+      return "Tick the confirmation box to continue.";
+    }
+
+    return null;
+  })();
+
+  const canSubmitReport = missingRequirement === null;
+  const submitGateReason = missingRequirement ?? "";
+
+  // Step 1: validate, then ALWAYS show the sentiment step (online AND
+  // offline) — the 3 verdict questions are part of every report. Offline
+  // handling happens at final confirm in doSubmit.
   const handleSubmit = async () => {
     if (!draft) return;
 
@@ -849,34 +844,11 @@ export default function SubmitElectionReportScreen() {
       return;
     }
 
-    // Offline path: queue immediately, skip sentiment step
-    if (isOffline) {
-      const queuePayload = {
-        ...(draft as unknown as Record<string, unknown>),
-        totalValidVotes: validation.totalValidVotes,
-        rating: feedback.rating,
-        intimidationToday: feedback.intimidationToday,
-        voteBuyingToday: feedback.voteBuyingToday,
-      };
-
-      enqueue({ type: "submit-election-report", payload: queuePayload });
-      await clearResultDraft();
-      setViewState("success");
-
-      showToast({
-        type: "success",
-        message:
-          "Report saved offline. It will sync automatically when you're back online.",
-      });
-
-      return;
-    }
-
-    // Online path: show sentiment overview before final submit
     setViewState("review-sentiment");
   };
 
-  // Step 2: actual API call — triggered from the sentiment confirmation screen
+  // Step 2: final confirm from the sentiment screen — submits online or
+  // queues offline, always carrying the verdict answers.
   const doSubmit = async () => {
     if (!draft) return;
 
@@ -896,6 +868,21 @@ export default function SubmitElectionReportScreen() {
       intimidationToday: feedback.intimidationToday,
       voteBuyingToday: feedback.voteBuyingToday,
     };
+
+    // Offline: queue with the verdict answers included.
+    if (isOffline) {
+      enqueue({ type: "submit-election-report", payload: queuePayload });
+      await clearResultDraft();
+      setViewState("success");
+
+      showToast({
+        type: "success",
+        message:
+          "Report saved offline. It will sync automatically when you're back online.",
+      });
+
+      return;
+    }
 
     setLoading(true);
 
@@ -1367,13 +1354,26 @@ export default function SubmitElectionReportScreen() {
           </View>
         </View>
 
-        <View style={styles.section}>
-          <AppText style={styles.adminTitle}>
-            Administrative Figures on the Result sheet{"\n"}(EC8A)
-          </AppText>
-        </View>
+        <View style={styles.adminCard}>
+          <View style={styles.adminHeaderRow}>
+            <View style={styles.adminIconCircle}>
+              <Ionicons
+                name="calculator-outline"
+                size={18}
+                color={Theme.colors.primary}
+              />
+            </View>
+            <View style={styles.adminHeaderTextWrap}>
+              <AppText style={styles.adminTitle}>
+                Administrative Figures (EC8A)
+              </AppText>
+              <AppText style={styles.adminSubtitle}>
+                Enter all four figures exactly as on the result sheet.
+              </AppText>
+            </View>
+          </View>
 
-        <View style={styles.adminGrid}>
+          <View style={styles.adminGrid}>
           {/* Clean 2×2 grid — no dangling half-rows */}
           <View style={styles.adminGridRow}>
             <CompactField
@@ -1422,6 +1422,7 @@ export default function SubmitElectionReportScreen() {
               }
             />
           </View>
+          </View>
         </View>
 
         <Pressable
@@ -1457,9 +1458,15 @@ export default function SubmitElectionReportScreen() {
           title={loading ? "Submitting..." : "Submit Report"}
           onPress={handleSubmit}
           loading={loading}
-          disabled={loading}
+          disabled={loading || !canSubmitReport}
           style={styles.submitBtn}
         />
+
+        {!canSubmitReport ? (
+          <AppText style={styles.submitGateHint}>
+            {submitGateReason}
+          </AppText>
+        ) : null}
       </ScrollView>
 
       <SelectPickerSheet
@@ -1818,14 +1825,49 @@ const styles = StyleSheet.create({
     fontFamily: Theme.fonts.body.semibold,
   },
 
+  adminCard: {
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "rgba(15,23,42,0.08)",
+    padding: 16,
+    gap: 16,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
+  },
+  adminHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  adminIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(5,163,156,0.10)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  adminHeaderTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
   adminTitle: {
     fontSize: 15,
     lineHeight: 20,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
   },
+  adminSubtitle: {
+    fontSize: 12.5,
+    lineHeight: 17,
+    color: Theme.colors.textMuted,
+  },
   adminGrid: {
-    gap: 12,
+    gap: 14,
   },
   adminGridRow: {
     flexDirection: "row",
@@ -1888,6 +1930,13 @@ const styles = StyleSheet.create({
     marginBottom: 0,
     minHeight: 45,
     borderRadius: 12,
+  },
+  submitGateHint: {
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: "#C2410C",
+    textAlign: "center",
+    marginTop: 8,
   },
 
   // ── Sentiment step styles ──────────────────────────────────────────────────

@@ -167,13 +167,13 @@ export default function LiveElectionCard({ item, width, viewerRole }: Props) {
   return (
     <View style={[styles.card, { width }]}>
       <View style={styles.topRow}>
-        <View style={styles.liveRow}>
+        <View style={styles.livePill}>
           <View style={styles.liveDot} />
           <AppText style={styles.liveText}>LIVE NOW</AppText>
         </View>
 
         <View style={styles.illustrationWrap}>
-          <ElectionIcon width={54} height={54} />
+          <ElectionIcon width={44} height={44} />
         </View>
       </View>
 
@@ -205,18 +205,27 @@ export default function LiveElectionCard({ item, width, viewerRole }: Props) {
         </View>
       </View>
 
-      <View style={styles.progressTrack}>
-        <View
-          style={[
-            styles.progressFill,
-            {
-              width:
-                progress > 0
-                  ? `${Math.max(8, Math.round(progress * 100))}%`
-                  : "28%",
-            },
-          ]}
-        />
+      <View style={styles.progressBlock}>
+        <View style={styles.progressHeaderRow}>
+          <AppText style={styles.progressLabel}>Collation progress</AppText>
+          <AppText style={styles.progressPercent}>
+            {`${Math.round(progress * 100)}%`}
+          </AppText>
+        </View>
+
+        <View style={styles.progressTrack}>
+          <View
+            style={[
+              styles.progressFill,
+              {
+                width:
+                  progress > 0
+                    ? `${Math.max(8, Math.round(progress * 100))}%`
+                    : "28%",
+              },
+            ]}
+          />
+        </View>
       </View>
 
       <View style={styles.actionsRow}>
@@ -243,7 +252,7 @@ export default function LiveElectionCard({ item, width, viewerRole }: Props) {
           <Ionicons
             name={submitEnabled ? "document-text-outline" : "eye-outline"}
             size={18}
-            color={Theme.colors.text}
+            color={Theme.colors.primary}
           />
           <AppText style={styles.submitButtonText}>
             {submitEnabled ? "Submit" : "View"}
@@ -251,7 +260,7 @@ export default function LiveElectionCard({ item, width, viewerRole }: Props) {
           <Ionicons
             name="chevron-forward"
             size={17}
-            color={Theme.colors.text}
+            color={Theme.colors.primary}
           />
         </Pressable>
       </View>
@@ -268,87 +277,117 @@ export default function LiveElectionCard({ item, width, viewerRole }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 18,
-    backgroundColor: "#FFFBE8",
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#DDE4EC",
-    paddingHorizontal: 18,
-    paddingVertical: 17,
-    gap: 12,
-    shadowColor: "#111A32",
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 3,
+    borderColor: "rgba(5,163,156,0.16)",
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    gap: 13,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 5,
   },
 
   topRow: {
-    minHeight: 42,
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
   },
 
-  liveRow: {
+  livePill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
-    paddingTop: 3,
+    backgroundColor: "rgba(239,68,68,0.09)",
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,0.22)",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
 
   liveDot: {
-    width: 11,
-    height: 11,
+    width: 9,
+    height: 9,
     borderRadius: 999,
     backgroundColor: "#EF4444",
   },
 
   liveText: {
-    fontSize: 15,
-    lineHeight: 20,
-    color: Theme.colors.primary,
+    fontSize: 12.5,
+    lineHeight: 16,
+    color: "#DC2626",
     fontFamily: Theme.fonts.body.bold,
+    letterSpacing: 0.8,
   },
 
   illustrationWrap: {
-    width: 58,
-    height: 58,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: "rgba(5,163,156,0.08)",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: -6,
   },
 
   title: {
-    fontSize: 20,
-    lineHeight: 24,
+    fontSize: 22,
+    lineHeight: 27,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.heading.bold,
-    maxWidth: 260,
   },
 
   metaBlock: {
-    gap: 7,
+    gap: 8,
   },
 
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 9,
   },
 
   metaText: {
     flex: 1,
-    fontSize: 15,
-    lineHeight: 21,
+    fontSize: 14.5,
+    lineHeight: 20,
     color: Theme.colors.textMuted,
     fontFamily: Theme.fonts.body.medium,
   },
 
+  progressBlock: {
+    gap: 7,
+  },
+
+  progressHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  progressLabel: {
+    fontSize: 12.5,
+    lineHeight: 17,
+    color: Theme.colors.textMuted,
+    fontFamily: Theme.fonts.body.medium,
+  },
+
+  progressPercent: {
+    fontSize: 13,
+    lineHeight: 17,
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.body.semibold,
+    fontVariant: ["tabular-nums"],
+  },
+
   progressTrack: {
-    height: 7,
+    height: 8,
     borderRadius: 999,
     overflow: "hidden",
-    backgroundColor: "#D8E0EA",
+    backgroundColor: "rgba(15,23,42,0.08)",
   },
 
   progressFill: {
@@ -366,13 +405,18 @@ const styles = StyleSheet.create({
 
   collationButton: {
     flex: 1,
-    minHeight: 48,
-    borderRadius: 13,
+    minHeight: 50,
+    borderRadius: 14,
     backgroundColor: Theme.colors.primary,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 7,
+    shadowColor: Theme.colors.primary,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.28,
+    shadowRadius: 10,
+    elevation: 4,
   },
 
   collationButtonText: {
@@ -384,11 +428,11 @@ const styles = StyleSheet.create({
 
   submitButton: {
     flex: 1,
-    minHeight: 48,
-    borderRadius: 13,
-    backgroundColor: "#FFFFFF",
+    minHeight: 50,
+    borderRadius: 14,
+    backgroundColor: "rgba(5,163,156,0.06)",
     borderWidth: 1.4,
-    borderColor: Theme.colors.text,
+    borderColor: Theme.colors.primary,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -396,14 +440,14 @@ const styles = StyleSheet.create({
   },
 
   submitButtonDisabled: {
-    borderColor: "rgba(17,26,50,0.25)",
-    opacity: 0.8,
+    borderColor: "rgba(5,163,156,0.35)",
+    opacity: 0.85,
   },
 
   submitButtonText: {
     fontSize: 15,
     lineHeight: 20,
-    color: Theme.colors.text,
+    color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.semibold,
   },
 

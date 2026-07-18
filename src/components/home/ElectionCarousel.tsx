@@ -26,8 +26,10 @@ type Props = {
 };
 
 const SIDE_PADDING = 16;
-const CARD_GAP = 14;
-const NEXT_CARD_PEEK = 24;
+const CARD_GAP = 10;
+// Keep the card stretched nearly edge-to-edge while still revealing a sliver
+// of the next card so users know to swipe.
+const NEXT_CARD_PEEK = 14;
 
 function Dot({ active }: { active: boolean }) {
   const width = useSharedValue(active ? 26 : 7);
