@@ -69,7 +69,6 @@
     "babel-plugin-transform-remove-console": "^6.9.4",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~57.0.0",
-    "expo-module-scripts": "^56.0.0",
     "typescript": "~6.0.3"
   },
   "private": true,
