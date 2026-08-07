@@ -1,6 +1,5 @@
 import { getApiAccessToken } from "@/lib/api/authToken";
 import { ApiEnv } from "@/lib/api/env";
-import { emitSessionExpired } from "@/lib/authEvent";
 
 type ApiErrorPayload = {
   message?: string;
@@ -241,9 +240,9 @@ function apiMultipartRequest<T>({
       });
 
       if (!ok) {
-        if (status === 401) {
-          emitSessionExpired();
-        }
+        // NOTE: a 401 is NOT treated as session death here. The apiRequest
+        // wrapper first tries a silent token refresh and replays the call;
+        // only a rejected refresh ends the session.
         reject(new ApiError(getApiErrorMessage(data as ApiErrorPayload | null), status));
         return;
       }
@@ -298,7 +297,7 @@ function apiMultipartRequest<T>({
   });
 }
 
-export async function apiRequest<T>(
+async function performApiRequest<T>(
   path: string,
   options: ApiRequestOptions = {}
 ): Promise<T> {
@@ -383,9 +382,8 @@ export async function apiRequest<T>(
   });
 
   if (!response.ok) {
-    if (response.status === 401) {
-      emitSessionExpired();
-    }
+    // See note in apiMultipartRequest — 401 recovery is handled by the
+    // apiRequest wrapper via silent refresh + replay.
     throw new ApiError(
       getApiErrorMessage(data as ApiErrorPayload | null),
       response.status
@@ -393,4 +391,37 @@ export async function apiRequest<T>(
   }
 
   return data as T;
+}
+/**
+ * Public entry point: performs the request and, on a 401, transparently
+ * renews the access token once and replays it.
+ *
+ * The user should never be logged out for an expired 1-hour access token —
+ * that's precisely what the refresh token exists to prevent. Only a refresh
+ * that is definitively rejected ends the session (handled by
+ * `onSessionInvalidated` in sessionRefresh.ts).
+ */
+export async function apiRequest<T>(
+  path: string,
+  options: ApiRequestOptions = {}
+): Promise<T> {
+  try {
+    return await performApiRequest<T>(path, options);
+  } catch (error) {
+    const status = (error as { status?: unknown })?.status;
+    const isUnauthorized = status === 401;
+
+    // Unauthenticated calls (sign-in, refresh itself) must never recurse.
+    const isRefreshable = isUnauthorized && options.auth !== false;
+
+    if (!isRefreshable) throw error;
+
+    const { refreshAccessToken } = await import("@/lib/auth/sessionRefresh");
+    const outcome = await refreshAccessToken();
+
+    if (!outcome.ok) throw error;
+
+    // Fresh Bearer token is already installed — replay the original request.
+    return performApiRequest<T>(path, options);
+  }
 }

@@ -278,7 +278,7 @@ export default function ReportIncidentLiveReviewScreen() {
             color={Theme.colors.textMuted}
           />
           <AppText style={styles.loadingText}>
-            We couldn't find your report draft.
+            We couldn’t find your report draft.
           </AppText>
           <AppText style={styles.missingDraftSubtext}>
             Please start the incident report again — your polling unit details

@@ -72,29 +72,18 @@ const RESULT_DRAFT_KEY = "@cm_reporting_result_draft";
 const INCIDENT_DRAFT_KEY = "@cm_reporting_incident_draft";
 const LIVE_VIDEO_KEY = "@cm_reporting_live_video";
 
-export const REPORTING_DEV_CONFIG = {
-  autoShowDemoLiveNotice: true,
-  enableGlobalLiveNoticeDevTrigger: false,
-  forceInvalidResultSubmission: false,
-  forceIncidentSuccess: true,
-  forceResultSuccess: true,
-} as const;
-
-export const DEV_COMMENCEMENT_CONTEXT: CommencementContext = {
-  electionId: "alimosho-lg-2026",
-  electionTitle: "Alimosho LG Election Result",
-  pollingUnitName: "Ikotun Community Primary School",
-  pollingUnitCode: "LA/01/08/004",
-  ward: "Ward 01",
-  lga: "Alimosho LGA",
-  state: "Lagos",
-  uploadLocation: null,
-};
-
+/**
+ * Starter rows for the result table.
+ *
+ * Candidate names are intentionally EMPTY: they differ per election and per
+ * office, so hardcoding them (previously Lagos governorship candidates) put
+ * the wrong names under unrelated elections. Real candidates come from the
+ * election payload.
+ */
 export const DEFAULT_PARTIES: ResultPartyVote[] = [
-  { id: "apc", party: "APC", candidate: "Babajide Sanwo-Olu", votes: "" },
-  { id: "pdp", party: "PDP", candidate: "Gbadebo Rhodes", votes: "" },
-  { id: "lp", party: "LP", candidate: "Olajide Adediran", votes: "" },
+  { id: "apc", party: "APC", candidate: "", votes: "" },
+  { id: "pdp", party: "PDP", candidate: "", votes: "" },
+  { id: "lp", party: "LP", candidate: "", votes: "" },
   { id: "nnpp", party: "NNPP", candidate: "", votes: "" },
   { id: "others", party: "Other Parties", candidate: "", votes: "" },
 ];
@@ -111,25 +100,38 @@ export const INCIDENT_OPTIONS = [
   "Other Incidents",
 ] as const;
 
+/**
+ * Normalises a commencement context.
+ *
+ * Missing values stay EMPTY on purpose. Substituting placeholder data here is
+ * how a fixture polling unit ("Ikotun Community Primary School") once leaked
+ * into real reports — a report with the wrong polling unit is worse than one
+ * the UI refuses to submit. Use `isCommencementContextComplete` to gate
+ * submission instead.
+ */
 export function buildCommencementContext(
   partial?: Partial<CommencementContext>
 ): CommencementContext {
   return {
-    electionId: partial?.electionId?.trim() || DEV_COMMENCEMENT_CONTEXT.electionId,
-    electionTitle:
-      partial?.electionTitle?.trim() || DEV_COMMENCEMENT_CONTEXT.electionTitle,
-    pollingUnitName:
-      partial?.pollingUnitName?.trim() ||
-      DEV_COMMENCEMENT_CONTEXT.pollingUnitName,
-    pollingUnitCode:
-      partial?.pollingUnitCode?.trim() ||
-      DEV_COMMENCEMENT_CONTEXT.pollingUnitCode,
-    ward: partial?.ward?.trim() || DEV_COMMENCEMENT_CONTEXT.ward,
-    lga: partial?.lga?.trim() || DEV_COMMENCEMENT_CONTEXT.lga,
-    state: partial?.state?.trim() || DEV_COMMENCEMENT_CONTEXT.state,
-    uploadLocation:
-      partial?.uploadLocation ?? DEV_COMMENCEMENT_CONTEXT.uploadLocation ?? null,
+    electionId: partial?.electionId?.trim() || "",
+    electionTitle: partial?.electionTitle?.trim() || "",
+    pollingUnitName: partial?.pollingUnitName?.trim() || "",
+    pollingUnitCode: partial?.pollingUnitCode?.trim() || "",
+    ward: partial?.ward?.trim() || "",
+    lga: partial?.lga?.trim() || "",
+    state: partial?.state?.trim() || "",
+    uploadLocation: partial?.uploadLocation ?? null,
   };
+}
+
+/**
+ * A report can only be submitted against a real, identified election.
+ * Typed as a predicate so callers get proper narrowing after the check.
+ */
+export function isCommencementContextComplete(
+  context: CommencementContext | null | undefined
+): context is CommencementContext {
+  return Boolean(context?.electionId?.trim());
 }
 
 export function buildInitialResultDraft(
@@ -308,15 +310,6 @@ export function validateElectionResult(draft: ElectionResultDraft): {
   const accreditedVoters = parseNumeric(draft.accreditedVoters);
   const rejectedVotes = parseNumeric(draft.rejectedVoters);
   const spoiledVotes = parseNumeric(draft.spoiledBallotPapers);
-
-  if (REPORTING_DEV_CONFIG.forceInvalidResultSubmission) {
-    return {
-      valid: false,
-      reason:
-        "Under Section 60 of the Electoral Act 2022, a result sheet where the total of valid votes, rejected votes, and spoil ballots does not equal the number of accredited voters cannot be accepted as an official result.",
-      totalValidVotes,
-    };
-  }
 
   const combined = totalValidVotes + rejectedVotes + spoiledVotes;
 

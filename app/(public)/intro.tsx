@@ -19,14 +19,15 @@ import AppText from "@/components/ui/AppText";
 import { INTRO_SLIDES } from "@/data/introSlides";
 import { setHasSeenIntroSlides } from "@/lib/introStorage";
 import { Theme } from "@/theme";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 
 const SWIPE_THRESHOLD = 50;
 
 export default function IntroScreen() {
   const [activeIndex, setActiveIndex] = useState(0);
   const activeIndexRef = useRef(0);
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const fadeAnim = useAnimatedValue(1);
+  const scaleAnim = useAnimatedValue(1);
   const isAnimating = useRef(false);
 
   const { width, height } = useWindowDimensions();
@@ -86,7 +87,18 @@ export default function IntroScreen() {
     [fadeAnim, scaleAnim, slides.length]
   );
 
-  const panResponder = useRef(
+  /*
+   * Lazy state (not `useRef().current`) so the responder is created exactly
+   * once without reading a ref during render.
+   *
+   * The rule still fires because `activeIndexRef` is referenced inside the
+   * gesture callbacks. That access is safe: those callbacks only run in
+   * response to a user gesture, long after mount — never during render. The
+   * ref is what lets a single, stable responder always see the live index;
+   * capturing `activeIndex` directly would freeze it at the first slide.
+   */
+  // eslint-disable-next-line react-hooks/refs
+  const [panResponder] = useState(() =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onStartShouldSetPanResponderCapture: () => false,
@@ -103,7 +115,7 @@ export default function IntroScreen() {
         }
       },
     })
-  ).current;
+  );
 
   const currentSlide = slides[activeIndex];
   const isFirst = activeIndex === 0;

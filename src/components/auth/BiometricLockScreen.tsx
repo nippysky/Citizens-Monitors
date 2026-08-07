@@ -123,15 +123,15 @@ export default function BiometricLockScreen({ onAuthenticate, onUsePassword }: P
     if (didAutoPrompt.current) return;
     didAutoPrompt.current = true;
 
-    if (Platform.OS === "android") {
-      // One event-loop tick is enough — rAF is not available in RN.
-      const id = setTimeout(() => {
-        void triggerAuth();
-      }, 100);
-      return () => clearTimeout(id);
-    }
+    // Always defer via a timer: Android needs the view settled before the
+    // native dialog opens, and on both platforms this keeps the state update
+    // out of the effect body (no cascading render).
+    const delay = Platform.OS === "android" ? 100 : 0;
+    const id = setTimeout(() => {
+      void triggerAuth();
+    }, delay);
 
-    void triggerAuth();
+    return () => clearTimeout(id);
     // triggerAuth is stable for the lifetime of this component.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -19,10 +19,14 @@ import { Theme } from "@/theme";
 type Props = {
   contextData: CommencementContext | null;
   onProceedResult: (time: string) => void;
-  onProceedIncident: () => void;
+  /**
+   * Time is captured for incidents too — an observer reporting that polling
+   * never started still needs to say WHEN they observed it.
+   */
+  onProceedIncident: (time: string) => void;
 };
 
-type Step = "choice" | "time";
+type Step = "choice" | "time-result" | "time-incident";
 
 function resolveElectionTitle(contextData: CommencementContext | null): string {
   return contextData?.electionTitle?.trim() || "this election";
@@ -85,21 +89,38 @@ const CommencementBottomSheet = forwardRef<BottomSheetModal, Props>(
     }, [dismiss, reset]);
 
     const handleElectionHappened = useCallback(() => {
-      setStep("time");
+      setStep("time-result");
+      setSelectedTime("");
+      setIosPickerVisible(false);
+    }, []);
+
+    const handleElectionDidNotHold = useCallback(() => {
+      setStep("time-incident");
+      setSelectedTime("");
+      setIosPickerVisible(false);
+    }, []);
+
+    const handleBackToChoice = useCallback(() => {
+      setStep("choice");
+      setSelectedTime("");
       setIosPickerVisible(false);
     }, []);
 
     const handleProceed = useCallback(() => {
       if (!selectedTime) return;
 
-      onProceedResult(selectedTime);
-      handleClose();
-    }, [selectedTime, onProceedResult, handleClose]);
+      // Route by the branch the user picked — each carries the same election
+      // context, so the report lands against the right election either way.
+      if (step === "time-incident") {
+        onProceedIncident(selectedTime);
+      } else {
+        onProceedResult(selectedTime);
+      }
 
-    const handleIncident = useCallback(() => {
-      onProceedIncident();
       handleClose();
-    }, [onProceedIncident, handleClose]);
+    }, [step, selectedTime, onProceedIncident, onProceedResult, handleClose]);
+
+    const isIncidentBranch = step === "time-incident";
 
     return (
       <BottomSheetModal
@@ -126,7 +147,20 @@ const CommencementBottomSheet = forwardRef<BottomSheetModal, Props>(
           contentContainerStyle={styles.content}
         >
           <View style={styles.header}>
-            <AppText style={styles.title}>Commencement</AppText>
+            <View style={styles.headerTextWrap}>
+              {/* The election name lives in the header so the user can never
+                  be unsure WHICH election they're reporting on. */}
+              <AppText style={styles.title} numberOfLines={1}>
+                Report {electionTitle}
+              </AppText>
+              <AppText style={styles.subtitle}>
+                {step === "choice"
+                  ? "Confirm what happened at your polling unit"
+                  : isIncidentBranch
+                    ? "Step 2 of 2 · Incident report"
+                    : "Step 2 of 2 · Official result"}
+              </AppText>
+            </View>
 
             <Pressable onPress={handleClose} style={styles.closeBtn}>
               <Ionicons
@@ -177,7 +211,10 @@ const CommencementBottomSheet = forwardRef<BottomSheetModal, Props>(
                 />
               </Pressable>
 
-              <Pressable onPress={handleIncident} style={styles.optionCard}>
+              <Pressable
+                onPress={handleElectionDidNotHold}
+                style={styles.optionCard}
+              >
                 <View style={styles.optionIconWrap}>
                   <AppText style={styles.optionEmoji}>🚨</AppText>
                 </View>
@@ -200,13 +237,37 @@ const CommencementBottomSheet = forwardRef<BottomSheetModal, Props>(
             </>
           ) : (
             <>
+              <Pressable onPress={handleBackToChoice} style={styles.backRow}>
+                <Ionicons
+                  name="chevron-back"
+                  size={18}
+                  color={Theme.colors.primary}
+                />
+                <AppText style={styles.backText}>Back</AppText>
+              </Pressable>
+
+              <View style={styles.electionChip}>
+                <Ionicons
+                  name="flag-outline"
+                  size={14}
+                  color={Theme.colors.primary}
+                />
+                <AppText style={styles.electionChipText} numberOfLines={1}>
+                  {electionTitle} · {pollingUnitName}
+                </AppText>
+              </View>
+
               <View style={styles.timeStepHeader}>
                 <AppText style={styles.timeStepIntro}>
-                  Select the time polling opened at your unit today.
+                  {isIncidentBranch
+                    ? "Tell us when you observed this at your polling unit today."
+                    : "Select the time polling opened at your unit today."}
                 </AppText>
 
                 <AppText style={styles.timeFieldLabel}>
-                  When did voting start?
+                  {isIncidentBranch
+                    ? "What time did you observe this?"
+                    : "When did voting start?"}
                 </AppText>
               </View>
 
@@ -215,7 +276,15 @@ const CommencementBottomSheet = forwardRef<BottomSheetModal, Props>(
                 value={selectedTime}
                 placeholder="Select time"
                 onPress={() => setIosPickerVisible(true)}
-                leftIcon={<AppText style={styles.clockEmoji}>⏰</AppText>}
+                // Vector icon instead of an emoji — the ⏰ glyph was being
+                // clipped by its line box on some devices.
+                leftIcon={
+                  <Ionicons
+                    name="time-outline"
+                    size={20}
+                    color={Theme.colors.primary}
+                  />
+                }
               />
 
               <TimePickerSheet
@@ -236,7 +305,11 @@ const CommencementBottomSheet = forwardRef<BottomSheetModal, Props>(
         {step !== "choice" ? (
           <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
             <AppButton
-              title="Proceed To Report"
+              title={
+                isIncidentBranch
+                  ? "Proceed To Incident Report"
+                  : "Proceed To Result"
+              }
               onPress={handleProceed}
               disabled={!selectedTime}
             />
@@ -269,11 +342,57 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  headerTextWrap: {
+    flex: 1,
+    gap: 2,
+    paddingRight: 12,
+  },
   title: {
     fontSize: 18,
     lineHeight: 24,
     color: Theme.colors.text,
     fontFamily: Theme.fonts.heading.semibold,
+  },
+  subtitle: {
+    fontSize: 12.5,
+    lineHeight: 17,
+    color: Theme.colors.textMuted,
+    fontFamily: Theme.fonts.body.medium,
+  },
+  backRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    alignSelf: "flex-start",
+    paddingVertical: 6,
+    paddingRight: 10,
+  },
+  backText: {
+    fontSize: 14,
+    lineHeight: 19,
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+  electionChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    alignSelf: "flex-start",
+    maxWidth: "100%",
+    backgroundColor: "rgba(5,163,156,0.09)",
+    borderWidth: 1,
+    borderColor: "rgba(5,163,156,0.20)",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    marginTop: 4,
+  },
+  electionChipText: {
+    flexShrink: 1,
+    fontSize: 12.5,
+    lineHeight: 17,
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.body.semibold,
   },
   closeBtn: {
     width: 40,

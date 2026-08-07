@@ -2,8 +2,9 @@
 // Branded loader: Citizen icon + smooth multi-color bar animation.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { Animated, Easing, Modal, StyleSheet, View } from "react-native";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 
 import CitizenIcon from "@/svgs/app/CitizenIcon";
 import { Theme } from "@/theme";
@@ -11,7 +12,7 @@ import { Theme } from "@/theme";
 type Props = { visible: boolean };
 
 export default function AppScreenLoader({ visible }: Props) {
-  const translateX = useRef(new Animated.Value(-120)).current;
+  const translateX = useAnimatedValue(-120);
 
   useEffect(() => {
     if (!visible) return;

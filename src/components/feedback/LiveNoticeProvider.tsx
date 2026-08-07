@@ -12,7 +12,6 @@ import {
 } from "react";
 
 import GlobalLiveNotice from "@/components/feedback/GlobalLiveNotice";
-import LiveNoticeDevTrigger from "@/components/feedback/LiveNoticeDevTrigger";
 import CommencementBottomSheet from "@/components/reporting/CommencementBottomSheet";
 import LocationPermissionModal from "@/components/reporting/LocationPermissionModal";
 import { Paths } from "@/constants/paths";
@@ -27,8 +26,6 @@ import {
   buildInitialIncidentDraft,
   buildInitialResultDraft,
   CommencementContext,
-  DEV_COMMENCEMENT_CONTEXT,
-  REPORTING_DEV_CONFIG,
   saveIncidentDraft,
   saveResultDraft,
 } from "@/lib/reporting";
@@ -46,7 +43,6 @@ type LiveNoticeContextValue = {
   hideNotice: () => void;
   openCommencement: (contextData?: CommencementContext) => void;
   requestLocationForAction: (onGranted: (geoLabel: string) => void) => void;
-  triggerDevElectionNotice: () => void;
 };
 
 type LiveElectionLike = {
@@ -158,8 +154,10 @@ export function LiveNoticeProvider({ children }: { children: ReactNode }) {
   const [rendered, setRendered] = useState(false);
   const [message, setMessage] = useState("");
   const [actionLabel, setActionLabel] = useState<string | undefined>();
-  const [noticeContext, setNoticeContext] = useState<CommencementContext>(
-    DEV_COMMENCEMENT_CONTEXT,
+  // Starts empty — populated from the live election + the user's profile.
+  // Never seeded with fixture data.
+  const [noticeContext, setNoticeContext] = useState<CommencementContext>(() =>
+    buildCommencementContext()
   );
   const [customOnPress, setCustomOnPress] = useState<(() => void) | null>(null);
 
@@ -231,16 +229,6 @@ export function LiveNoticeProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const triggerDevElectionNotice = useCallback(() => {
-    const context = primaryProdNoticeContext ?? DEV_COMMENCEMENT_CONTEXT;
-
-    showNotice({
-      message: buildNoticeMessage(context),
-      actionLabel: "Submit Election Report",
-      contextData: context,
-    });
-  }, [primaryProdNoticeContext, showNotice]);
-
   const requestLocationForAction = useCallback(
     (onGranted: (geoLabel: string) => void) => {
       setLocationSuccessHandler(() => onGranted);
@@ -271,11 +259,15 @@ export function LiveNoticeProvider({ children }: { children: ReactNode }) {
     [noticeContext],
   );
 
-  const handleProceedIncident = useCallback(async () => {
+  const handleProceedIncident = useCallback(async (time: string) => {
     const draft = buildInitialIncidentDraft(noticeContext);
-    await saveIncidentDraft(draft);
+    await saveIncidentDraft({ ...draft, incidentTime: time });
 
-    router.push(buildReportRoute(Paths.reportIncident, noticeContext));
+    router.push(
+      buildReportRoute(Paths.reportIncident, noticeContext, {
+        incidentTime: time,
+      })
+    );
   }, [noticeContext]);
 
   useEffect(() => {
@@ -293,23 +285,6 @@ export function LiveNoticeProvider({ children }: { children: ReactNode }) {
     });
   }, [primaryProdNoticeContext, showNotice]);
 
-  useEffect(() => {
-    if (!REPORTING_DEV_CONFIG.autoShowDemoLiveNotice) return;
-    if (primaryProdNoticeContext) return;
-    if (liveElectionsQuery.isLoading || profileQuery.isLoading) return;
-
-    const timer = setTimeout(() => {
-      triggerDevElectionNotice();
-    }, 1200);
-
-    return () => clearTimeout(timer);
-  }, [
-    liveElectionsQuery.isLoading,
-    primaryProdNoticeContext,
-    profileQuery.isLoading,
-    triggerDevElectionNotice,
-  ]);
-
   useEffect(() => clearTimer, [clearTimer]);
 
   const value = useMemo(
@@ -318,24 +293,18 @@ export function LiveNoticeProvider({ children }: { children: ReactNode }) {
       hideNotice,
       openCommencement,
       requestLocationForAction,
-      triggerDevElectionNotice,
     }),
     [
       showNotice,
       hideNotice,
       openCommencement,
       requestLocationForAction,
-      triggerDevElectionNotice,
     ],
   );
 
   return (
     <LiveNoticeContext.Provider value={value}>
       {children}
-
-      {REPORTING_DEV_CONFIG.enableGlobalLiveNoticeDevTrigger ? (
-        <LiveNoticeDevTrigger onPress={triggerDevElectionNotice} />
-      ) : null}
 
       {rendered ? (
         <GlobalLiveNotice

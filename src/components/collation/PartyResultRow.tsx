@@ -9,14 +9,24 @@ import { getPartyLogo } from "@/svgs/app/collation/parties";
 
 type Props = { party: PartyResult };
 
+/**
+ * Renders the party logo as an ELEMENT rather than binding the component to a
+ * capitalised local. Selecting a component type during render gives it a new
+ * identity each pass, so React unmounts and remounts the subtree — losing any
+ * internal state and restarting animations (react-hooks/static-components).
+ */
+function renderPartyLogo(logoKey: PartyResult["logoKey"]) {
+  const Logo = getPartyLogo(logoKey);
+  return <Logo width={28} height={20} />;
+}
+
 export default function PartyResultRow({ party }: Props) {
-  const Logo = getPartyLogo(party.logoKey);
 
   return (
     <View style={styles.wrap}>
       <View style={styles.topRow}>
         <View style={styles.left}>
-          <Logo width={28} height={20} />
+          {renderPartyLogo(party.logoKey)}
           <AppText style={styles.name}>{party.shortName}</AppText>
         </View>
 

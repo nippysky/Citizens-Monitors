@@ -57,6 +57,16 @@ const DOT_COLOR = Theme.colors.primary;
 /* Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Returns an ELEMENT rather than a component type. Binding a component to a
+ * capitalised local during render gives it a fresh identity each pass, so
+ * React remounts the subtree (react-hooks/static-components).
+ */
+function renderElectionIcon(type: Parameters<typeof getElectionIcon>[0], size: number) {
+  const Icon = getElectionIcon(type);
+  return <Icon width={size} height={size} />;
+}
+
 function getElectionIcon(type: string) {
   const t = type.toLowerCase();
 
@@ -175,7 +185,6 @@ function DiscussionCard({
   isLast: boolean;
   onJoin: () => void;
 }) {
-  const ElectionIcon = getElectionIcon(item.electionType);
   const isLive = item.status === "live";
 
   const animatedStyle = useAnimatedStyle(() => {
@@ -228,7 +237,7 @@ function DiscussionCard({
         </View>
 
         <View style={styles.electionIconWrap}>
-          <ElectionIcon width={42} height={42} />
+          {renderElectionIcon(item.electionType, 42)}
         </View>
       </View>
 

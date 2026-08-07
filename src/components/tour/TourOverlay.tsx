@@ -1,5 +1,5 @@
 import { usePathname } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Pressable,
   StyleSheet,
@@ -44,11 +44,17 @@ export default function TourOverlay() {
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
   const [tooltipHeight, setTooltipHeight] = useState(180);
 
-  useEffect(() => {
-    if (!isActive) {
-      setShowSkipConfirm(false);
-    }
-  }, [isActive]);
+  /*
+   * Close the skip dialog when the tour ends. Adjusted during render (React's
+   * documented alternative to setState-in-effect) so the dialog can't flash
+   * on top of a tour that has already finished.
+   */
+  const [wasActive, setWasActive] = useState(isActive);
+
+  if (isActive !== wasActive) {
+    setWasActive(isActive);
+    if (!isActive) setShowSkipConfirm(false);
+  }
 
   const targetRect = currentStep ? targets[currentStep.targetId] : undefined;
 

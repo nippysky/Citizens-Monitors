@@ -292,11 +292,20 @@ export default function PollingUnitLocatorScreen() {
     return `Polling units in ${form.ward}, ${form.lga}, ${form.state}.`;
   }, [form.lga, form.state, form.ward]);
 
-  useEffect(() => {
+  /*
+   * Any change to the state/LGA/ward selection invalidates the current
+   * results. Cleared during render so stale polling units from the previous
+   * selection are never briefly displayed.
+   */
+  const selectionKey = `${form.state}|${form.lga}|${form.ward}`;
+  const [lastSelectionKey, setLastSelectionKey] = useState(selectionKey);
+
+  if (selectionKey !== lastSelectionKey) {
+    setLastSelectionKey(selectionKey);
     setResults([]);
     setResultCount(0);
     setResultsVisible(false);
-  }, [form.state, form.lga, form.ward]);
+  }
 
   const handleSelectState = (state: string): void => {
     setForm({
@@ -581,16 +590,32 @@ function PollingUnitResultsModal({
     [results, searchQuery]
   );
 
-  useEffect(() => {
+  /*
+   * Reset the search box each time the sheet opens. State is adjusted during
+   * render (no cascading commit); the imperative list scroll stays in an
+   * effect because that IS an external side effect.
+   */
+  const [wasVisible, setWasVisible] = useState(visible);
+
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
+
     if (visible) {
       setSearchQuery("");
       setShowBackToTop(false);
-      showBackToTopRef.current = false;
-
-      requestAnimationFrame(() => {
-        listRef.current?.scrollToOffset({ offset: 0, animated: false });
-      });
     }
+  }
+
+  useEffect(() => {
+    if (!visible) return;
+
+    // Ref WRITES belong here, not in the render body: a render may be
+    // discarded and restarted, which would leave the ref out of sync.
+    showBackToTopRef.current = false;
+
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    });
   }, [visible]);
 
   useEffect(() => {

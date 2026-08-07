@@ -169,15 +169,26 @@ export default function SentimentAnalysisSection({ collation }: Props) {
   const [incidentScope, setIncidentScope] = useState<ScopeFilter>(defaultScope);
   const [activityScope, setActivityScope] = useState<ScopeFilter>(defaultScope);
 
-  useEffect(() => {
+  /*
+   * When the available scope changes (e.g. the viewer gains/loses state-wide
+   * visibility) every filter resets to the valid default. Adjusted during
+   * render so charts never paint one frame with an invalid scope.
+   */
+  const [lastShowStateScope, setLastShowStateScope] =
+    useState(shouldShowStateScope);
+
+  if (shouldShowStateScope !== lastShowStateScope) {
+    setLastShowStateScope(shouldShowStateScope);
+
     const nextScope: ScopeFilter = shouldShowStateScope
       ? "all-state"
       : "my-unit";
+
     setHealthScope(nextScope);
     setVerificationScope(nextScope);
     setIncidentScope(nextScope);
     setActivityScope(nextScope);
-  }, [shouldShowStateScope]);
+  }
 
   if (empty) {
     return (
@@ -670,13 +681,23 @@ function AnimatedDonut({
           fill="none"
         />
 
-        {(() => {
-          let offset = 0;
+        {/* Offsets precomputed with a pure reduce — mutating a local inside a
+            render IIFE (`offset += dash`) is exactly what react-hooks/
+            immutability flags, and it breaks under re-render memoisation. */}
+        {segments
+          .reduce<{ segment: (typeof segments)[number]; offset: number }[]>(
+            (acc, segment) => {
+              const previous = acc[acc.length - 1];
+              const offset = previous
+                ? previous.offset + (previous.segment.value / 100) * circumference
+                : 0;
 
-          return segments.map((segment) => {
+              return [...acc, { segment, offset }];
+            },
+            []
+          )
+          .map(({ segment, offset: currentOffset }) => {
             const dash = (segment.value / 100) * circumference;
-            const currentOffset = offset;
-            offset += dash;
 
             return (
               <AnimatedArc
@@ -691,8 +712,7 @@ function AnimatedDonut({
                 dashOffset={-currentOffset}
               />
             );
-          });
-        })()}
+          })}
       </Svg>
 
       <View style={styles.chartCenter}>

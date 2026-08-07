@@ -3,6 +3,7 @@
 export const Paths = {
   welcome: "/(public)/welcome",
   signIn: "/(public)/sign-in",
+  unlock: "/(public)/unlock",
   signUp: "/(public)/sign-up",
   resetPassword: "/(public)/reset-password",
   setPassword: "/(public)/set-password",

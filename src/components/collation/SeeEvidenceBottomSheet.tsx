@@ -20,6 +20,13 @@ import AppText from "@/components/ui/AppText";
 import CollationVideoPlayer from "@/components/collation/CollationVideoPlayer";
 import { Theme } from "@/theme";
 
+/**
+ * Shown instead of a value the backend did not supply.
+ * NEVER substitute sample figures here — fabricated vote counts on an
+ * election-monitoring screen are worse than an obvious blank.
+ */
+const NOT_PROVIDED = "—";
+
 export type EvidencePayload = {
   title: string;
   imageUri?: string;
@@ -119,10 +126,10 @@ const SeeEvidenceBottomSheet = forwardRef<BottomSheetModal, Props>(
             <AppText style={styles.evidenceTitle}>{evidence.title}</AppText>
 
             <View style={styles.metaGrid}>
-              <MetaCell icon="calendar-outline" label="Submitted" value={evidence.submittedAt ?? "15 Mar 2027 · 08:42 AM WAT"} />
-              <MetaCell icon="location-outline" label="Polling Unit" value={evidence.pollingUnitName ?? "Ikotun Primary School"} />
-              <MetaCell icon="qr-code-outline" label="Unit Code" value={evidence.pollingUnitCode ?? "PU LA/12/35"} />
-              <MetaCell icon="person-outline" label="Observer" value={evidence.observerHandle ?? "@IronEagle23"} />
+              <MetaCell icon="calendar-outline" label="Submitted" value={evidence.submittedAt ?? NOT_PROVIDED} />
+              <MetaCell icon="location-outline" label="Polling Unit" value={evidence.pollingUnitName ?? NOT_PROVIDED} />
+              <MetaCell icon="qr-code-outline" label="Unit Code" value={evidence.pollingUnitCode ?? NOT_PROVIDED} />
+              <MetaCell icon="person-outline" label="Observer" value={evidence.observerHandle ?? NOT_PROVIDED} />
             </View>
 
             <View style={styles.srcPill}>
@@ -185,7 +192,7 @@ const SeeEvidenceBottomSheet = forwardRef<BottomSheetModal, Props>(
               <AppText style={styles.noteTitle}>Observer Note</AppText>
             </View>
             <AppText style={styles.noteBody}>
-              {evidence.note ?? "Result sheet was captured immediately after collation at the polling unit. The announcement video was recorded after party agents and officials confirmed the figures on site."}
+              {evidence.note?.trim() || "No note was provided with this evidence."}
             </AppText>
           </View>
 
@@ -194,11 +201,11 @@ const SeeEvidenceBottomSheet = forwardRef<BottomSheetModal, Props>(
             <AppText style={styles.secTitle}>Administrative Figures from EC8A Sheet</AppText>
             <AppText style={styles.secSub}>These figures were extracted from the polling unit result evidence submitted for this election report.</AppText>
             <View style={styles.statsGrid}>
-              <StatCell label="Accredited Voter" value={evidence.accreditedVoter ?? "675,435"} />
-              <StatCell label="Rejected Votes" value={evidence.rejectedVotes ?? "657"} />
-              <StatCell label="Spoiled Ballot Papers" value={evidence.spoiledBallots ?? "320"} />
-              <StatCell label="Used Ballot Papers" value={evidence.usedBallots ?? "601"} />
-              <StatCell label="Unused Ballot Papers" value={evidence.unusedBallots ?? "87"} />
+              <StatCell label="Accredited Voter" value={evidence.accreditedVoter ?? NOT_PROVIDED} />
+              <StatCell label="Rejected Votes" value={evidence.rejectedVotes ?? NOT_PROVIDED} />
+              <StatCell label="Spoiled Ballot Papers" value={evidence.spoiledBallots ?? NOT_PROVIDED} />
+              <StatCell label="Used Ballot Papers" value={evidence.usedBallots ?? NOT_PROVIDED} />
+              <StatCell label="Unused Ballot Papers" value={evidence.unusedBallots ?? NOT_PROVIDED} />
             </View>
           </View>
 
@@ -214,10 +221,10 @@ const SeeEvidenceBottomSheet = forwardRef<BottomSheetModal, Props>(
               </View>
             </View>
             <View style={styles.vmBody}>
-              <VmRow label="Election" value={evidence.electionName ?? "Alimosho Local Government Election 2026"} />
-              <VmRow label="Submitted By" value={evidence.observerHandle ?? "@IronEagle23"} />
-              <VmRow label="Submitted At" value={evidence.submittedAt ?? "15 Mar 2027 · 08:42 AM WAT"} />
-              <VmRow label="Geo Address" value={evidence.locationMeta ?? "No 20 Ao, Alimosho, Lagos State, Nigeria"} />
+              <VmRow label="Election" value={evidence.electionName ?? NOT_PROVIDED} />
+              <VmRow label="Submitted By" value={evidence.observerHandle ?? NOT_PROVIDED} />
+              <VmRow label="Submitted At" value={evidence.submittedAt ?? NOT_PROVIDED} />
+              <VmRow label="Geo Address" value={evidence.locationMeta ?? NOT_PROVIDED} />
             </View>
             <View style={styles.legalRow}>
               <Ionicons name="document-lock-outline" size={14} color={Theme.colors.primary} />

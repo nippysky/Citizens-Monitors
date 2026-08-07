@@ -104,6 +104,10 @@ const FlagReportBottomSheet = forwardRef<BottomSheetModal, Props>(
     return (
       <BottomSheetModal
         ref={ref} snapPoints={snaps} enablePanDownToClose topInset={insets.top + 12}
+        // Wires the Android hardware back button to close the sheet. The
+        // handler was created but never attached, so back exited the screen
+        // underneath instead of dismissing this sheet.
+        onChange={handleSheetChange}
         keyboardBehavior="interactive" keyboardBlurBehavior="restore"
         backdropComponent={(p) => <BottomSheetBackdrop {...p} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.32} pressBehavior="close" />}
         handleIndicatorStyle={s.handle} backgroundStyle={s.bg}

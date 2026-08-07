@@ -13,7 +13,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { isTabPathname } from "@/constants/tabRoutes";
 import { useTabBarLayout } from "@/hooks/useTabBarLayout";
@@ -53,12 +53,20 @@ export default function CollationDiscussionsTab({
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const [localLikeCounts, setLocalLikeCounts] = useState<Record<string, number>>({});
 
-  useEffect(() => {
+  /*
+   * Reset per-election local state when the user switches collation card.
+   * Done during render rather than in an effect so stale likes/comments from
+   * the previous election are never briefly visible.
+   */
+  const [lastCollationId, setLastCollationId] = useState(collation.id);
+
+  if (collation.id !== lastCollationId) {
+    setLastCollationId(collation.id);
     setLocalDiscussions(collation.discussions);
     setComments([]);
     setLikedIds(new Set());
     setLocalLikeCounts({});
-  }, [collation.id, collation.discussions]);
+  }
 
   const refreshing = externalRefreshing ?? localRefreshing;
 

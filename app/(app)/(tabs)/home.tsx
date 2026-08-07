@@ -132,7 +132,8 @@ function getElectionLocation(election: DashboardLiveElection): string {
  *   2. The submitter's polling-unit context from their profile (state, lga, ward, pollingUnit)
  *
  * The polling-unit context is what flows into the Submit Election Report screen.
- * Without it, the submit screen falls back to DEV_COMMENCEMENT_CONTEXT (dev fixture).
+ * Without it the context is left EMPTY and submission is blocked — the screen
+ * never invents placeholder polling-unit data.
  *
  * Notes:
  *  - The dashboard API doesn't expose `votingStartTime`, so we leave it `undefined`.

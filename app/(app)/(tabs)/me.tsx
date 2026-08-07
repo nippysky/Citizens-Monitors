@@ -28,6 +28,7 @@ import PollingUnitBottomSheet, {
 import ProfileBottomSheet, {
   ProfileFormState,
 } from "@/components/me/ProfileBottomSheet";
+import AppLockBottomSheet from "@/components/me/AppLockBottomSheet";
 import SecurityBottomSheet, {
   SecurityFormState,
 } from "@/components/me/SecurityBottomSheet";
@@ -70,6 +71,13 @@ import {
   MobileNotificationSettingsState,
   MyProfileResponse,
 } from "@/lib/api/profile.api";
+import {
+  getDeviceSecurityLabel,
+  isAppLockEnabled,
+  isDeviceSecurityAvailable,
+  promptDeviceAuthentication,
+  setAppLockEnabled,
+} from "@/lib/auth/appLockPreference";
 import { Theme } from "@/theme";
 import { BirthdayValue, Gender } from "@/types/onboarding";
 
@@ -490,6 +498,69 @@ export default function MeScreen() {
 
   const profileSheetRef = useRef<BottomSheetModal>(null);
   const securitySheetRef = useRef<BottomSheetModal>(null);
+  const appLockSheetRef = useRef<BottomSheetModal>(null);
+
+  // ── App Lock (biometric) preference — available to every role ────────────
+  const [appLockEnabled, setAppLockEnabledState] = useState(false);
+  const [appLockSupported, setAppLockSupported] = useState(false);
+  const [appLockMethod, setAppLockMethod] = useState("device passcode");
+  const [appLockBusy, setAppLockBusy] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    void (async () => {
+      const [enabled, supported, label] = await Promise.all([
+        isAppLockEnabled(),
+        isDeviceSecurityAvailable(),
+        getDeviceSecurityLabel(),
+      ]);
+
+      if (!active) return;
+
+      setAppLockEnabledState(enabled);
+      setAppLockSupported(supported);
+      setAppLockMethod(label);
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleToggleAppLock = async (next: boolean): Promise<void> => {
+    if (appLockBusy) return;
+    setAppLockBusy(true);
+
+    try {
+      // Turning it ON must be proven — otherwise someone holding the phone
+      // could enable a lock the owner can't pass. Turning it OFF is also
+      // verified so a thief can't silently disable it.
+      const confirmed = await promptDeviceAuthentication(
+        next ? "Confirm to turn on App Lock" : "Confirm to turn off App Lock"
+      );
+
+      if (!confirmed) {
+        showToast({
+          type: "error",
+          message: "Verification failed. App Lock was not changed.",
+        });
+        return;
+      }
+
+      await setAppLockEnabled(next);
+      setAppLockEnabledState(next);
+
+      showToast({
+        type: "success",
+        message: next
+          ? "App Lock is on. You'll verify each time you open the app."
+          : "App Lock is off.",
+      });
+    } finally {
+      setAppLockBusy(false);
+    }
+  };
   const pollingUnitSheetRef = useRef<BottomSheetModal>(null);
   const notificationSheetRef = useRef<BottomSheetModal>(null);
   const observerSheetRef = useRef<BottomSheetModal>(null);
@@ -499,8 +570,23 @@ export default function MeScreen() {
   const birthdaySheetRef = useRef<BottomSheetModal>(null);
   const genderSheetRef = useRef<BottomSheetModal>(null);
 
-  useEffect(() => {
-    if (!profile) return;
+  /*
+   * Re-seed every form when the profile (or notification settings) arrive or
+   * change. Adjusted during render rather than in an effect: React restarts
+   * the render immediately instead of committing, so the sheets never show a
+   * frame of stale/empty values after a refetch.
+   */
+  const [lastFormSeed, setLastFormSeed] = useState<{
+    profile: typeof profile;
+    settings: typeof notificationsQuery.data;
+  }>({ profile: null, settings: undefined });
+
+  if (
+    profile &&
+    (profile !== lastFormSeed.profile ||
+      notificationsQuery.data !== lastFormSeed.settings)
+  ) {
+    setLastFormSeed({ profile, settings: notificationsQuery.data });
 
     setProfileForm(buildProfileForm(profile));
     setPollingUnitForm(buildPollingUnitForm(profile));
@@ -511,7 +597,7 @@ export default function MeScreen() {
     setNotificationSettings((previous) =>
       buildNotificationSettings(profile, notificationsQuery.data ?? previous)
     );
-  }, [notificationsQuery.data, profile]);
+  }
 
   const profileWithDraftPublicName = useMemo(() => {
     if (!profile) return null;
@@ -959,6 +1045,9 @@ export default function MeScreen() {
       case "security":
         securitySheetRef.current?.present();
         return;
+      case "app-lock":
+        appLockSheetRef.current?.present();
+        return;
       case "polling-unit":
         pollingUnitSheetRef.current?.present();
         return;
@@ -1109,6 +1198,17 @@ export default function MeScreen() {
             void handleUpdatePassword();
           }}
           saving={updatePasswordMutation.isPending}
+        />
+
+        <AppLockBottomSheet
+          ref={appLockSheetRef}
+          enabled={appLockEnabled}
+          deviceSupported={appLockSupported}
+          methodLabel={appLockMethod}
+          busy={appLockBusy}
+          onToggle={(next) => {
+            void handleToggleAppLock(next);
+          }}
         />
 
         <PollingUnitBottomSheet

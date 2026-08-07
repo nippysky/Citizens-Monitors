@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Platform,
   Pressable,
@@ -117,18 +117,26 @@ export default function ElectionDetailsScreen() {
     });
   }, [apiElection, params.scope, params.viewer]);
 
-  useEffect(() => {
+  /*
+   * Sync the tab with the route during render — React's documented
+   * alternative to setState-in-effect. Avoids a second commit (and a visible
+   * flash of the previous tab) when navigating with ?tab=...
+   * https://react.dev/learn/you-might-not-need-an-effect
+   */
+  const routeTabKey = `${params.tab}|${params.id}|${params.viewer}|${params.scope}`;
+  const [lastRouteTabKey, setLastRouteTabKey] = useState(routeTabKey);
+
+  if (routeTabKey !== lastRouteTabKey) {
+    setLastRouteTabKey(routeTabKey);
+
     const incoming = normalizeRouteParam(
       params.tab
     ) as ElectionDetailsTabKey | undefined;
 
-    if (incoming && TAB_VALUES.includes(incoming)) {
-      setActiveTab(incoming);
-      return;
-    }
-
-    setActiveTab("overview");
-  }, [params.tab, params.id, params.viewer, params.scope]);
+    setActiveTab(
+      incoming && TAB_VALUES.includes(incoming) ? incoming : "overview"
+    );
+  }
 
   const heroDateLabel = useMemo(() => {
     if (!scenario) return "Election Day";

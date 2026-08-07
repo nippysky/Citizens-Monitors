@@ -1,5 +1,4 @@
 import { Redirect, Stack, router } from "expo-router";
-import { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
 
 import ToastNotification from "@/components/app/ToastNotification";
@@ -11,25 +10,24 @@ import { ElectionsProvider } from "@/context/ElectionsContext";
 import { NetworkProvider } from "@/context/NetworkContext";
 import { OfflineSyncProvider } from "@/context/OfflineSyncContext";
 import { TourProvider } from "@/context/TourContext";
-import { onSessionExpired } from "@/lib/authEvent";
 import { useBiometricGate } from "@/hooks/useBiometricGate";
 
 export default function AppLayout() {
-  const { isAuthenticated, isOnboardingComplete, isRestoring, signOut } =
-    useAuth();
+  const {
+    isAuthenticated,
+    isOnboardingComplete,
+    isRestoring,
+    sessionStatus,
+    signOut,
+  } = useAuth();
 
   const { isLocked, isReady, authenticate } = useBiometricGate(
     isAuthenticated && !isRestoring && isOnboardingComplete
   );
 
-  // Auto-logout when any API call returns 401 (session expired / token revoked).
-  // Registered early so it also catches events queued before mount (see authEvent.ts).
-  useEffect(() => {
-    const unsubscribe = onSessionExpired(() => {
-      void signOut();
-    });
-    return unsubscribe;
-  }, [signOut]);
+  // NOTE: 401s no longer bubble up here. The API layer silently refreshes the
+  // access token and replays the request; only a REJECTED refresh ends the
+  // session, which AuthContext handles via onSessionInvalidated.
 
   // Wait for SecureStore restore to complete before making any auth routing
   // decisions.  Without this guard, the component renders with isAuthenticated:
@@ -37,6 +35,12 @@ export default function AppLayout() {
   // welcome screen — causing a flash or a stuck skeleton on every cold open.
   if (isRestoring) {
     return null;
+  }
+
+  // Session couldn't be renewed (offline) — offer a retry instead of the
+  // welcome screen, so the user doesn't lose their session to a bad signal.
+  if (sessionStatus === "locked") {
+    return <Redirect href="/(public)/unlock" />;
   }
 
   if (!isAuthenticated) {

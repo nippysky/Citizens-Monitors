@@ -22,12 +22,11 @@ import ScreenHeader from "@/components/elections/ScreenHeader";
 import CommencementBottomSheet from "@/components/reporting/CommencementBottomSheet";
 import TourTarget from "@/components/tour/TourTarget";
 import AppText from "@/components/ui/AppText";
-import { useToastContext } from "@/components/feedback/ToastProvider";
-import FloatingActionButton from "@/components/ui/FloatingActionButton";
 import { Paths } from "@/constants/paths";
 import { useElections } from "@/context/ElectionsContext";
 import { useMyProfileQuery } from "@/hooks/api/useMyProfileQuery";
 import {
+  isCommencementContextComplete,
   buildInitialIncidentDraft,
   buildInitialResultDraft,
   saveIncidentDraft,
@@ -52,6 +51,7 @@ import {
 import { useActiveElectionsQuery } from "@/hooks/api/useElectionQueries";
 import NoElection from "@/svgs/app/NoElection";
 import { Theme } from "@/theme";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 
 const FIXED_HEADLINE = "Discover your polling unit elections";
 
@@ -116,33 +116,9 @@ function EmptyElectionsState({
 export default function ElectionsScreen() {
   const filterSheetRef = useRef<BottomSheetModal>(null);
   const commencementRef = useRef<BottomSheetModal>(null);
-  const { showToast } = useToastContext();
 
-  // Collapse the FAB to icon-only while the list is scrolling (same behaviour
-  // as the Pulse Post button).
-  const [scrolling, setScrolling] = useState(false);
-  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleListScroll = () => {
-    setScrolling(true);
-
-    if (scrollTimerRef.current) {
-      clearTimeout(scrollTimerRef.current);
-    }
-
-    scrollTimerRef.current = setTimeout(() => setScrolling(false), 300);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (scrollTimerRef.current) {
-        clearTimeout(scrollTimerRef.current);
-      }
-    };
-  }, []);
-
-  const badgeOpacity = useRef(new Animated.Value(0)).current;
-  const badgeTranslateY = useRef(new Animated.Value(-6)).current;
+  const badgeOpacity = useAnimatedValue(0);
+  const badgeTranslateY = useAnimatedValue(-6);
 
   const {
     filters,
@@ -170,41 +146,46 @@ export default function ElectionsScreen() {
     return sortElectionsForDisplay(items);
   }, [electionsQuery.data]);
 
-  // Live detection must NOT depend on the user's current status filter —
-  // otherwise filtering by "Concluded" would hide a genuinely live election
-  // from the submit flow. Query live elections directly (same query the
-  // LiveNoticeProvider uses, so it's already cached).
-  const liveElectionsQuery = useActiveElectionsQuery("live");
+  // The election a card's Submit button was tapped for. Every downstream
+  // action (sheet, drafts, navigation params) reads from THIS, so a report
+  // always lands against the exact election the user chose — never a
+  // "first live election" guess.
+  const [selectedElection, setSelectedElection] = useState<ElectionItem | null>(
+    null
+  );
 
-  const firstLiveElection = useMemo(() => {
-    const liveItems =
-      liveElectionsQuery.data?.elections.map(mapApiElectionToItem) ?? [];
-
-    return (
-      sortElectionsForDisplay(liveItems).find((e) => e.status === "live") ??
-      null
-    );
-  }, [liveElectionsQuery.data]);
-
-  // Polling unit ALWAYS comes from the user's profile — same shared builder
-  // the LiveNotice banner uses, so the commencement sheet shows identical
-  // location details from every entry point.
+  // Polling unit ALWAYS comes from the user's profile (every user has exactly
+  // one polling unit regardless of election) — same shared builder used by
+  // the LiveNotice banner and the home card.
   const commencementContext = useMemo(
     () =>
-      firstLiveElection
+      selectedElection
         ? buildProfileCommencementContext({
             electionId:
-              firstLiveElection.activeElectionId || firstLiveElection.id,
-            electionTitle: firstLiveElection.title,
+              selectedElection.activeElectionId || selectedElection.id,
+            electionTitle: selectedElection.title,
             profile: profileLike,
           })
         : null,
-    [firstLiveElection, profileLike]
+    [selectedElection, profileLike]
   );
 
+  const handleOpenSubmitSheet = (item: ElectionItem) => {
+    // A report is worthless without a real election id — refuse rather than
+    // opening a flow that would submit against nothing.
+    if (!(item.activeElectionId || item.id)) return;
+
+    setSelectedElection(item);
+    // Present on the next frame so the sheet renders with the new context.
+    requestAnimationFrame(() => commencementRef.current?.present());
+  };
+
   const handleProceedResult = async (time: string) => {
-    if (!firstLiveElection || !commencementContext) return;
-    const electionId = firstLiveElection.activeElectionId || firstLiveElection.id;
+    if (!selectedElection || !isCommencementContextComplete(commencementContext)) {
+      return;
+    }
+    const electionId =
+      selectedElection.activeElectionId || selectedElection.id;
 
     // Persist the initial draft BEFORE navigating — the reporting screens
     // hydrate from this draft (same as the LiveNotice flow).
@@ -216,26 +197,29 @@ export default function ElectionsScreen() {
       params: {
         electionId,
         activeElectionId: electionId,
-        electionTitle: firstLiveElection.title,
+        electionTitle: selectedElection.title,
         votingStartTime: time,
         pollingUnitName: commencementContext.pollingUnitName,
         pollingUnitCode: commencementContext.pollingUnitCode,
         ward: commencementContext.ward,
         lga: commencementContext.lga,
         state: commencementContext.state,
-        location: firstLiveElection.location,
+        location: selectedElection.location,
       },
     });
   };
 
-  const handleProceedIncident = async () => {
-    if (!firstLiveElection || !commencementContext) return;
+  const handleProceedIncident = async (time: string) => {
+    if (!selectedElection || !isCommencementContextComplete(commencementContext)) {
+      return;
+    }
 
     // The live recorder and its review screen read the persisted incident
     // draft. Without saving it first, the review screen finds no draft and
     // hangs on "Preparing report..." forever.
     const draft = buildInitialIncidentDraft(commencementContext);
-    await saveIncidentDraft(draft);
+    // Carry the observed time into the draft for THIS election.
+    await saveIncidentDraft({ ...draft, incidentTime: time });
 
     // Go to the incident FORM (same as the LiveNotice flow) — the user picks
     // the incident type there, then "Record Live" opens the camera. Jumping
@@ -246,6 +230,7 @@ export default function ElectionsScreen() {
       params: {
         electionId: commencementContext.electionId,
         electionTitle: commencementContext.electionTitle,
+        incidentTime: time,
         pollingUnitName: commencementContext.pollingUnitName,
         pollingUnitCode: commencementContext.pollingUnitCode,
         ward: commencementContext.ward,
@@ -416,8 +401,12 @@ export default function ElectionsScreen() {
         <ElectionCard
           item={item}
           onLivePress={() => handleOpenCollation(item)}
-          onConcludedPress={() => handleOpenDetails(item)}
+          // Concluded elections are read-only: their value is the collation
+          // result, so send the user straight there.
+          onConcludedPress={() => handleOpenCollation(item)}
           onUpcomingPress={() => handleOpenDetails(item)}
+          canSubmit={canSubmit}
+          onSubmitPress={() => handleOpenSubmitSheet(item)}
         />
       </View>
     );
@@ -439,8 +428,6 @@ export default function ElectionsScreen() {
           ListHeaderComponent={renderHeader}
           ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
           showsVerticalScrollIndicator={false}
-          onScroll={handleListScroll}
-          scrollEventThrottle={16}
           refreshControl={
             <RefreshControl
               refreshing={electionsQuery.isRefetching}
@@ -489,28 +476,6 @@ export default function ElectionsScreen() {
         />
       </View>
 
-      {canSubmit ? (
-        <FloatingActionButton
-          onPress={() => {
-            if (firstLiveElection) {
-              commencementRef.current?.present();
-            } else {
-              showToast({
-                type: "error",
-                message:
-                  "No live election right now. You can submit reports once an election goes live.",
-              });
-            }
-          }}
-          collapsed={scrolling}
-          label="Submit Result"
-          expandedWidth={172}
-          icon={
-            <Ionicons name="document-text-outline" size={20} color="#FFFFFF" />
-          }
-          accessibilityLabel="Submit election result"
-        />
-      ) : null}
 
       <ElectionFiltersBottomSheet
         sheetRef={filterSheetRef}

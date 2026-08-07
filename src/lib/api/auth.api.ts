@@ -66,7 +66,18 @@ export type SignInPayload = {
 export type SignInResponse = {
   message: string;
   token: string;
+  /** Long-lived credential used to mint new access tokens silently. */
+  refreshToken?: string;
+  /** Access-token lifetime in seconds (backend currently 3600). */
+  expiresIn?: number;
   user: MobileUser;
+};
+
+export type RefreshTokenResponse = {
+  message: string;
+  token: string;
+  refreshToken: string;
+  expiresIn: number;
 };
 
 export type VerifyEmailPayload = {
@@ -220,6 +231,23 @@ export async function signInUser(
       password: payload.password,
       ...devicePayload,
     },
+  });
+}
+
+/**
+ * Exchange a refresh token for a fresh access token.
+ *
+ * `auth: false` on purpose — the expired access token must NOT be attached,
+ * and a 401 here must never re-enter the session-expired handler (that would
+ * recurse while we're already trying to recover).
+ */
+export async function refreshSession(
+  refreshToken: string
+): Promise<RefreshTokenResponse> {
+  return apiRequest<RefreshTokenResponse>("/auth/refresh", {
+    method: "POST",
+    auth: false,
+    body: { refreshToken },
   });
 }
 
@@ -378,6 +406,9 @@ export type GoogleAuthPayload = {
 export type GoogleAuthResponse = {
   message: string;
   token: string;
+  /** Long-lived credential used to renew the access token silently. */
+  refreshToken?: string;
+  expiresIn?: number;
   user: MobileUser;
   /**
    * True when this Google account had no existing user OR the existing user

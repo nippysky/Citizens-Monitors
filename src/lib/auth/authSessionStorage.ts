@@ -3,12 +3,18 @@ import * as SecureStore from "expo-secure-store";
 import { AuthUser } from "@/types/auth";
 
 const AUTH_TOKEN_KEY = "citizen_monitors.auth.token";
+const AUTH_REFRESH_TOKEN_KEY = "citizen_monitors.auth.refresh_token";
 const AUTH_USER_KEY = "citizen_monitors.auth.user";
 const AUTH_ONBOARDING_COMPLETE_KEY =
   "citizen_monitors.auth.onboarding_complete";
 
 export type StoredAuthSession = {
   token: string | null;
+  /**
+   * Long-lived credential that mints fresh access tokens. This — not the
+   * 1-hour access token — is what keeps a user signed in across app restarts.
+   */
+  refreshToken: string | null;
   user: AuthUser | null;
   isOnboardingComplete: boolean;
 };
@@ -50,6 +56,12 @@ export async function saveAuthSession(session: StoredAuthSession): Promise<void>
     writes.push(safeDeleteItem(AUTH_TOKEN_KEY));
   }
 
+  if (session.refreshToken) {
+    writes.push(safeSetItem(AUTH_REFRESH_TOKEN_KEY, session.refreshToken));
+  } else {
+    writes.push(safeDeleteItem(AUTH_REFRESH_TOKEN_KEY));
+  }
+
   if (session.user) {
     writes.push(safeSetItem(AUTH_USER_KEY, JSON.stringify(session.user)));
   } else {
@@ -67,24 +79,42 @@ export async function saveAuthSession(session: StoredAuthSession): Promise<void>
 }
 
 export async function restoreAuthSession(): Promise<StoredAuthSession> {
-  const [token, rawUser, rawOnboardingComplete] = await Promise.all([
-    safeGetItem(AUTH_TOKEN_KEY),
-    safeGetItem(AUTH_USER_KEY),
-    safeGetItem(AUTH_ONBOARDING_COMPLETE_KEY),
-  ]);
+  const [token, refreshToken, rawUser, rawOnboardingComplete] =
+    await Promise.all([
+      safeGetItem(AUTH_TOKEN_KEY),
+      safeGetItem(AUTH_REFRESH_TOKEN_KEY),
+      safeGetItem(AUTH_USER_KEY),
+      safeGetItem(AUTH_ONBOARDING_COMPLETE_KEY),
+    ]);
 
   const user = parseStoredUser(rawUser);
 
   return {
     token,
+    refreshToken,
     user,
     isOnboardingComplete: rawOnboardingComplete === "true",
   };
 }
 
+/** Persist only the rotated tokens, leaving user/onboarding untouched. */
+export async function saveRotatedTokens(params: {
+  token: string;
+  refreshToken: string | null;
+}): Promise<void> {
+  const writes: Promise<void>[] = [safeSetItem(AUTH_TOKEN_KEY, params.token)];
+
+  if (params.refreshToken) {
+    writes.push(safeSetItem(AUTH_REFRESH_TOKEN_KEY, params.refreshToken));
+  }
+
+  await Promise.all(writes);
+}
+
 export async function clearAuthSession(): Promise<void> {
   await Promise.all([
     safeDeleteItem(AUTH_TOKEN_KEY),
+    safeDeleteItem(AUTH_REFRESH_TOKEN_KEY),
     safeDeleteItem(AUTH_USER_KEY),
     safeDeleteItem(AUTH_ONBOARDING_COMPLETE_KEY),
   ]);

@@ -43,8 +43,8 @@ import {
   clearResultDraft,
   collectResultDraftMediaUris,
   CommencementContext,
-  DEV_COMMENCEMENT_CONTEXT,
   ElectionResultDraft,
+  getResultDraft,
   saveIncidentDraft,
   saveResultDraft,
   validateElectionResult,
@@ -436,21 +436,15 @@ function resolveCommencementContext(input: {
   lga?: string;
   state?: string;
 }): CommencementContext {
-  return {
-    electionId: input.electionId?.trim() || DEV_COMMENCEMENT_CONTEXT.electionId,
-    electionTitle:
-      input.electionTitle?.trim() || DEV_COMMENCEMENT_CONTEXT.electionTitle,
-    pollingUnitName:
-      input.pollingUnitName?.trim() ||
-      DEV_COMMENCEMENT_CONTEXT.pollingUnitName,
-    pollingUnitCode:
-      input.pollingUnitCode?.trim() ||
-      DEV_COMMENCEMENT_CONTEXT.pollingUnitCode,
-    ward: input.ward?.trim() || DEV_COMMENCEMENT_CONTEXT.ward,
-    lga: input.lga?.trim() || DEV_COMMENCEMENT_CONTEXT.lga,
-    state: input.state?.trim() || DEV_COMMENCEMENT_CONTEXT.state,
-    uploadLocation: DEV_COMMENCEMENT_CONTEXT.uploadLocation ?? null,
-  };
+  return buildCommencementContext({
+    electionId: input.electionId,
+    electionTitle: input.electionTitle,
+    pollingUnitName: input.pollingUnitName,
+    pollingUnitCode: input.pollingUnitCode,
+    ward: input.ward,
+    lga: input.lga,
+    state: input.state,
+  });
 }
 
 function normalizePartyList(draft: ElectionResultDraft): ElectionResultDraft {
@@ -514,18 +508,27 @@ export default function SubmitElectionReportScreen() {
     let mounted = true;
 
     const hydrateDraft = async () => {
+      // Every entry point persists a draft carrying the chosen election's
+      // context BEFORE navigating here, so that draft — not hardcoded dev
+      // data — is the fallback when a route param is missing. Reading it
+      // first is what guarantees the report lands against the election the
+      // user actually tapped.
+      const stored = await getResultDraft();
+
       const ctx = resolveCommencementContext({
-        electionId: params.electionId,
-        electionTitle: params.electionTitle,
-        pollingUnitName: params.pollingUnitName,
-        pollingUnitCode: params.pollingUnitCode,
-        ward: params.ward,
-        lga: params.lga,
-        state: params.state,
+        electionId: params.electionId ?? stored?.electionId,
+        electionTitle: params.electionTitle ?? stored?.electionTitle,
+        pollingUnitName: params.pollingUnitName ?? stored?.pollingUnitName,
+        pollingUnitCode: params.pollingUnitCode ?? stored?.pollingUnitCode,
+        ward: params.ward ?? stored?.ward,
+        lga: params.lga ?? stored?.lga,
+        state: params.state ?? stored?.state,
       });
 
-      const freshDraft = () =>
-        buildInitialResultDraft(ctx, params.votingStartTime?.trim() || "");
+      const votingStartTime =
+        params.votingStartTime?.trim() || stored?.votingStartTime?.trim() || "";
+
+      const freshDraft = () => buildInitialResultDraft(ctx, votingStartTime);
 
       try {
         // ALWAYS start fresh on entry. Backing out of this screen must leave
@@ -806,6 +809,12 @@ export default function SubmitElectionReportScreen() {
   // present, so an empty/partial form can never be submitted.
   const missingRequirement = ((): string | null => {
     if (!draft) return "Preparing form...";
+
+    // Hard stop: without a real election id the report can't be attributed to
+    // anything. Previously a dev fixture id silently filled this gap.
+    if (!draft.electionId?.trim()) {
+      return "This report isn't linked to an election. Go back and start from the election card.";
+    }
 
     if (!draft.accreditedVoters.trim()) return "Enter the accredited voters figure.";
     if (!draft.usedBallotPapers.trim()) return "Enter the used ballot papers figure.";

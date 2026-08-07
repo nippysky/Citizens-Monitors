@@ -1,7 +1,7 @@
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Image,
@@ -34,6 +34,8 @@ import {
 } from "@/lib/api/reporting.api";
 import {
   abandonIncidentDraft,
+  buildCommencementContext,
+  buildInitialIncidentDraft,
   clearIncidentDraft,
   getIncidentDraft,
   INCIDENT_OPTIONS,
@@ -341,6 +343,18 @@ function EvidenceSection({
 }
 
 export default function ReportIncidentScreen() {
+  // Election context handed over by whichever card/banner started this flow.
+  const params = useLocalSearchParams<{
+    electionId?: string;
+    electionTitle?: string;
+    pollingUnitName?: string;
+    pollingUnitCode?: string;
+    ward?: string;
+    lga?: string;
+    state?: string;
+    incidentTime?: string;
+  }>();
+
   const queryClient = useQueryClient();
   const { isConnected, isInternetReachable } = useNetwork();
   const { enqueue } = useOfflineSync();
@@ -378,13 +392,61 @@ export default function ReportIncidentScreen() {
     };
   }, [width]);
 
+  // Route params are the authoritative election context; the stored draft is
+  // the resume path. Reading BOTH means the screen still knows which election
+  // it belongs to even if storage was cleared between screens, instead of
+  // rendering an empty shell forever.
   useEffect(() => {
-    void getIncidentDraft().then((data) => {
-      if (data) {
-        setDraft(data);
-      }
+    let mounted = true;
+
+    void getIncidentDraft().then((stored) => {
+      if (!mounted) return;
+
+      const ctx = buildCommencementContext({
+        electionId: params.electionId ?? stored?.electionId,
+        electionTitle: params.electionTitle ?? stored?.electionTitle,
+        pollingUnitName: params.pollingUnitName ?? stored?.pollingUnitName,
+        pollingUnitCode: params.pollingUnitCode ?? stored?.pollingUnitCode,
+        ward: params.ward ?? stored?.ward,
+        lga: params.lga ?? stored?.lga,
+        state: params.state ?? stored?.state,
+      });
+
+      // Prefer the stored draft (keeps any in-progress edits), but repair its
+      // election context from params when they disagree — params always
+      // reflect the card the user just tapped.
+      const base = stored ?? buildInitialIncidentDraft(ctx);
+
+      const next: IncidentDraft = {
+        ...base,
+        electionId: ctx.electionId || base.electionId,
+        electionTitle: ctx.electionTitle || base.electionTitle,
+        pollingUnitName: ctx.pollingUnitName || base.pollingUnitName,
+        pollingUnitCode: ctx.pollingUnitCode || base.pollingUnitCode,
+        ward: ctx.ward || base.ward,
+        lga: ctx.lga || base.lga,
+        state: ctx.state || base.state,
+        incidentTime:
+          params.incidentTime?.trim() || base.incidentTime || "",
+      };
+
+      setDraft(next);
+      void saveIncidentDraft(next);
     });
-  }, []);
+
+    return () => {
+      mounted = false;
+    };
+  }, [
+    params.electionId,
+    params.electionTitle,
+    params.pollingUnitName,
+    params.pollingUnitCode,
+    params.ward,
+    params.lga,
+    params.state,
+    params.incidentTime,
+  ]);
 
   // Deliberate exit wipes the draft + its staged media (fresh screen next
   // time, no storage bloat). Pushing forward to the live recorder / review
@@ -617,6 +679,15 @@ export default function ReportIncidentScreen() {
   };
 
   const handleSubmit = async () => {
+    if (!draft?.electionId?.trim()) {
+      showToast({
+        type: "error",
+        message:
+          "This report isn't linked to an election. Go back and start from the election card.",
+      });
+      return;
+    }
+
     if (!draft) return;
 
     if (!draft.incidentType) {

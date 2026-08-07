@@ -41,6 +41,16 @@ import PresidentialElection from "@/svgs/app/PresidentialElection";
 import SenatorElection from "@/svgs/app/SenatorElection";
 import NoElection from "@/svgs/app/NoElection";
 
+/**
+ * Returns an ELEMENT rather than a component type. Binding a component to a
+ * capitalised local during render gives it a fresh identity each pass, so
+ * React remounts the subtree (react-hooks/static-components).
+ */
+function renderVaultIcon(electionType: string, size: number) {
+  const Icon = getElectionIcon(electionType);
+  return <Icon width={size} height={size} />;
+}
+
 function getElectionIcon(type: string) {
   const normalized = type.toLowerCase();
 
@@ -260,14 +270,13 @@ function SubmissionCard({
     const electionName = getVaultElectionName(result.election);
     const electionLocation = getVaultElectionLocation(result.election);
     const electionType = getVaultElectionType(result.election);
-    const Icon = getElectionIcon(electionType);
     const evidenceCount = getResultEvidenceCount(result);
 
     return (
       <Pressable onPress={() => onOpen(item)} style={styles.submissionCard}>
         <View style={styles.submissionHeader}>
           <View style={styles.submissionIconShell}>
-            <Icon width={34} height={34} />
+            {renderVaultIcon(electionType, 34)}
           </View>
 
           <View style={styles.submissionHeaderText}>
@@ -349,14 +358,13 @@ function SubmissionCard({
   const electionName = getVaultElectionName(incident.election);
   const electionLocation = getVaultElectionLocation(incident.election);
   const electionType = getVaultElectionType(incident.election);
-  const Icon = getElectionIcon(electionType);
   const evidenceCount = getIncidentEvidenceCount(incident);
 
   return (
     <Pressable onPress={() => onOpen(item)} style={styles.submissionCard}>
       <View style={styles.submissionHeader}>
         <View style={styles.submissionIconShell}>
-          <Icon width={34} height={34} />
+          {renderVaultIcon(electionType, 34)}
         </View>
 
         <View style={styles.submissionHeaderText}>

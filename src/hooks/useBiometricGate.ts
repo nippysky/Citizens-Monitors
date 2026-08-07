@@ -1,192 +1,99 @@
-// ─── src/hooks/useBiometricGate.ts ────────────────────────────────────────────
+// ─── src/hooks/useBiometricGate.ts ───────────────────────────────────────────
 //
-// Architecture
-// ───────────
-// Three SecureStore keys drive all behaviour:
+// Biometric App Lock.
 //
-//   biometric_lock_enabled   "1" if the device should require biometrics on
-//                            every cold open / foreground resume.
-//                            Written the first time a fresh session sees
-//                            capable hardware.
+// This is PURELY a privacy gate, and it is OFF unless the user turns it on in
+// Settings → App Lock. It has nothing to do with staying signed in: the
+// refresh token handles that silently (see lib/auth/sessionRefresh.ts).
 //
-//   biometric_skip_once      "1" for exactly one gate check after a fresh
-//                            email/password or Google login.  Written by
-//                            markFreshBiometricLogin() (called from sign-in
-//                            and onboarding screens before signIn()).
-//                            Deleted immediately on first gate read.
+//   App Lock OFF (default) → open the app, you're straight in.
+//   App Lock ON            → Face ID / fingerprint / PIN before content shows,
+//                            on cold start and after a real absence.
 //
-// Background grace period
-// ──────────────────────
-// Coming back from background re-locks the app — but only if the device was
-// backgrounded for > BACKGROUND_GRACE_MS.  Switching apps briefly (< 30 s)
-// does NOT trigger a new lock.  This prevents constant prompts while, for
-// example, copying a password from another app.
-//
-// ─────────────────────────────────────────────────────────────────────────────
-import * as Device from "expo-device";
-import * as LocalAuthentication from "expo-local-authentication";
+// A short grace period means hopping to another app to copy a code doesn't
+// force a re-unlock.
+
 import * as SecureStore from "expo-secure-store";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, AppStateStatus, Platform } from "react-native";
+import { AppState, AppStateStatus } from "react-native";
 
-// ── Constants ────────────────────────────────────────────────────────────────
+import {
+  isAppLockEnabled,
+  isDeviceSecurityAvailable,
+  promptDeviceAuthentication,
+} from "@/lib/auth/appLockPreference";
 
-const BIOMETRIC_ENABLED_KEY = "biometric_lock_enabled";
 const SKIP_ONCE_KEY = "biometric_skip_once";
-const BACKGROUND_GRACE_MS = 30_000; // 30 seconds
-
-// ── Module-level security cache ──────────────────────────────────────────────
-// Only POSITIVE results are cached: if the user enrolls a PIN/biometric while
-// the app is running, the next check picks it up instead of staying stale.
-let _securityCache: boolean | null = null;
+const BACKGROUND_GRACE_MS = 30_000;
 
 /**
- * True when the device has ANY security the OS can verify:
- * biometrics (Face ID / Touch ID / fingerprint / face unlock) OR a device
- * credential (PIN, pattern, password / passcode).
- *
- * This intentionally does NOT require biometric enrollment — the product
- * requirement is "lock behind the user's phone security", and
- * authenticateAsync({ disableDeviceFallback: false }) already falls back to
- * the device PIN/pattern/passcode on both platforms.
- */
-async function isDeviceSecurityAvailable(): Promise<boolean> {
-  if (_securityCache === true) return true;
-  try {
-    const level = await LocalAuthentication.getEnrolledLevelAsync();
-    let available = level !== LocalAuthentication.SecurityLevel.NONE;
-
-    // iOS Simulator quirk: LocalAuthentication falsely reports a passcode
-    // (SECRET) even when none is set, and shows a fake passcode sheet that
-    // accepts any input. On simulators, only trust actual biometric
-    // enrollment (Features → Face ID → Enrolled). Real devices are
-    // unaffected — a real iPhone without a passcode reports NONE.
-    if (
-      available &&
-      Platform.OS === "ios" &&
-      !Device.isDevice &&
-      level === LocalAuthentication.SecurityLevel.SECRET
-    ) {
-      available = false;
-    }
-
-    if (available) {
-      _securityCache = true;
-    }
-
-    return available;
-  } catch {
-    // Fall back to the biometric-only check if the API is unavailable.
-    try {
-      const hasHardware = await LocalAuthentication.hasHardwareAsync();
-      if (!hasHardware) return false;
-
-      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-      if (isEnrolled) {
-        _securityCache = true;
-      }
-      return isEnrolled;
-    } catch {
-      return false;
-    }
-  }
-}
-
-// ── Public helper (call from sign-in / onboarding BEFORE signIn()) ───────────
-
-/**
- * Mark that the user just authenticated with their password so the biometric
- * gate skips once when it next activates (immediately after login or after
- * onboarding completes).
+ * Suppress the very next gate check — used right after an explicit login, so
+ * a user who just proved who they are isn't immediately challenged again.
  */
 export async function markFreshBiometricLogin(): Promise<void> {
   try {
     await SecureStore.setItemAsync(SKIP_ONCE_KEY, "1");
   } catch {
-    // Non-fatal — the worst case is a spurious lock screen after login.
+    // Worst case: one extra prompt.
   }
 }
 
-// ── Hook ─────────────────────────────────────────────────────────────────────
+async function consumeSkipOnce(): Promise<boolean> {
+  try {
+    const value = await SecureStore.getItemAsync(SKIP_ONCE_KEY);
+    if (value !== "1") return false;
+
+    await SecureStore.deleteItemAsync(SKIP_ONCE_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export function useBiometricGate(isAuthenticated: boolean) {
   const [isLocked, setIsLocked] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
-  // Guards against concurrent authenticate() calls (double-tap).
   const isAuthenticatingRef = useRef(false);
-
-  // Tracks when the app was sent to background so we can apply the grace period.
   const backgroundedAtRef = useRef<number | null>(null);
-
-  // Tracks the raw AppState value so we can detect direction of change.
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
-  // ── Initial gate ────────────────────────────────────────────────────────────
+  // ── Initial gate ──────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!isAuthenticated) {
-      setIsLocked(false);
-      setIsReady(true);
-      return;
-    }
-
     let cancelled = false;
+
+    if (!isAuthenticated) {
+      // Deferred to a microtask so this isn't a synchronous setState inside
+      // the effect body (which would trigger a cascading render).
+      void Promise.resolve().then(() => {
+        if (cancelled) return;
+        setIsLocked(false);
+        setIsReady(true);
+      });
+
+      return () => {
+        cancelled = true;
+      };
+    }
 
     async function runGate() {
       try {
-        // ── 1. Fresh-login bypass ──────────────────────────────────────────
-        const skipOnce = await SecureStore.getItemAsync(SKIP_ONCE_KEY);
-        if (skipOnce === "1") {
-          // Clear immediately — it's a one-shot token.
-          try {
-            await SecureStore.deleteItemAsync(SKIP_ONCE_KEY);
-          } catch {
-            // Best-effort delete; ignore if it fails.
-          }
-          if (!cancelled) {
-            setIsLocked(false);
-            setIsReady(true);
-          }
-          return;
-        }
+        const [enabled, available, skipOnce] = await Promise.all([
+          isAppLockEnabled(),
+          isDeviceSecurityAvailable(),
+          consumeSkipOnce(),
+        ]);
 
-        // ── 2. Check whether the device-security lock is armed ─────────────
-        const enabled = await SecureStore.getItemAsync(BIOMETRIC_ENABLED_KEY);
+        // Locked only when the user asked for it AND the device can enforce
+        // it AND this isn't the moment right after a login.
+        const shouldLock = enabled && available && !skipOnce;
 
-        if (enabled !== "1") {
-          // First gate check for an existing session — arm the lock if the
-          // device has any security (biometrics OR PIN/pattern/password) and
-          // lock right away. Fresh logins never reach this point: they are
-          // let through by the skip-once token in step 1.
-          const available = await isDeviceSecurityAvailable();
-          if (available) {
-            await SecureStore.setItemAsync(BIOMETRIC_ENABLED_KEY, "1");
-          }
-          if (!cancelled) {
-            setIsLocked(available);
-            setIsReady(true);
-          }
-          return;
-        }
-
-        // ── 3. Verify hardware is still enrolled (user may have removed it) ─
-        const available = await isDeviceSecurityAvailable();
-        if (!available) {
-          if (!cancelled) {
-            setIsLocked(false);
-            setIsReady(true);
-          }
-          return;
-        }
-
-        // ── 4. Show the lock screen ────────────────────────────────────────
         if (!cancelled) {
-          setIsLocked(true);
+          setIsLocked(shouldLock);
           setIsReady(true);
         }
       } catch {
-        // If SecureStore or LocalAuthentication throws, fail open so the user
-        // is never locked out of the app.
+        // Fail OPEN — never trap someone out of their own app.
         if (!cancelled) {
           setIsLocked(false);
           setIsReady(true);
@@ -201,17 +108,16 @@ export function useBiometricGate(isAuthenticated: boolean) {
     };
   }, [isAuthenticated]);
 
-  // ── Background → foreground re-lock ────────────────────────────────────────
+  // ── Re-lock after a genuine absence ───────────────────────────────────────
   useEffect(() => {
     if (!isAuthenticated) return;
 
     const subscription = AppState.addEventListener(
       "change",
       (nextState: AppStateStatus) => {
-        const prev = appStateRef.current;
+        const previous = appStateRef.current;
         appStateRef.current = nextState;
 
-        // Record when we go to background so we can measure elapsed time.
         if (nextState === "background" || nextState === "inactive") {
           if (backgroundedAtRef.current === null) {
             backgroundedAtRef.current = Date.now();
@@ -219,32 +125,30 @@ export function useBiometricGate(isAuthenticated: boolean) {
           return;
         }
 
-        // Returning to foreground.
-        if (nextState === "active" && (prev === "background" || prev === "inactive")) {
+        if (
+          nextState === "active" &&
+          (previous === "background" || previous === "inactive")
+        ) {
           const elapsed = backgroundedAtRef.current
             ? Date.now() - backgroundedAtRef.current
             : Infinity;
+
           backgroundedAtRef.current = null;
 
-          // Grace period — don't relock for brief app switches.
           if (elapsed < BACKGROUND_GRACE_MS) return;
 
-          // Re-lock only if biometrics are still enabled + available.
-          async function maybeRelock() {
+          void (async () => {
             try {
-              const enabled = await SecureStore.getItemAsync(BIOMETRIC_ENABLED_KEY);
-              if (enabled !== "1") return;
+              const [enabled, available] = await Promise.all([
+                isAppLockEnabled(),
+                isDeviceSecurityAvailable(),
+              ]);
 
-              const available = await isDeviceSecurityAvailable();
-              if (!available) return;
-
-              setIsLocked(true);
+              if (enabled && available) setIsLocked(true);
             } catch {
               // Ignore — fail open.
             }
-          }
-
-          void maybeRelock();
+          })();
         }
       }
     );
@@ -252,33 +156,18 @@ export function useBiometricGate(isAuthenticated: boolean) {
     return () => subscription.remove();
   }, [isAuthenticated]);
 
-  // ── authenticate ────────────────────────────────────────────────────────────
-  /**
-   * Triggers the OS biometric prompt.  Returns true on success.
-   * Guards against concurrent calls (double-tap protection).
-   */
   const authenticate = useCallback(async (): Promise<boolean> => {
     if (isAuthenticatingRef.current) return false;
     isAuthenticatingRef.current = true;
 
     try {
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: "Verify your identity to continue",
-        // iOS: label of the fallback button in the Face ID dialog.
-        // Android: ignored (uses its own system UI).
-        fallbackLabel: "Use Passcode",
-        // Keep device fallback enabled so users with locked biometrics
-        // can still enter their PIN / passcode.
-        disableDeviceFallback: false,
-      });
+      const success = await promptDeviceAuthentication(
+        "Unlock Citizen Monitors"
+      );
 
-      if (result.success) {
-        setIsLocked(false);
-      }
+      if (success) setIsLocked(false);
 
-      return result.success;
-    } catch {
-      return false;
+      return success;
     } finally {
       isAuthenticatingRef.current = false;
     }

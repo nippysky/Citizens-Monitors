@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import {
   Animated,
   Easing,
@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AppText from "@/components/ui/AppText";
 import { Theme } from "@/theme";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 
 export type ToastType = "success" | "error";
 
@@ -28,8 +29,8 @@ export default function GlobalToast({
 }: Props) {
   const insets = useSafeAreaInsets();
 
-  const translateY = useRef(new Animated.Value(-20)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useAnimatedValue(-20);
+  const opacity = useAnimatedValue(0);
 
   useEffect(() => {
     if (!visible) return;

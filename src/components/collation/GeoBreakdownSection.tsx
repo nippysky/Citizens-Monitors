@@ -57,12 +57,18 @@ export default function GeoBreakdownSection({ collation }: Props) {
 
   return (
     <View style={styles.wrap}>
-      <AppText style={styles.title}>Geo Election Result Breakdown by LGA</AppText>
+      {/* Grouping level comes from the API (state for national elections,
+          LGA for state-level ones) so the heading always matches the data. */}
+      <AppText style={styles.title}>
+        Geo Election Result Breakdown by {collation.geoGroupLabel}
+      </AppText>
       <AppText style={styles.subtitle}>
         Captured from real reports of this election from{" "}
-        {collation.resultsUploaded} results and {collation.incidentsReported}{" "}
-        incidents reported from {collation.coveredUnits}/{collation.totalUnits}{" "}
-        polling units in {collation.location}.
+        {collation.resultsUploaded.toLocaleString()} results and{" "}
+        {collation.incidentsReported.toLocaleString()} incidents reported from{" "}
+        {collation.coveredUnits.toLocaleString()}/
+        {collation.totalUnits.toLocaleString()} polling units in{" "}
+        {collation.geoScopeLabel}.
       </AppText>
 
       {empty ? (
@@ -85,12 +91,14 @@ export default function GeoBreakdownSection({ collation }: Props) {
                 <View style={styles.rowTop}>
                   <AppText style={styles.cardTitle}>{item.name}</AppText>
                   <AppText style={styles.cardMeta}>
-                    {item.reports} reports · {item.incidents} incidents
+                    {item.reports.toLocaleString()} results ·{" "}
+                    {item.incidents.toLocaleString()} incidents
                   </AppText>
                 </View>
 
                 <AppText style={styles.coverageText}>
-                  {item.coveredUnits}/{item.totalUnits} Polling Units
+                  {item.coveredUnits.toLocaleString()}/
+                  {item.totalUnits.toLocaleString()} Polling Units
                 </AppText>
 
                 <View style={styles.stackedBar}>
@@ -122,7 +130,7 @@ export default function GeoBreakdownSection({ collation }: Props) {
                     {formatCompactNumber(item.totalVotes)} Votes
                   </AppText>
                   <AppText style={styles.percentTotal}>
-                    {item.percentOfTotalVotes}% of total
+                    {item.percentOfTotalVotes}% of total votes
                   </AppText>
                 </View>
 

@@ -41,6 +41,7 @@ export type MeUser = {
 export type MeMenuItemId =
   | "personal-profile"
   | "security"
+  | "app-lock"
   | "polling-unit"
   | "upgrade-user"
   | "pvc-verification"
@@ -151,6 +152,12 @@ export function getMeAccountItems(user: MeUser): MeMenuItem[] {
       id: "security",
       title: "Security",
       subtitle: "Set new login password",
+      icon: icon(Security),
+    },
+    {
+      id: "app-lock",
+      title: "App Lock",
+      subtitle: "Use biometrics or your PIN to open the app",
       icon: icon(Security),
     },
     {

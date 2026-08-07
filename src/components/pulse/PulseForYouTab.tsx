@@ -172,20 +172,26 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
   // false = first visit → show card.
   const [hasSeenWelcome, setHasSeenWelcome] = useState<boolean | null>(null);
 
+  // Hoisted so the dependency is a plain value. Referencing `user?.id` inside
+  // the hook made the compiler infer a dependency on the whole `user` object,
+  // which is broader than the declared dep and disabled optimisation for the
+  // entire component (react-hooks/preserve-manual-memoization).
+  const userId = user?.id;
+
   // Read the per-user flag from SecureStore on mount.
   useEffect(() => {
-    if (!user?.id) return;
-    const key = welcomeSeenKey(user.id);
-    SecureStore.getItemAsync(key)
+    if (!userId) return;
+
+    SecureStore.getItemAsync(welcomeSeenKey(userId))
       .then((value) => setHasSeenWelcome(value === "1"))
       .catch(() => setHasSeenWelcome(false)); // on error, show the card
-  }, [user?.id]);
+  }, [userId]);
 
   const handleDismissWelcome = useCallback(() => {
-    if (!user?.id) return;
+    if (!userId) return;
     setHasSeenWelcome(true);
-    void SecureStore.setItemAsync(welcomeSeenKey(user.id), "1");
-  }, [user?.id]);
+    void SecureStore.setItemAsync(welcomeSeenKey(userId), "1");
+  }, [userId]);
 
   const postsQuery = usePulsePostsInfiniteQuery();
   const viewerQuery = usePulseViewerQuery();
@@ -349,7 +355,10 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
         showToast({ type: "error", message: "Unable to share." });
       }
     },
-    [likeCounts, showToast]
+    // `likeCounts` was a stale dependency — this callback doesn't read it, and
+    // including it re-created the handler (and re-rendered every card) on
+    // every like.
+    [showToast]
   );
 
   const handleOpenComments = useCallback(

@@ -171,15 +171,32 @@ export default function CollationScreen() {
     })),
   });
 
-  useEffect(() => {
-    setActiveTab(normalizeTab(params.tab));
-  }, [params.tab]);
+  /*
+   * Route params seed the tab + selected election, but the user can also
+   * change both by tapping. That's the classic "adjust state when a prop
+   * changes" case, and React's documented answer is to compare against the
+   * previous value DURING RENDER rather than in an effect — React discards
+   * the in-progress render and restarts immediately, so there's no extra
+   * commit and no cascading re-render.
+   * https://react.dev/learn/you-might-not-need-an-effect
+   */
+  const [lastParamTab, setLastParamTab] = useState(params.tab);
 
-  useEffect(() => {
+  if (params.tab !== lastParamTab) {
+    setLastParamTab(params.tab);
+    setActiveTab(normalizeTab(params.tab));
+  }
+
+  const [lastIncomingElectionId, setLastIncomingElectionId] =
+    useState(incomingElectionId);
+
+  if (incomingElectionId !== lastIncomingElectionId) {
+    setLastIncomingElectionId(incomingElectionId);
+
     if (incomingElectionId) {
       setSelectedElectionId(incomingElectionId);
     }
-  }, [incomingElectionId]);
+  }
 
   const collations = useMemo<CollationItem[]>(() => {
     const mapped = elections.map((election, index) =>

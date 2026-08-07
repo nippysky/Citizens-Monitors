@@ -11,7 +11,6 @@ import { ToastProvider } from "@/components/feedback/ToastProvider";
 import { AuthProvider } from "@/context/AuthContext";
 import AppQueryProvider from "@/providers/AppQueryProvider";
 import NotificationsGate from "@/components/app/NotificationsGate";
-
 void SplashScreen.preventAutoHideAsync();
 
 SplashScreen.setOptions({

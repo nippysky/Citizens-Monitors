@@ -15,6 +15,13 @@ type Props = {
   onLivePress?: () => void;
   onConcludedPress?: () => void;
   onUpcomingPress?: () => void;
+  /**
+   * Submit a report for THIS election. Only rendered for live elections and
+   * only when the viewer's role may report — upcoming elections have nothing
+   * to report yet, and concluded ones are read-only.
+   */
+  onSubmitPress?: () => void;
+  canSubmit?: boolean;
 };
 
 function statusColor(status: ElectionItem["status"]): string {
@@ -55,6 +62,8 @@ export default function ElectionCard({
   onLivePress,
   onConcludedPress,
   onUpcomingPress,
+  onSubmitPress,
+  canSubmit = false,
 }: Props) {
   const isLive = item.status === "live";
   const isUpcoming = item.status === "upcoming";
@@ -64,8 +73,11 @@ export default function ElectionCard({
   const ctaLabel = isLive
     ? "Monitor Election"
     : isConcluded
-      ? "View Reports"
+      ? "View Collation Results"
       : "View Details";
+
+  // Reporting is only meaningful while an election is actually running.
+  const showSubmit = isLive && canSubmit && Boolean(onSubmitPress);
 
   const handleCardPress = () => {
     if (isLive) {
@@ -179,6 +191,25 @@ export default function ElectionCard({
               color={Theme.colors.primary}
             />
           </View>
+        ) : null}
+
+        {showSubmit ? (
+          <Pressable
+            onPress={(event) => {
+              // Don't let the card's own press handler also fire.
+              event.stopPropagation();
+              onSubmitPress?.();
+            }}
+            style={({ pressed }) => [
+              styles.submitBtn,
+              pressed && styles.submitBtnPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={`Submit report for ${item.title}`}
+          >
+            <Ionicons name="document-text-outline" size={17} color="#FFFFFF" />
+            <AppText style={styles.submitBtnText}>Submit Report</AppText>
+          </Pressable>
         ) : null}
       </View>
     </Pressable>
@@ -339,6 +370,29 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     color: Theme.colors.primary,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+
+  submitBtn: {
+    marginTop: 8,
+    minHeight: 42,
+    borderRadius: 12,
+    backgroundColor: Theme.colors.primary,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+  },
+
+  submitBtnPressed: {
+    opacity: 0.82,
+  },
+
+  submitBtnText: {
+    fontSize: 14,
+    lineHeight: 19,
+    color: "#FFFFFF",
     fontFamily: Theme.fonts.body.semibold,
   },
 });

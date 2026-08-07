@@ -162,12 +162,18 @@ export default function ReportIncidentLiveScreen() {
     savingRef.current = saving;
   }, [saving]);
 
+  // Reset the counter the moment recording stops — during render, so the
+  // badge never briefly shows the previous duration.
+  const [wasRecording, setWasRecording] = useState(recording);
+
+  if (recording !== wasRecording) {
+    setWasRecording(recording);
+    if (!recording) setElapsedSec(0);
+  }
+
   // Recording timer — drives the REC badge.
   useEffect(() => {
-    if (!recording) {
-      setElapsedSec(0);
-      return;
-    }
+    if (!recording) return;
 
     const startedAt = Date.now();
     const interval = setInterval(() => {

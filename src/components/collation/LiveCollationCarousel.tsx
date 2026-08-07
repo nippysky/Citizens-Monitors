@@ -34,6 +34,16 @@ type Props = {
 
 const CARD_GAP = 12;
 
+/**
+ * Returns an ELEMENT rather than a component type. Binding a component to a
+ * capitalised local during render gives it a fresh identity each pass, so
+ * React remounts the subtree (react-hooks/static-components).
+ */
+function renderElectionIcon(type: Parameters<typeof getElectionIcon>[0], size: number) {
+  const Icon = getElectionIcon(type);
+  return <Icon width={size} height={size} />;
+}
+
 function clampIndex(index: number, total: number): number {
   if (total <= 0) return 0;
 
@@ -193,7 +203,6 @@ export default function LiveCollationCarousel({
 }
 
 function CarouselCard({ item, width }: { item: CollationItem; width: number }) {
-  const ElectionIcon = getElectionIcon(item.electionTitle);
 
   return (
     <Pressable style={[styles.card, { width }]}>
@@ -206,7 +215,7 @@ function CarouselCard({ item, width }: { item: CollationItem; width: number }) {
         </View>
 
         <View style={styles.electionIconWrap}>
-          <ElectionIcon width={36} height={36} />
+          {renderElectionIcon(item.electionTitle, 36)}
         </View>
       </View>
 

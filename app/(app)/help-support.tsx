@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -21,6 +21,7 @@ import { useMyProfileQuery } from "@/hooks/api/useMyProfileQuery";
 import { useGeneralFaqQuery, useObserverFaqQuery } from "@/hooks/api/useFaqQueries";
 import { FaqItem } from "@/lib/api/faq.api";
 import { Theme } from "@/theme";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 
 if (
   Platform.OS === "android" &&
@@ -67,7 +68,10 @@ export default function HelpSupportScreen() {
   );
 
   const [activeTab, setActiveTab] = useState<HelpScopeKey>(defaultTab);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  // undefined = untouched (first item auto-expands); null = user collapsed all
+  const [expandedId, setExpandedId] = useState<string | null | undefined>(
+    undefined
+  );
 
   const isObserver = resolvedRole === "observer";
 
@@ -100,21 +104,20 @@ export default function HelpSupportScreen() {
     (activeQuery.isFetching && faqs.length === 0);
   const isError = !isLoading && activeQuery.isError;
 
-  // Auto-expand first item when data loads
-  useEffect(() => {
-    if (faqs.length > 0 && !expandedId) {
-      setExpandedId(faqs[0].id);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [faqs.length]);
+  /*
+   * The first FAQ is expanded by default. Derived rather than stored: no
+   * effect, no extra render, and it stays correct when the list changes.
+   * `null` means "user explicitly collapsed everything".
+   */
+  const effectiveExpandedId =
+    expandedId === undefined ? faqs[0]?.id ?? null : expandedId;
 
-  // Reset active tab if it becomes unavailable after a role change
-  useEffect(() => {
-    if (!availableTabs.includes(activeTab)) {
-      setActiveTab(defaultTab);
-      setExpandedId(null);
-    }
-  }, [activeTab, availableTabs, defaultTab]);
+  // Fall back to the default tab if the current one disappears after a role
+  // change. Adjusted during render — no extra commit, no flash of an empty tab.
+  if (!availableTabs.includes(activeTab)) {
+    setActiveTab(defaultTab);
+    setExpandedId(undefined);
+  }
 
   const handleSwitchTab = (tab: HelpScopeKey) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -124,7 +127,9 @@ export default function HelpSupportScreen() {
 
   const handleToggleFaq = (id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setExpandedId((prev) => (prev === id ? null : id));
+    // Compare against the EFFECTIVE id: while state is still `undefined` the
+    // first card is visually open, so tapping it must collapse it.
+    setExpandedId(effectiveExpandedId === id ? null : id);
   };
 
   return (
@@ -194,7 +199,7 @@ export default function HelpSupportScreen() {
               <FaqAccordionCard
                 key={item.id}
                 item={item}
-                expanded={expandedId === item.id}
+                expanded={effectiveExpandedId === item.id}
                 onToggle={() => handleToggleFaq(item.id)}
               />
             ))}
@@ -239,7 +244,7 @@ function FaqAccordionCard({
   expanded: boolean;
   onToggle: () => void;
 }) {
-  const rotate = useRef(new Animated.Value(expanded ? 1 : 0)).current;
+  const rotate = useAnimatedValue(expanded ? 1 : 0);
 
   useEffect(() => {
     Animated.timing(rotate, {

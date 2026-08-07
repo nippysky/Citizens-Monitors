@@ -146,6 +146,10 @@ export type CollationItem = {
   incidentAnalytics: IncidentAnalyticsItem[];
   monitoringActivity: MonitoringActivityItem[];
   geoBreakdown: GeoBreakdownItem[];
+  /** "State" or "LGA" — how the backend grouped the geo breakdown. */
+  geoGroupLabel: string;
+  /** Geographic scope of the election, e.g. "Nigeria" or "Lagos". */
+  geoScopeLabel: string;
   reviewReports: ReviewReportItem[];
   discussions: DiscussionItem[];
 };
@@ -162,7 +166,6 @@ export type CollationElectionSource = {
   status: string;
 };
 
-export const collationDummyData: CollationItem[] = [];
 
 const WAT_TIME_ZONE = "Africa/Lagos";
 
@@ -323,10 +326,31 @@ function resolvePartyName(party: string): string {
   return PARTY_NAMES[key] ?? party;
 }
 
-function buildParties(result: CollationResultPayload | null): PartyResult[] {
-  const entries = Object.entries(result?.aggregateAnalysis ?? {})
-    .map(([party, votes]) => ({ party: party.trim(), votes: toNumber(votes) }))
-    .filter((item) => item.party && item.votes >= 0);
+/**
+ * Aggregates party votes across every reporting region.
+ *
+ * `result` is an ARRAY (one entry per state/LGA). Summing each region's
+ * `aggregateAnalysis` gives the election-wide totals; reading `.aggregateAnalysis`
+ * off the array itself (the previous behaviour) always yielded undefined and
+ * left the whole screen blank.
+ */
+function buildParties(
+  result: CollationResultPayload[] | null
+): PartyResult[] {
+  const totals = new Map<string, number>();
+
+  for (const region of result ?? []) {
+    for (const [party, votes] of Object.entries(region?.aggregateAnalysis ?? {})) {
+      const name = party.trim();
+      if (!name) continue;
+
+      totals.set(name, (totals.get(name) ?? 0) + toNumber(votes));
+    }
+  }
+
+  const entries = [...totals.entries()]
+    .map(([party, votes]) => ({ party, votes }))
+    .filter((item) => item.votes >= 0);
 
   const total = entries.reduce((sum, item) => sum + item.votes, 0);
 
@@ -352,22 +376,52 @@ function getTotalVotes(parties: PartyResult[]): number {
   return parties.reduce((sum, party) => sum + party.votes, 0);
 }
 
+/**
+ * Polling-unit coverage for the election.
+ *
+ * Preference order:
+ *   1. `geoBreakdown.summary` — server-computed real polling-unit counts.
+ *   2. Region footers — keyed by states (national) or LGAs (state-level).
+ *   3. Report counts, as a last resort so the bar isn't stuck at zero.
+ */
 function getCoverage(response: ElectionCollationResponse) {
-  const registered = Math.max(
-    toNumber(response.result?.footer?.["registered-lgas"]),
-    toNumber(response.incidentReport?.footer?.["registered-lgas"])
-  );
-  const submitted = Math.max(
-    toNumber(response.result?.footer?.["submitted-lgas"]),
-    toNumber(response.incidentReport?.footer?.["submitted-lgas"])
-  );
+  const summary = response.geoBreakdown?.summary;
+
+  if (summary && toNumber(summary.totalPollingUnits) > 0) {
+    return {
+      coveredUnits: toNumber(summary.reportedPollingUnits),
+      totalUnits: toNumber(summary.totalPollingUnits),
+    };
+  }
+
+  const footers = [
+    ...(response.result ?? []).map((region) => region?.footer),
+    ...(response.incidentReport ?? []).map((region) => region?.footer),
+  ].filter(Boolean);
+
+  let registered = 0;
+  let submitted = 0;
+
+  for (const footer of footers) {
+    registered = Math.max(
+      registered,
+      toNumber(footer?.["registered-states"]),
+      toNumber(footer?.["registered-lgas"])
+    );
+    submitted = Math.max(
+      submitted,
+      toNumber(footer?.["submitted-states"]),
+      toNumber(footer?.["submitted-lgas"])
+    );
+  }
 
   if (registered > 0 || submitted > 0) {
     return { coveredUnits: submitted, totalUnits: registered };
   }
 
   const fallback =
-    response.overview.resultsUploadedCount + response.overview.incidentsReportedCount;
+    response.overview.resultsUploadedCount +
+    response.overview.incidentsReportedCount;
 
   return { coveredUnits: fallback, totalUnits: fallback };
 }
@@ -393,9 +447,13 @@ function buildOfficialSummary(response: ElectionCollationResponse): CollationIte
 }
 
 function buildSentiment(payload: CollationSentimentPayload | null): CollationItem["sentiment"] {
-  const voteRating = payload?.aggregateAnalysis.voteRating ?? {};
-  const voterIntimidation = payload?.aggregateAnalysis.voterIntimidation ?? {};
-  const voteBuying = payload?.aggregateAnalysis.voteBuying ?? {};
+  // Fall back to `chart` when `aggregateAnalysis` is absent, and guard every
+  // level — a partially-populated sentiment payload must not crash the tab.
+  const source = payload?.aggregateAnalysis ?? payload?.chart ?? {};
+
+  const voteRating = source?.voteRating ?? {};
+  const voterIntimidation = source?.voterIntimidation ?? {};
+  const voteBuying = source?.voteBuying ?? {};
 
   const good = toNumber(voteRating.good);
   const okay = toNumber(voteRating.okay);
@@ -446,10 +504,26 @@ function resolveIncidentMeta(label: string) {
   );
 }
 
-function buildIncidentAnalytics(payload: CollationIncidentPayload | null): IncidentAnalyticsItem[] {
-  const aggregate = payload?.aggregateAnalysis ?? {};
-  const entries = Object.entries(aggregate)
-    .map(([label, count]) => ({ label, count: toNumber(count) }))
+/**
+ * Incident totals per category, summed across every reporting region
+ * (`incidentReport` is an array, mirroring `result`).
+ */
+function buildIncidentAnalytics(
+  payload: CollationIncidentPayload[] | null
+): IncidentAnalyticsItem[] {
+  const totals = new Map<string, number>();
+
+  for (const region of payload ?? []) {
+    for (const [label, count] of Object.entries(region?.aggregateAnalysis ?? {})) {
+      const name = label.trim();
+      if (!name) continue;
+
+      totals.set(name, (totals.get(name) ?? 0) + toNumber(count));
+    }
+  }
+
+  const entries = [...totals.entries()]
+    .map(([label, count]) => ({ label, count }))
     .filter((item) => item.count > 0);
 
   const merged = new Map<string, { label: string; count: number; color: string; iconKey: IncidentAnalyticsItem["iconKey"] }>();
@@ -479,60 +553,65 @@ function buildIncidentAnalytics(payload: CollationIncidentPayload | null): Incid
   }));
 }
 
-function buildGeoBreakdown(response: ElectionCollationResponse, parties: PartyResult[]): GeoBreakdownItem[] {
-  if (!response.result && !response.incidentReport) return [];
+/**
+ * Geographic breakdown, taken straight from the server's `geoBreakdown`.
+ *
+ * The backend already groups by the correct level — `state` for national /
+ * presidential elections, `lga` for state-level ones — and supplies per-region
+ * vote splits, percentages and polling-unit coverage. Previously this was
+ * reconstructed client-side from the incident chart, which produced regions
+ * with duplicated election-wide party percentages and no real vote counts.
+ */
+/**
+ * Human label for the grouping level. National/presidential elections are
+ * grouped by state; state-level elections (governorship, house of assembly)
+ * by LGA. Driven entirely by the backend's `groupBy` so the heading can never
+ * contradict the data underneath it.
+ */
+function resolveGeoGroupLabel(groupBy: string | undefined): string {
+  const value = (groupBy ?? "").trim().toLowerCase();
 
-  const totalVotes = getTotalVotes(parties);
-  const { coveredUnits, totalUnits } = getCoverage(response);
-  const incidentRows = response.incidentReport?.chart ?? [];
+  if (value === "lga") return "LGA";
+  if (value === "state") return "State";
+  if (value === "ward") return "Ward";
+  if (value === "pollingunit" || value === "polling_unit") return "Polling Unit";
 
-  if (response.result?.restriction?.value || response.meta.electionLocation) {
-    const name = response.result?.restriction?.value ?? response.meta.electionLocation ?? "Election Scope";
+  return "Region";
+}
 
-    return [
-      {
-        id: slugify(name),
-        name: name.toUpperCase(),
-        reports: response.overview.resultsUploadedCount,
-        incidents: response.overview.incidentsReportedCount,
-        coveredUnits,
-        totalUnits,
-        totalVotes,
-        percentOfTotalVotes: 100,
-        parties: parties.map((party) => ({
-          shortName: party.shortName,
-          percent: party.percent,
-          color: party.color,
-        })),
-      },
-    ];
-  }
+function buildGeoBreakdown(
+  response: ElectionCollationResponse
+): GeoBreakdownItem[] {
+  const regions = response.geoBreakdown?.regions ?? [];
 
-  return incidentRows
-    .map((row) => {
-      const name = typeof row.lga === "string" ? row.lga : "Unknown LGA";
-      const incidents = Object.entries(row).reduce((sum, [key, value]) => {
-        if (key === "lga") return sum;
-        return sum + toNumber(value);
-      }, 0);
+  return regions
+    .map((region) => {
+      const name = region?.regionName?.trim() || "Unknown";
 
       return {
         id: slugify(name),
         name: name.toUpperCase(),
-        reports: response.overview.resultsUploadedCount,
-        incidents,
-        coveredUnits,
-        totalUnits,
-        totalVotes,
-        percentOfTotalVotes: 100,
-        parties: parties.map((party) => ({
-          shortName: party.shortName,
-          percent: party.percent,
-          color: party.color,
-        })),
+        reports: toNumber(region?.resultsCount),
+        incidents: toNumber(region?.incidentsCount),
+        coveredUnits: toNumber(region?.reportedPollingUnits),
+        totalUnits: toNumber(region?.totalPollingUnits),
+        totalVotes: toNumber(region?.totalVotes),
+        percentOfTotalVotes: toNumber(region?.percentOfTotalVotes),
+        parties: (region?.parties ?? [])
+          .filter((party) => Boolean(party?.party))
+          .map((party) => {
+            const key = resolvePartyKey(party.party);
+
+            return {
+              shortName: party.party.toUpperCase(),
+              percent: toNumber(party.percent),
+              // The API may return a null colour for less common parties.
+              color: party.color ?? PARTY_COLORS[key] ?? PARTY_COLORS.OTHERS,
+            };
+          }),
       };
     })
-    .filter((item) => item.incidents > 0 || item.reports > 0);
+    .sort((a, b) => b.totalVotes - a.totalVotes);
 }
 
 function buildMonitoringActivity(response: ElectionCollationResponse): MonitoringActivityItem[] {
@@ -610,6 +689,10 @@ function buildFallbackItem(election: CollationElectionSource): CollationItem {
       { label: "Avg, submission time", value: "—", icon: "time-outline", color: "#111827" },
     ],
     geoBreakdown: [],
+    // National elections group by state; anything scoped to a location
+    // groups by LGA. Refined once the collation payload arrives.
+    geoGroupLabel: election.electionLocation?.trim() ? "LGA" : "State",
+    geoScopeLabel: location,
     reviewReports: [],
     discussions: [],
   };
@@ -661,7 +744,12 @@ export function mapCollationResponseToItem(
     sentiment: buildSentiment(response.sentimentAnalysis),
     incidentAnalytics: buildIncidentAnalytics(response.incidentReport),
     monitoringActivity: buildMonitoringActivity(response),
-    geoBreakdown: buildGeoBreakdown(response, parties),
+    geoBreakdown: buildGeoBreakdown(response),
+    geoGroupLabel: resolveGeoGroupLabel(response.geoBreakdown?.groupBy),
+    geoScopeLabel:
+      response.geoBreakdown?.summary?.scopeLabel?.trim() ||
+      response.meta.electionLocation?.trim() ||
+      "Nationwide",
     reviewReports: [],
     discussions: [],
   };

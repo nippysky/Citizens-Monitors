@@ -21,6 +21,7 @@ import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
 import { Theme } from "@/theme";
 import { CalendarDayItem } from "@/types/home";
+import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 
 type Props = {
   items: CalendarDayItem[];
@@ -43,9 +44,9 @@ type DayChipProps = {
 };
 
 function DayChip({ item, selected, today, onPress }: DayChipProps) {
-  const scale = useRef(new Animated.Value(selected ? 1 : 0.96)).current;
-  const dotOpacity = useRef(new Animated.Value(selected ? 1 : 0)).current;
-  const dotScale = useRef(new Animated.Value(selected ? 1 : 0.82)).current;
+  const scale = useAnimatedValue(selected ? 1 : 0.96);
+  const dotOpacity = useAnimatedValue(selected ? 1 : 0);
+  const dotScale = useAnimatedValue(selected ? 1 : 0.82);
 
   useEffect(() => {
     Animated.parallel([

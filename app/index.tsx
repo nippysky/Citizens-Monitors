@@ -1,6 +1,10 @@
 import { Redirect } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
+import {
+  useAnimatedValue,
+  useAnimatedValues,
+} from "@/hooks/useAnimatedValue";
 
 import AuthBackground from "@/components/auth/AuthBackground";
 import { useAuth } from "@/context/AuthContext";
@@ -13,33 +17,28 @@ const BRANDING_DURATION = 2400;
 const DOT_COLORS = ["#EA4335", "#4285F4", "#34A853", "#FBBC05", "#F29900"];
 
 export default function IndexScreen() {
-  const { isAuthenticated, isOnboardingComplete } = useAuth();
+  const { isAuthenticated, isOnboardingComplete, sessionStatus } = useAuth();
   const [readyToRoute, setReadyToRoute] = useState(false);
   const [hasSeenIntro, setHasSeenIntro] = useState<boolean | null>(null);
 
-  const logoOpacity = useRef(new Animated.Value(0)).current;
-  const logoTranslateY = useRef(new Animated.Value(18)).current;
-  const logoScale = useRef(new Animated.Value(0.94)).current;
+  const logoOpacity = useAnimatedValue(0);
+  const logoTranslateY = useAnimatedValue(18);
+  const logoScale = useAnimatedValue(0.94);
 
-  const dotsOpacity = useRef(new Animated.Value(0)).current;
-  const dotsTranslateY = useRef(new Animated.Value(12)).current;
+  const dotsOpacity = useAnimatedValue(0);
+  const dotsTranslateY = useAnimatedValue(12);
 
-  const handsOpacity = useRef(new Animated.Value(0)).current;
-  const handsTranslateY = useRef(new Animated.Value(18)).current;
+  const handsOpacity = useAnimatedValue(0);
+  const handsTranslateY = useAnimatedValue(18);
 
-  const dotScales = useRef(
-    DOT_COLORS.map(() => new Animated.Value(0.92))
-  ).current;
+  const dotScales = useAnimatedValues(DOT_COLORS.length, 0.92);
+  const dotOpacities = useAnimatedValues(DOT_COLORS.length, 0.45);
 
-  const dotOpacities = useRef(
-    DOT_COLORS.map(() => new Animated.Value(0.45))
-  ).current;
+  const loaderTranslateX = useAnimatedValue(-56);
+  const loaderOpacity = useAnimatedValue(0);
 
-  const loaderTranslateX = useRef(new Animated.Value(-56)).current;
-  const loaderOpacity = useRef(new Animated.Value(0)).current;
-
-  const logoExitScale = useRef(new Animated.Value(1)).current;
-  const logoExitOpacity = useRef(new Animated.Value(1)).current;
+  const logoExitScale = useAnimatedValue(1);
+  const logoExitOpacity = useAnimatedValue(1);
 
   const routeNode = useMemo(() => {
     if (hasSeenIntro === null) {
@@ -48,6 +47,12 @@ export default function IndexScreen() {
 
     if (!hasSeenIntro) {
       return <Redirect href="/(public)/intro" />;
+    }
+
+    // Expired session with vaulted credentials — offer biometric re-entry
+    // instead of dumping a known user back on the welcome screen.
+    if (sessionStatus === "locked") {
+      return <Redirect href="/(public)/unlock" />;
     }
 
     if (!isAuthenticated) {
@@ -59,7 +64,7 @@ export default function IndexScreen() {
     }
 
     return <Redirect href="/(app)/(tabs)/home" />;
-  }, [hasSeenIntro, isAuthenticated, isOnboardingComplete]);
+  }, [hasSeenIntro, isAuthenticated, isOnboardingComplete, sessionStatus]);
 
   useEffect(() => {
     let mounted = true;

@@ -53,6 +53,18 @@ function getElectionIcon(type: ElectionCardItem["electionType"]) {
   }
 }
 
+/**
+ * Returns an ELEMENT, not a component type. Assigning a component to a local
+ * during render changes its identity every pass, remounting the subtree.
+ */
+function renderElectionIcon(
+  type: ElectionCardItem["electionType"],
+  size: number
+) {
+  const Icon = getElectionIcon(type);
+  return <Icon width={size} height={size} />;
+}
+
 function getRecordedText(item: ElectionCardItem): string {
   if (item.totalPollingUnits > 0) {
     return `${item.pollingUnitsRecorded}/${item.totalPollingUnits} Polling Units recorded`;
@@ -75,7 +87,6 @@ function getProgress(item: ElectionCardItem): number {
 }
 
 export default function LiveElectionCard({ item, width, viewerRole }: Props) {
-  const ElectionIcon = getElectionIcon(item.electionType);
   const activeElectionId = item.activeElectionId ?? item.id;
   const submitEnabled = canSubmitResult(viewerRole);
   const progress = getProgress(item);
@@ -142,19 +153,22 @@ export default function LiveElectionCard({ item, width, viewerRole }: Props) {
     });
   };
 
-  const handleProceedIncident = async () => {
+  const handleProceedIncident = async (time: string) => {
     // Persist the initial incident draft BEFORE navigating — jumping straight
     // to the camera with no stored draft is what left the review screen stuck
     // on "Preparing report...". Route to the incident FORM first (same as the
     // LiveNotice and Elections-FAB flows) so the user picks an incident type.
     const draft = buildInitialIncidentDraft(commencementContext);
-    await saveIncidentDraft(draft);
+    // Carry the observed time straight into the draft so the incident form
+    // opens pre-filled for THIS election.
+    await saveIncidentDraft({ ...draft, incidentTime: time });
 
     router.push({
       pathname: Paths.reportIncident as never,
       params: {
         electionId: commencementContext.electionId,
         electionTitle: commencementContext.electionTitle,
+        incidentTime: time,
         pollingUnitName: commencementContext.pollingUnitName,
         pollingUnitCode: commencementContext.pollingUnitCode,
         ward: commencementContext.ward,
@@ -173,7 +187,7 @@ export default function LiveElectionCard({ item, width, viewerRole }: Props) {
         </View>
 
         <View style={styles.illustrationWrap}>
-          <ElectionIcon width={44} height={44} />
+          {renderElectionIcon(item.electionType, 44)}
         </View>
       </View>
 

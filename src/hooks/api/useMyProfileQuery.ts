@@ -55,10 +55,15 @@ export function useMyProfileQuery() {
     networkMode: "offlineFirst",
   });
 
+  /*
+   * Persist the freshest profile for offline use. This effect now ONLY writes
+   * to the external store — it no longer mirrors the value back into React
+   * state, which was a redundant setState-in-effect (an extra render on every
+   * fetch). `profile` below already prefers query.data over the cache.
+   */
   useEffect(() => {
     if (!query.data) return;
 
-    setCachedProfile(query.data);
     void saveCachedMyProfile(query.data);
   }, [query.data]);
 

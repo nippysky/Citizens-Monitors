@@ -65,6 +65,9 @@ export default function SignInScreen() {
       await signIn(mapMobileUserToAuthUser(response.user, email), {
         token: response.token,
         hasCompletedOnboarding: true,
+        // Keeps the user signed in across restarts: the 1-hour access token
+        // is silently renewed with this.
+        refreshToken: response.refreshToken ?? null,
       });
 
       showToast({
@@ -120,6 +123,7 @@ export default function SignInScreen() {
       await markFreshBiometricLogin();
       await signIn(mapMobileUserToAuthUser(response.user, result.email), {
         token: response.token,
+        refreshToken: response.refreshToken ?? null,
         hasCompletedOnboarding: !response.requiresPasswordSetup,
       });
 

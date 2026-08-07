@@ -122,6 +122,7 @@ export default function SignUpScreen() {
       // backend with a valid Authorization header.
       await signIn(mapMobileUserToAuthUser(response.user, result.email), {
         token: response.token,
+        refreshToken: response.refreshToken ?? null,
         hasCompletedOnboarding: !response.requiresPasswordSetup,
       });
 

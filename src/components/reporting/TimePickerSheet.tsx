@@ -1,9 +1,8 @@
 import DateTimePicker, {
   DateTimePickerAndroid,
-  DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
 import { Ionicons } from "@expo/vector-icons";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, View } from "react-native";
 
 import AppButton from "@/components/ui/AppButton";
@@ -59,12 +58,20 @@ export default function TimePickerSheet({
   onClose,
   onConfirm,
 }: Props) {
-  const initialDate = useMemo(() => parseTimeValue(value), [value]);
-  const [tempDate, setTempDate] = useState<Date>(initialDate);
+  const [tempDate, setTempDate] = useState<Date>(() => parseTimeValue(value));
 
-  useEffect(() => {
+  /*
+   * Re-seed the wheel whenever the sheet reopens or the incoming value
+   * changes. Done during render (React's documented alternative to
+   * setState-in-effect) so the picker never briefly shows the previous time.
+   */
+  const seedKey = `${value ?? ""}|${visible}`;
+  const [lastSeedKey, setLastSeedKey] = useState(seedKey);
+
+  if (seedKey !== lastSeedKey) {
+    setLastSeedKey(seedKey);
     setTempDate(parseTimeValue(value));
-  }, [value, visible]);
+  }
 
   useEffect(() => {
     if (Platform.OS !== "android" || !visible) return;
@@ -74,18 +81,13 @@ export default function TimePickerSheet({
       mode: "time",
       is24Hour: false,
       display: "default",
-      onChange: (event: DateTimePickerEvent, selectedDate?: Date) => {
-        if (event.type === "dismissed") {
-          onClose();
-          return;
-        }
-
-        if (selectedDate) {
-          onConfirm(formatTime(selectedDate));
-        } else {
-          onClose();
-        }
+      // Split listeners replace the deprecated `onChange`: confirmation and
+      // dismissal are now distinct callbacks instead of branching on
+      // event.type, so cancelling can never be mistaken for a selection.
+      onValueChange: (_event, selectedDate) => {
+        onConfirm(formatTime(selectedDate));
       },
+      onDismiss: onClose,
     });
   }, [visible, tempDate, onClose, onConfirm]);
 
@@ -119,10 +121,11 @@ export default function TimePickerSheet({
           value={tempDate}
           mode="time"
           display="spinner"
-          onChange={(_, selectedDate) => {
-            if (selectedDate) {
-              setTempDate(selectedDate);
-            }
+          // datetimepicker 9.x: `onChange` is deprecated in favour of the
+          // split listeners. `onValueChange` always provides a Date, so no
+          // null guard is needed here.
+          onValueChange={(_, selectedDate) => {
+            setTempDate(selectedDate);
           }}
           style={styles.iosPicker}
         />

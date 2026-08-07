@@ -1,5 +1,5 @@
 import * as Location from "expo-location";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ActivityIndicator, Modal, Pressable, StyleSheet, View } from "react-native";
 
 import AppButton from "@/components/ui/AppButton";
@@ -19,11 +19,14 @@ export default function LocationPermissionModal({
 }: Props) {
   const [phase, setPhase] = useState<"idle" | "detecting">("idle");
 
-  useEffect(() => {
-    if (!visible) {
-      setPhase("idle");
-    }
-  }, [visible]);
+  // Reset to idle whenever the modal closes — adjusted during render so a
+  // stale "detecting" spinner is never visible on reopen.
+  const [wasVisible, setWasVisible] = useState(visible);
+
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
+    if (!visible) setPhase("idle");
+  }
 
   const handleEnable = async () => {
     try {
