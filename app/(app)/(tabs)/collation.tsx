@@ -124,6 +124,8 @@ function EmptyCollationState({ onRefresh }: { onRefresh: () => void }) {
   );
 }
 
+export { default as ErrorBoundary } from "@/components/app/RouteErrorFallback";
+
 export default function CollationScreen() {
   const params = useLocalSearchParams<{
     tab?: string;

@@ -10,26 +10,22 @@ import {
   View,
 } from "react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 
 import AppText from "@/components/ui/AppText";
 import CommentsBottomSheet from "@/components/collation/CommentsBottomSheet";
-import LiveDiscussionCarousel from "@/components/pulse/LiveDiscussionCarousel";
 import PulseDiscussionCard from "@/components/pulse/PulseDiscussionCard";
 import PulseWelcomeCard from "@/components/pulse/PulseWelcomeCard";
 import { PulseDiscussionPost } from "@/data/pulse";
-import { Paths } from "@/constants/paths";
 import { useAppToast } from "@/hooks/useAppToast";
 import { useOfflineSync } from "@/context/OfflineSyncContext";
 import { useAuth } from "@/context/AuthContext";
 import {
   useLikePulsePostMutation,
-  useLiveElectionCarouselQuery,
   usePulsePostsInfiniteQuery,
   usePulseViewerQuery,
 } from "@/hooks/api/usePulseQueries";
-import { PulseLiveElection, PulsePost } from "@/lib/api/pulse.api";
+import { PulsePost } from "@/lib/api/pulse.api";
 import { Theme } from "@/theme";
 import NoDiscussion from "@/svgs/app/collation/NoDiscussion";
 
@@ -92,29 +88,6 @@ function PulseSkeletonBlock({ style }: { style?: object }) {
   return <View style={[styles.skeletonBlock, style]} />;
 }
 
-function LiveCarouselSkeleton() {
-  return (
-    <View style={styles.skeletonCarouselWrap}>
-      <PulseSkeletonBlock style={styles.skeletonSectionTitle} />
-
-      <View style={styles.skeletonCarouselCard}>
-        <View style={styles.skeletonCarouselTop}>
-          <PulseSkeletonBlock style={styles.skeletonLivePill} />
-          <PulseSkeletonBlock style={styles.skeletonElectionIcon} />
-        </View>
-
-        <PulseSkeletonBlock style={styles.skeletonElectionTitleOne} />
-        <PulseSkeletonBlock style={styles.skeletonElectionTitleTwo} />
-
-        <View style={styles.skeletonCarouselBottom}>
-          <PulseSkeletonBlock style={styles.skeletonDiscussionCount} />
-          <PulseSkeletonBlock style={styles.skeletonJoinButton} />
-        </View>
-      </View>
-    </View>
-  );
-}
-
 function PulsePostSkeleton() {
   return (
     <View style={styles.skeletonPostCard}>
@@ -145,7 +118,6 @@ function PulsePostSkeleton() {
 function PulseFeedSkeleton() {
   return (
     <View>
-      <LiveCarouselSkeleton />
       <PulsePostSkeleton />
       <PulsePostSkeleton />
       <PulsePostSkeleton />
@@ -195,21 +167,11 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
 
   const postsQuery = usePulsePostsInfiniteQuery();
   const viewerQuery = usePulseViewerQuery();
-  const liveCarouselQuery = useLiveElectionCarouselQuery();
   const likePostMutation = useLikePulsePostMutation();
 
-  // NOTE: carouselIndex state intentionally removed. Tracking it here caused
-  // PulseForYouTab to re-render on every swipe, which (combined with the
-  // inline ListHeaderComponent) was remounting the carousel and snapping it
-  // back to card 0. The carousel now owns its own scroll state.
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
-
-  const liveElections = useMemo(
-    () => liveCarouselQuery.data?.elections ?? [],
-    [liveCarouselQuery.data]
-  );
 
   const apiPosts = useMemo(
     () =>
@@ -267,12 +229,11 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
   const isInitialLoading =
     postsQuery.isLoading && !postsQuery.data && pendingPosts.length === 0;
 
-  const isRefreshing =
-    postsQuery.isRefetching || liveCarouselQuery.isRefetching;
+  const isRefreshing = postsQuery.isRefetching;
 
   const onRefresh = useCallback(() => {
-    void Promise.all([postsQuery.refetch(), liveCarouselQuery.refetch()]);
-  }, [liveCarouselQuery, postsQuery]);
+    void postsQuery.refetch();
+  }, [postsQuery]);
 
   const handleScroll = useCallback(
     (_: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -377,17 +338,6 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
     [showToast]
   );
 
-  const handleJoinDiscussion = useCallback((item: PulseLiveElection) => {
-    router.push({
-      pathname: Paths.appCollation as never,
-      params: {
-        tab: "discussions",
-        collationId: item.id,
-        electionId: item.id,
-      },
-    });
-  }, []);
-
   const handleEndReached = useCallback(() => {
     if (postsQuery.hasNextPage && !postsQuery.isFetchingNextPage) {
       void postsQuery.fetchNextPage();
@@ -396,47 +346,22 @@ export default function PulseForYouTab({ onScrollStateChange }: Props) {
 
   // ── Memoized header element ──
   // CRITICAL: passing a fresh function as ListHeaderComponent on every render
-  // makes FlatList treat it as a NEW component type and remount it. That was
-  // what killed every carousel swipe. By memoizing the JSX element here, the
-  // header keeps its identity across parent re-renders, so the carousel
-  // preserves its scroll state.
+  // makes FlatList treat it as a NEW component type and remount it. By
+  // memoizing the JSX element here, the header keeps its identity across
+  // parent re-renders.
+  //
+  // The founder welcome card is the "nothing here yet" placeholder for a
+  // brand new ward feed — it must never sit alongside real posts. So it only
+  // shows when the feed is genuinely empty (no real posts, no queued posts)
+  // AND the user hasn't already dismissed it. There is no live-election
+  // carousel on this screen — that belongs on Collation, not Pulse.
   const headerElement = useMemo(() => {
-    const carousel = (() => {
-      if (liveCarouselQuery.isLoading && !liveCarouselQuery.data) {
-        return <LiveCarouselSkeleton />;
-      }
+    if (hasSeenWelcome === false && !hasPosts) {
+      return <PulseWelcomeCard onDismiss={handleDismissWelcome} />;
+    }
 
-      if (!liveElections.length) {
-        return null;
-      }
-
-      return (
-        <LiveDiscussionCarousel
-          items={liveElections}
-          onJoinDiscussion={handleJoinDiscussion}
-        />
-      );
-    })();
-
-    return (
-      <>
-        {/* Show the welcome card exactly once per user (first visit only).
-            hasSeenWelcome === null means SecureStore hasn't resolved yet —
-            skip rendering to avoid a flash of the card on returning users. */}
-        {hasSeenWelcome === false ? (
-          <PulseWelcomeCard onDismiss={handleDismissWelcome} />
-        ) : null}
-        {carousel}
-      </>
-    );
-  }, [
-    hasSeenWelcome,
-    handleDismissWelcome,
-    liveCarouselQuery.isLoading,
-    liveCarouselQuery.data,
-    liveElections,
-    handleJoinDiscussion,
-  ]);
+    return null;
+  }, [hasSeenWelcome, hasPosts, handleDismissWelcome]);
 
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<PulseFeedItem>) => {
@@ -548,70 +473,6 @@ const styles = StyleSheet.create({
   skeletonBlock: {
     backgroundColor: skeletonColor,
     overflow: "hidden",
-  },
-  skeletonCarouselWrap: {
-    gap: 12,
-    paddingTop: 4,
-    paddingBottom: 14,
-  },
-  skeletonSectionTitle: {
-    width: 178,
-    height: 18,
-    borderRadius: 999,
-    marginHorizontal: 16,
-  },
-  skeletonCarouselCard: {
-    marginHorizontal: 16,
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: Theme.colors.surface,
-    borderWidth: 1,
-    borderColor: Theme.colors.border,
-    gap: 10,
-  },
-  skeletonCarouselTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  skeletonLivePill: {
-    width: 86,
-    height: 20,
-    borderRadius: 999,
-    backgroundColor: skeletonColorStrong,
-  },
-  skeletonElectionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-  },
-  skeletonElectionTitleOne: {
-    width: "78%",
-    height: 22,
-    borderRadius: 999,
-  },
-  skeletonElectionTitleTwo: {
-    width: "48%",
-    height: 22,
-    borderRadius: 999,
-  },
-  skeletonCarouselBottom: {
-    marginTop: 4,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  skeletonDiscussionCount: {
-    width: 134,
-    height: 16,
-    borderRadius: 999,
-  },
-  skeletonJoinButton: {
-    width: 124,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: "rgba(5,163,156,0.10)",
   },
 
   skeletonPostCard: {

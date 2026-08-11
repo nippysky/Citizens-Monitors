@@ -420,18 +420,22 @@ function getCoverage(response: ElectionCollationResponse) {
   }
 
   const fallback =
-    response.overview.resultsUploadedCount +
-    response.overview.incidentsReportedCount;
+    toNumber(response.overview?.resultsUploadedCount) +
+    toNumber(response.overview?.incidentsReportedCount);
 
   return { coveredUnits: fallback, totalUnits: fallback };
 }
 
 function buildOfficialSummary(response: ElectionCollationResponse): CollationItem["officialSummary"] {
-  const figures = response.overview.administrativeFiguresFromReports;
-  const accreditedVoters = toNumber(figures.accreditedVoters);
-  const usedBallots = toNumber(figures.usedBallotPapers);
-  const rejectedVotes = toNumber(figures.rejectedVotes);
-  const spoiledBallots = toNumber(figures.spoiledBallotPapers);
+  // `overview` and its nested figures are typed as required, but that's only
+  // a compile-time promise — the response is JSON-parsed with no runtime
+  // validation, so a real payload missing this (e.g. a newly created
+  // election whose aggregation hasn't populated yet) must not crash render.
+  const figures = response.overview?.administrativeFiguresFromReports;
+  const accreditedVoters = toNumber(figures?.accreditedVoters);
+  const usedBallots = toNumber(figures?.usedBallotPapers);
+  const rejectedVotes = toNumber(figures?.rejectedVotes);
+  const spoiledBallots = toNumber(figures?.spoiledBallotPapers);
 
   return {
     accreditedVoters,
@@ -440,7 +444,7 @@ function buildOfficialSummary(response: ElectionCollationResponse): CollationIte
     usedBallots,
     unusedBallots: Math.max(0, accreditedVoters - usedBallots),
     aggregateVoters:
-      typeof response.overview.officialInecAggregate.value === "number"
+      typeof response.overview?.officialInecAggregate?.value === "number"
         ? formatCompactNumber(response.overview.officialInecAggregate.value)
         : "Not Recorded",
   };
@@ -615,8 +619,10 @@ function buildGeoBreakdown(
 }
 
 function buildMonitoringActivity(response: ElectionCollationResponse): MonitoringActivityItem[] {
-  const totalReports = response.overview.resultsUploadedCount + response.overview.incidentsReportedCount;
-  const submitters = response.overview.distinctObserverSubmitters;
+  const totalReports =
+    toNumber(response.overview?.resultsUploadedCount) +
+    toNumber(response.overview?.incidentsReportedCount);
+  const submitters = toNumber(response.overview?.distinctObserverSubmitters);
 
   return [
     {
@@ -639,7 +645,7 @@ function buildMonitoringActivity(response: ElectionCollationResponse): Monitorin
     },
     {
       label: "Avg, submission time",
-      value: getTimeAgo(response.overview.lastSyncAt),
+      value: getTimeAgo(response.overview?.lastSyncAt),
       icon: "time-outline",
       color: "#111827",
     },
@@ -702,39 +708,58 @@ export function mapCollationResponseToItem(
   response: ElectionCollationResponse,
   fallbackElection?: CollationElectionSource
 ): CollationItem {
+  // `meta`, `electionDetails` and `overview` are typed as required, but that
+  // TS contract only holds if the backend actually fills them in every time.
+  // It's JSON-parsed with no runtime validation (see http.ts), so a response
+  // for an election whose aggregation hasn't fully populated yet — missing
+  // one of these objects entirely — must degrade gracefully instead of
+  // throwing mid-render and blanking the whole Collation screen.
   const meta = response.meta;
-  const location = normalizeLocation(meta.electionLocation ?? response.electionDetails.electionLocation);
-  const electionTitle = meta.electionName || response.electionDetails.electionName || "Election";
+  const details = response.electionDetails;
+  const overview = response.overview;
+
+  const location = normalizeLocation(
+    meta?.electionLocation ??
+      details?.electionLocation ??
+      fallbackElection?.electionLocation
+  );
+  const electionTitle =
+    meta?.electionName ||
+    details?.electionName ||
+    fallbackElection?.electionName ||
+    "Election";
   const parties = buildParties(response.result);
   const totalVotes = getTotalVotes(parties);
   const { coveredUnits, totalUnits } = getCoverage(response);
   const progressPercent = totalUnits > 0 ? Math.round((coveredUnits / totalUnits) * 100) : 0;
-  const hasReportData = response.overview.resultsUploadedCount > 0 || response.overview.incidentsReportedCount > 0;
+  const resultsUploadedCount = toNumber(overview?.resultsUploadedCount);
+  const incidentsReportedCount = toNumber(overview?.incidentsReportedCount);
+  const hasReportData = resultsUploadedCount > 0 || incidentsReportedCount > 0;
 
   return {
-    id: meta.activeElectionId,
+    id: meta?.activeElectionId ?? fallbackElection?.id ?? "unknown-election",
     status: fallbackElection?.status === "live" ? "live" : "ended",
     electionTitle,
-    electionType: meta.electionType,
-    electionDateLabel: formatElectionDateLabel(meta.startDate),
+    electionType: meta?.electionType ?? details?.electionType ?? fallbackElection?.electionType ?? "election",
+    electionDateLabel: formatElectionDateLabel(meta?.startDate ?? details?.startDate),
     progressPercent,
     coveredUnits,
     totalUnits,
-    lastSyncLabel: getTimeAgo(response.overview.lastSyncAt),
+    lastSyncLabel: getTimeAgo(overview?.lastSyncAt),
     fullTitle: electionTitle,
     location,
-    dateRange: formatDateRange(meta.startDate, meta.endDate),
+    dateRange: formatDateRange(meta?.startDate ?? details?.startDate, meta?.endDate ?? details?.endDate),
     description:
-      response.overview.resultsUploadedCount > 0
-        ? `See the vote result from ${response.overview.resultsUploadedCount} result${
-            response.overview.resultsUploadedCount === 1 ? "" : "s"
-          } and ${response.overview.incidentsReportedCount} incident${
-            response.overview.incidentsReportedCount === 1 ? "" : "s"
+      resultsUploadedCount > 0
+        ? `See the vote result from ${resultsUploadedCount} result${
+            resultsUploadedCount === 1 ? "" : "s"
+          } and ${incidentsReportedCount} incident${
+            incidentsReportedCount === 1 ? "" : "s"
           } in ${location} reported by observers.`
         : "No verified collation report has been submitted yet.",
-    resultsUploaded: response.overview.resultsUploadedCount,
-    incidentsReported: response.overview.incidentsReportedCount,
-    observersCount: response.overview.distinctObserverSubmitters,
+    resultsUploaded: resultsUploadedCount,
+    incidentsReported: incidentsReportedCount,
+    observersCount: toNumber(overview?.distinctObserverSubmitters),
     totalVotesLabel: `${formatCompactNumber(totalVotes)} Votes`,
     canReviewReports: false,
     canJoinDiscussion: fallbackElection?.status === "live",
@@ -748,7 +773,7 @@ export function mapCollationResponseToItem(
     geoGroupLabel: resolveGeoGroupLabel(response.geoBreakdown?.groupBy),
     geoScopeLabel:
       response.geoBreakdown?.summary?.scopeLabel?.trim() ||
-      response.meta.electionLocation?.trim() ||
+      meta?.electionLocation?.trim() ||
       "Nationwide",
     reviewReports: [],
     discussions: [],

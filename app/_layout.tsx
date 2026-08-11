@@ -18,6 +18,8 @@ SplashScreen.setOptions({
   fade: true,
 });
 
+export { default as ErrorBoundary } from "@/components/app/RouteErrorFallback";
+
 export default function RootLayout() {
   const [loaded, error] = useFonts({
     "Inter-Regular": require("../assets/fonts/Inter-Regular.ttf"),

@@ -331,6 +331,8 @@ function HomeSkeleton() {
   );
 }
 
+export { default as ErrorBoundary } from "@/components/app/RouteErrorFallback";
+
 export default function HomeScreen() {
   const { showToast, isConnected } = useNetwork();
   const dashboardQuery = useDashboardQuery();

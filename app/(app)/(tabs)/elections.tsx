@@ -113,6 +113,8 @@ function EmptyElectionsState({
   );
 }
 
+export { default as ErrorBoundary } from "@/components/app/RouteErrorFallback";
+
 export default function ElectionsScreen() {
   const filterSheetRef = useRef<BottomSheetModal>(null);
   const commencementRef = useRef<BottomSheetModal>(null);

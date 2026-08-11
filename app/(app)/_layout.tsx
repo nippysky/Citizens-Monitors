@@ -12,6 +12,8 @@ import { OfflineSyncProvider } from "@/context/OfflineSyncContext";
 import { TourProvider } from "@/context/TourContext";
 import { useBiometricGate } from "@/hooks/useBiometricGate";
 
+export { default as ErrorBoundary } from "@/components/app/RouteErrorFallback";
+
 export default function AppLayout() {
   const {
     isAuthenticated,

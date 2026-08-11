@@ -419,6 +419,8 @@ function MeScreenSkeleton() {
   );
 }
 
+export { default as ErrorBoundary } from "@/components/app/RouteErrorFallback";
+
 export default function MeScreen() {
   const { signOut } = useAuth();
   const { showToast } = useToastContext();

@@ -12,6 +12,8 @@ import SharePulseOpinionSheet from "@/components/pulse/SharePulseOpinionSheet";
 import { Paths } from "@/constants/paths";
 import { Theme } from "@/theme";
 
+export { default as ErrorBoundary } from "@/components/app/RouteErrorFallback";
+
 export default function PulseScreen() {
   const [scrolling, setScrolling] = useState(false);
   const shareSheetRef = useRef<BottomSheetModal>(null);
