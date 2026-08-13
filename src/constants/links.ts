@@ -17,12 +17,6 @@
 
 export const WEB_BASE_URL = "https://www.citizenmonitors.com";
 
-/**
- * Donation page, shown inside an in-app WebView.
- * The website owns the entire Stripe checkout, so the app needs no keys.
- */
-export const DONATE_URL = `${WEB_BASE_URL}/donate`;
-
 export function buildNewsShareUrl(slugOrId: string): string {
   return `${WEB_BASE_URL}/insights/${encodeURIComponent(slugOrId)}`;
 }
