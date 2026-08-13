@@ -40,13 +40,20 @@ export default function RouteErrorFallback({ error, retry }: ErrorBoundaryProps)
           keeps happening, let us know what you were doing right before it.
         </AppText>
 
-        {__DEV__ ? (
-          <View style={styles.debugBox}>
-            <AppText style={styles.debugText} numberOfLines={6}>
-              {error.message}
-            </AppText>
-          </View>
-        ) : null}
+        {/*
+          Intentionally shown in every build, not just __DEV__, while the app
+          is still in internal/client testing and there's no crash-reporting
+          service (e.g. Sentry) wired up yet. Without this, a report like
+          "Collation shows an error" is undiagnosable — there's no other way
+          to see what actually broke. Re-gate this behind __DEV__ (or replace
+          it with real crash reporting) before public release.
+        */}
+        <View style={styles.debugBox}>
+          <AppText style={styles.debugLabel}>Error details (for support):</AppText>
+          <AppText style={styles.debugText} numberOfLines={8}>
+            {error.message || error.name || "Unknown error"}
+          </AppText>
+        </View>
 
         <Pressable
           onPress={retry}
@@ -106,6 +113,15 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(220,38,38,0.06)",
     borderWidth: 1,
     borderColor: "rgba(220,38,38,0.18)",
+    gap: 4,
+  },
+  debugLabel: {
+    fontSize: 10,
+    lineHeight: 13,
+    color: Theme.colors.danger,
+    fontFamily: Theme.fonts.body.semibold,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
   debugText: {
     fontSize: 11,
