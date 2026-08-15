@@ -16,7 +16,13 @@ function normalizeOptions(items: LocationOption[]): string[] {
   const seen = new Set<string>();
   const options: string[] = [];
 
-  for (const item of items) {
+  // `items` is only a TS-level promise, not a runtime guarantee — apiRequest()
+  // does a raw JSON.parse with no schema validation. If the backend ever
+  // serializes this endpoint as an object instead of an array, `for...of`
+  // throws "iterator method is not callable" in Hermes and crashes whatever
+  // screen called this (states/LGA/ward/polling-unit pickers). Guard the
+  // shape, not just nullishness.
+  for (const item of Array.isArray(items) ? items : []) {
     const name = normalizeLocationName(item.name);
 
     if (!name || seen.has(name)) {

@@ -70,7 +70,7 @@ function cleanText(value?: string): string {
 }
 
 function createPartyVoteState(result: ElectionVaultResult): EditablePartyVote[] {
-  const existing = result.partiesVotes ?? [];
+  const existing = Array.isArray(result.partiesVotes) ? result.partiesVotes : [];
 
   if (existing.length > 0) {
     return existing.map((item, index) => ({

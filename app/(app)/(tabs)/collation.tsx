@@ -156,7 +156,10 @@ export default function CollationScreen() {
   const routedCollationQuery = useElectionCollationQuery(incomingElectionId);
 
   const elections = useMemo<CollationElectionSource[]>(() => {
-    const raw = electionsQuery.data?.elections ?? [];
+    // Array.isArray guard, not just `?? []` — `elections` is only a
+    // TS-level promise from apiRequest(), not a runtime guarantee.
+    const list = electionsQuery.data?.elections;
+    const raw = Array.isArray(list) ? list : [];
 
     return raw
       .map((item: unknown) => normalizeElectionSource(item))

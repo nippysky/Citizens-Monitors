@@ -63,8 +63,10 @@ function normalizeLookupResponse(
     };
   }
 
-  const pollingUnits =
-    response.pollingUnits ?? response.data ?? response.results ?? [];
+  // Array.isArray guard on each candidate — `?? []` alone doesn't help if
+  // one of these fields exists but isn't actually an array.
+  const candidate = response.pollingUnits ?? response.data ?? response.results;
+  const pollingUnits = Array.isArray(candidate) ? candidate : [];
 
   return {
     count: response.count ?? pollingUnits.length,

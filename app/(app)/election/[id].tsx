@@ -83,9 +83,12 @@ export default function ElectionDetailsScreen() {
   const electionSource = useMemo(() => {
     if (!routeElectionId) return undefined;
 
-    const election = electionsQuery.data?.elections.find(
-      (item) => item.id === routeElectionId
-    );
+    // Array.isArray guard — same reasoning as elections.tsx/collation.tsx:
+    // `.elections` is only a TS-level promise, not a runtime guarantee.
+    const list = electionsQuery.data?.elections;
+    const election = Array.isArray(list)
+      ? list.find((item) => item.id === routeElectionId)
+      : undefined;
 
     return election ? normalizeElectionSource(election) : undefined;
   }, [electionsQuery.data, routeElectionId]);

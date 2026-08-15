@@ -128,7 +128,12 @@ function getIncidentEvidenceCount(incident: ElectionVaultIncident): number {
 }
 
 function getTopPartySummary(result: ElectionVaultResult): string {
-  const parties = [...(result.partiesVotes ?? [])]
+  // Array.isArray guard, not just `?? []` — a truthy non-array here throws
+  // "iterator method is not callable" on the spread, same crash class fixed
+  // in src/data/collation.ts.
+  const parties = [
+    ...(Array.isArray(result.partiesVotes) ? result.partiesVotes : []),
+  ]
     .filter((item) => item.party)
     .sort((a, b) => (b.count ?? 0) - (a.count ?? 0))
     .slice(0, 3);

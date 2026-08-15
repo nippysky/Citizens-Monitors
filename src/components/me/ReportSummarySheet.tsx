@@ -120,7 +120,7 @@ function EvidenceThumb({
 }
 
 function PartyVoteRows({ result }: { result: ElectionVaultResult }) {
-  const parties = result.partiesVotes ?? [];
+  const parties = Array.isArray(result.partiesVotes) ? result.partiesVotes : [];
   const total = parties.reduce((sum, item) => sum + (item.count ?? 0), 0);
 
   if (!parties.length) {
@@ -294,7 +294,10 @@ function IncidentSummary({ incident }: { incident: ElectionVaultIncident }) {
         <AppText style={styles.sectionTitle}>Evidence</AppText>
 
         <View style={styles.evidenceGrid}>
-          {(incident.incidentPictures ?? []).map((file) => (
+          {(Array.isArray(incident.incidentPictures)
+            ? incident.incidentPictures
+            : []
+          ).map((file) => (
             <EvidenceThumb
               key={file._id || file.url}
               url={file.url}

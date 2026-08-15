@@ -143,7 +143,12 @@ export default function ElectionsScreen() {
   );
 
   const electionItems = useMemo(() => {
-    const items = electionsQuery.data?.elections.map(mapApiElectionToItem) ?? [];
+    // Array.isArray guard: `data?.elections.map(...)` would throw if `data`
+    // exists but `elections` doesn't (the trailing `?? []` only catches
+    // `data` itself being missing, not `elections`), or if `elections` came
+    // back as a non-array shape.
+    const list = electionsQuery.data?.elections;
+    const items = Array.isArray(list) ? list.map(mapApiElectionToItem) : [];
 
     return sortElectionsForDisplay(items);
   }, [electionsQuery.data]);
