@@ -339,7 +339,12 @@ function buildParties(
 ): PartyResult[] {
   const totals = new Map<string, number>();
 
-  for (const region of result ?? []) {
+  // `result ?? []` alone only guards against null/undefined. If the backend
+  // ever serializes `result` as a keyed object instead of an array (this has
+  // happened before — see file header comment), `for...of` on a plain object
+  // throws "iterator method is not callable" in Hermes, crashing the whole
+  // screen. Array.isArray() guards against that shape mismatch too.
+  for (const region of Array.isArray(result) ? result : []) {
     for (const [party, votes] of Object.entries(region?.aggregateAnalysis ?? {})) {
       const name = party.trim();
       if (!name) continue;
@@ -394,9 +399,16 @@ function getCoverage(response: ElectionCollationResponse) {
     };
   }
 
+  // Same Array.isArray() guard as buildParties()/buildIncidentAnalytics() —
+  // `?? []` doesn't help if the field is a truthy non-array.
+  const resultList = Array.isArray(response.result) ? response.result : [];
+  const incidentList = Array.isArray(response.incidentReport)
+    ? response.incidentReport
+    : [];
+
   const footers = [
-    ...(response.result ?? []).map((region) => region?.footer),
-    ...(response.incidentReport ?? []).map((region) => region?.footer),
+    ...resultList.map((region) => region?.footer),
+    ...incidentList.map((region) => region?.footer),
   ].filter(Boolean);
 
   let registered = 0;
@@ -517,7 +529,9 @@ function buildIncidentAnalytics(
 ): IncidentAnalyticsItem[] {
   const totals = new Map<string, number>();
 
-  for (const region of payload ?? []) {
+  // Same Array.isArray() guard as buildParties() — see that function's
+  // comment for why `?? []` alone isn't enough.
+  for (const region of Array.isArray(payload) ? payload : []) {
     for (const [label, count] of Object.entries(region?.aggregateAnalysis ?? {})) {
       const name = label.trim();
       if (!name) continue;
