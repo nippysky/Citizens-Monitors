@@ -75,6 +75,7 @@ function AnswerPill({
           styles.answerPillText,
           active && styles.answerPillTextActive,
         ]}
+        numberOfLines={1}
       >
         {label}
       </AppText>

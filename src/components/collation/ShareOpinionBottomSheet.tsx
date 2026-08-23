@@ -15,22 +15,22 @@ import AppInput from "@/components/ui/AppInput";
 import AppText from "@/components/ui/AppText";
 import { PickedMedia, useCollationMedia } from "@/hooks/useCollationMedia";
 import { useAppToast } from "@/hooks/useAppToast";
+import { useCreateDiscussionPostMutation } from "@/hooks/api/useDiscussionQueries";
 import { Theme } from "@/theme";
 
-type Audience = "my-polling-unit" | "my-world" | "my-state";
+// The backend's discussion-post endpoint has no scope/visibility field (it
+// takes body/allowSocialShare/useAnonymousDisplay/images/videos only) — so
+// this picker is currently UI-only and not sent with the post. Kept per
+// product direction; ask backend if a real scope field is planned.
+type Audience = "my-polling-unit" | "ward";
 
 type Props = {
+  electionId: string;
   onSubmitted?: () => void;
-  /** Called with the actual payload so parent can add to local list */
-  onPayload?: (payload: {
-    opinion: string;
-    audience: Audience;
-    shareToSocial: boolean;
-  }) => void;
 };
 
 const ShareOpinionBottomSheet = forwardRef<BottomSheetModal, Props>(
-  function ShareOpinionBottomSheet({ onSubmitted, onPayload }, ref) {
+  function ShareOpinionBottomSheet({ electionId, onSubmitted }, ref) {
     const insets = useSafeAreaInsets();
     const { handleSheetChange } = useBottomSheetBackHandler(
       ref as React.RefObject<BottomSheetModal | null>
@@ -38,9 +38,11 @@ const ShareOpinionBottomSheet = forwardRef<BottomSheetModal, Props>(
     const { showToast } = useAppToast();
     const { pickImageFromGallery, pickVideoFromGallery, busy } =
       useCollationMedia();
+    const createPostMutation = useCreateDiscussionPostMutation(electionId);
     const [opinion, setOpinion] = useState("");
     const [audience, setAudience] = useState<Audience>("my-polling-unit");
     const [social, setSocial] = useState(true);
+    const [anonymous, setAnonymous] = useState(false);
     const [imgAsset, setImgAsset] = useState<PickedMedia | null>(null);
     const [vidAsset, setVidAsset] = useState<PickedMedia | null>(null);
     const snaps = useMemo(() => ["88%"], []);
@@ -68,28 +70,45 @@ const ShareOpinionBottomSheet = forwardRef<BottomSheetModal, Props>(
       if (r.data) setVidAsset(r.data);
     };
 
-    const submit = () => {
+    const submit = async () => {
       if (!ok) {
         showToast({ type: "error", message: "Write your opinion first." });
         return;
       }
 
-      // Send payload to parent for local list insertion
-      onPayload?.({
-        opinion: opinion.trim(),
-        audience,
-        shareToSocial: social,
-      });
+      if (!electionId) {
+        showToast({ type: "error", message: "No election selected." });
+        return;
+      }
 
-      onSubmitted?.();
+      try {
+        await createPostMutation.mutateAsync({
+          body: opinion.trim(),
+          allowSocialShare: social,
+          useAnonymousDisplay: anonymous,
+          imageUri: imgAsset?.uri ?? null,
+          videoUri: vidAsset?.uri ?? null,
+        });
 
-      // Reset
-      setOpinion("");
-      setAudience("my-polling-unit");
-      setSocial(true);
-      setImgAsset(null);
-      setVidAsset(null);
-      close();
+        onSubmitted?.();
+
+        // Reset
+        setOpinion("");
+        setAudience("my-polling-unit");
+        setSocial(true);
+        setAnonymous(false);
+        setImgAsset(null);
+        setVidAsset(null);
+        close();
+      } catch (error) {
+        showToast({
+          type: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Couldn't post your opinion. Please try again.",
+        });
+      }
     };
 
     return (
@@ -203,25 +222,20 @@ const ShareOpinionBottomSheet = forwardRef<BottomSheetModal, Props>(
           <View style={st.sec}>
             <AppText style={st.label}>Who can see this discussion?</AppText>
             <View style={st.audWrap}>
-              {(["my-polling-unit", "my-world", "my-state"] as Audience[]).map(
-                (a) => (
-                  <Pressable
-                    key={a}
-                    onPress={() => setAudience(a)}
-                    style={[st.chip, audience === a && st.chipOn]}
+              {(["my-polling-unit", "ward"] as Audience[]).map((a) => (
+                <Pressable
+                  key={a}
+                  onPress={() => setAudience(a)}
+                  style={[st.chip, audience === a && st.chipOn]}
+                >
+                  <AppText
+                    style={[st.chipText, audience === a && st.chipTextOn]}
+                    numberOfLines={1}
                   >
-                    <AppText
-                      style={[st.chipText, audience === a && st.chipTextOn]}
-                    >
-                      {a === "my-polling-unit"
-                        ? "My polling unit"
-                        : a === "my-world"
-                          ? "My world"
-                          : "Within my state"}
-                    </AppText>
-                  </Pressable>
-                )
-              )}
+                    {a === "my-polling-unit" ? "Polling Unit" : "Ward"}
+                  </AppText>
+                </Pressable>
+              ))}
             </View>
           </View>
 
@@ -238,14 +252,27 @@ const ShareOpinionBottomSheet = forwardRef<BottomSheetModal, Props>(
             />
           </View>
 
+          <View style={st.switchRow}>
+            <AppText style={st.switchLabel}>
+              Post anonymously (hide your name).
+            </AppText>
+            <Switch
+              value={anonymous}
+              onValueChange={setAnonymous}
+              trackColor={{ false: "#D7DDE5", true: "#AEE7E1" }}
+              thumbColor={anonymous ? Theme.colors.primary : "#FFF"}
+              ios_backgroundColor="#D7DDE5"
+            />
+          </View>
+
         </BottomSheetScrollView>
 
         <View style={[st.footer, { paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
           <AppButton
-            title="Submit Post"
-            onPress={submit}
-            disabled={!ok}
-            loading={busy}
+            title={createPostMutation.isPending ? "Posting..." : "Submit Post"}
+            onPress={() => void submit()}
+            disabled={!ok || busy || createPostMutation.isPending}
+            loading={busy || createPostMutation.isPending}
             style={st.submitButton}
           />
         </View>

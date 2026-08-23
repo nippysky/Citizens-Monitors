@@ -49,6 +49,7 @@ import {
   startOfMonth,
 } from "@/data/elections";
 import { useActiveElectionsQuery } from "@/hooks/api/useElectionQueries";
+import { useSubmissionGate } from "@/hooks/useSubmissionGate";
 import NoElection from "@/svgs/app/NoElection";
 import { Theme } from "@/theme";
 import { useAnimatedValue } from "@/hooks/useAnimatedValue";
@@ -177,14 +178,19 @@ export default function ElectionsScreen() {
     [selectedElection, profileLike]
   );
 
+  const { checkAndProceed } = useSubmissionGate();
+
   const handleOpenSubmitSheet = (item: ElectionItem) => {
     // A report is worthless without a real election id — refuse rather than
     // opening a flow that would submit against nothing.
-    if (!(item.activeElectionId || item.id)) return;
+    const electionId = item.activeElectionId || item.id;
+    if (!electionId) return;
 
-    setSelectedElection(item);
-    // Present on the next frame so the sheet renders with the new context.
-    requestAnimationFrame(() => commencementRef.current?.present());
+    void checkAndProceed(electionId, () => {
+      setSelectedElection(item);
+      // Present on the next frame so the sheet renders with the new context.
+      requestAnimationFrame(() => commencementRef.current?.present());
+    });
   };
 
   const handleProceedResult = async (time: string) => {

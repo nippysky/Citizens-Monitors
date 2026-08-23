@@ -9,6 +9,7 @@ import { forwardRef, useMemo } from "react";
 import { Image, Linking, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import PartyLogo from "@/components/shared/PartyLogo";
 import AppText from "@/components/ui/AppText";
 import {
   ElectionVaultIncident,
@@ -16,6 +17,7 @@ import {
   ElectionVaultSubmission,
   getVaultElectionName,
   isVaultResult,
+  resolvePartyLogoUrl,
 } from "@/lib/api/electionVault.api";
 import { Theme } from "@/theme";
 
@@ -133,16 +135,28 @@ function PartyVoteRows({ result }: { result: ElectionVaultResult }) {
     );
   }
 
+  const politicalParties = result.election?.politicalParties;
+
   return (
     <View style={styles.partyWrap}>
       {parties.map((party) => {
         const count = party.count ?? 0;
         const percent = total > 0 ? Math.max(4, (count / total) * 100) : 0;
+        const code = party.party || "Party";
 
         return (
           <View key={party._id || party.party} style={styles.partyRow}>
             <View style={styles.partyTop}>
-              <AppText style={styles.partyName}>{party.party || "Party"}</AppText>
+              <View style={styles.partyNameRow}>
+                <PartyLogo
+                  code={code}
+                  logoUrl={resolvePartyLogoUrl(code, politicalParties)}
+                  size={22}
+                />
+                <AppText style={styles.partyName} numberOfLines={1}>
+                  {code}
+                </AppText>
+              </View>
               <AppText style={styles.partyCount}>{formatNumber(count)}</AppText>
             </View>
 
@@ -565,10 +579,18 @@ const styles = StyleSheet.create({
   },
   partyTop: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
   },
+  partyNameRow: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   partyName: {
+    flexShrink: 1,
     fontSize: 14,
     lineHeight: 19,
     color: Theme.colors.text,

@@ -1,11 +1,13 @@
 // ─── src/components/collation/CollationDiscussionTab.tsx ───────────────────────
-// Functional discussion tab — re-exports the full implementation.
-// (Named singular to match the existing import in election/[id].tsx.)
+// Functional discussion tab — real backend-backed (create/list posts, like,
+// comment). (Named singular to match the existing import in election/[id].tsx.)
 // ─────────────────────────────────────────────────────────────────────────────
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
 import { usePathname } from "expo-router";
 import {
+  ActivityIndicator,
+  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -13,19 +15,22 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import { isTabPathname } from "@/constants/tabRoutes";
 import { useTabBarLayout } from "@/hooks/useTabBarLayout";
 
 import AppText from "@/components/ui/AppText";
-import CommentsBottomSheet, {
-  DiscussionComment,
-} from "@/components/collation/CommentsBottomSheet";
+import DiscussionCommentsBottomSheet from "@/components/collation/DiscussionCommentsBottomSheet";
 import ShareOpinionBottomSheet from "@/components/collation/ShareOpinionBottomSheet";
 import { useAppToast } from "@/hooks/useAppToast";
-import { useOfflineSync } from "@/context/OfflineSyncContext";
-import { CollationItem, DiscussionItem } from "@/data/collation";
+import {
+  useDiscussionPostsInfiniteQuery,
+  useLikeDiscussionPostMutation,
+} from "@/hooks/api/useDiscussionQueries";
+import { DiscussionPost } from "@/lib/api/discussion.api";
+import { formatTimeAgo } from "@/lib/formatTimeAgo";
+import { CollationItem } from "@/data/collation";
 import { Theme } from "@/theme";
 import NoElection from "@/svgs/app/NoElection";
 
@@ -35,86 +40,69 @@ type Props = {
   onRefresh?: () => void;
 };
 
+function getMinutesAgo(dateValue?: string): number {
+  if (!dateValue) return 0;
+
+  const date = new Date(dateValue);
+
+  if (Number.isNaN(date.getTime())) {
+    return 0;
+  }
+
+  return Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000));
+}
+
 export default function CollationDiscussionsTab({
   collation,
   refreshing: externalRefreshing,
   onRefresh: externalRefresh,
 }: Props) {
   const { showToast } = useAppToast();
-  const { enqueue } = useOfflineSync();
   const commentsRef = useRef<BottomSheetModal>(null);
   const shareOpinionRef = useRef<BottomSheetModal>(null);
 
-  const [comments, setComments] = useState<DiscussionComment[]>([]);
-  const [localRefreshing, setLocalRefreshing] = useState(false);
-  const [localDiscussions, setLocalDiscussions] = useState<DiscussionItem[]>(
-    collation.discussions
+  const electionId = collation.id;
+  const postsQuery = useDiscussionPostsInfiniteQuery(electionId);
+  const likePostMutation = useLikeDiscussionPostMutation(electionId);
+
+  const [activePostId, setActivePostId] = useState<string | null>(null);
+
+  const posts = useMemo<DiscussionPost[]>(
+    () => postsQuery.data?.pages.flatMap((page) => page.posts) ?? [],
+    [postsQuery.data]
   );
-  const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
-  const [localLikeCounts, setLocalLikeCounts] = useState<Record<string, number>>({});
 
-  /*
-   * Reset per-election local state when the user switches collation card.
-   * Done during render rather than in an effect so stale likes/comments from
-   * the previous election are never briefly visible.
-   */
-  const [lastCollationId, setLastCollationId] = useState(collation.id);
-
-  if (collation.id !== lastCollationId) {
-    setLastCollationId(collation.id);
-    setLocalDiscussions(collation.discussions);
-    setComments([]);
-    setLikedIds(new Set());
-    setLocalLikeCounts({});
-  }
-
-  const refreshing = externalRefreshing ?? localRefreshing;
+  const refreshing = externalRefreshing ?? postsQuery.isRefetching;
 
   const onRefresh = useCallback(() => {
-    if (externalRefresh) {
-      externalRefresh();
-      return;
-    }
-
-    setLocalRefreshing(true);
-    setTimeout(() => setLocalRefreshing(false), 1400);
-  }, [externalRefresh]);
+    void postsQuery.refetch();
+    externalRefresh?.();
+  }, [externalRefresh, postsQuery]);
 
   const handleLike = useCallback(
-    (id: string, currentLikes: number) => {
-      const alreadyLiked = likedIds.has(id);
-
-      setLikedIds((prev) => {
-        const next = new Set(prev);
-        if (alreadyLiked) next.delete(id);
-        else next.add(id);
-        return next;
-      });
-
-      setLocalLikeCounts((prev) => ({
-        ...prev,
-        [id]: alreadyLiked
-          ? Math.max(0, (prev[id] ?? currentLikes) - 1)
-          : (prev[id] ?? currentLikes) + 1,
-      }));
-
-      enqueue({
-        type: "like",
-        payload: { discussionId: id, liked: !alreadyLiked },
+    (postId: string) => {
+      likePostMutation.mutate(postId, {
+        onError: (error) => {
+          showToast({
+            type: "error",
+            message:
+              error instanceof Error ? error.message : "Couldn't like this post.",
+          });
+        },
       });
     },
-    [likedIds, enqueue]
+    [likePostMutation, showToast]
   );
 
   const handleShare = useCallback(
-    async (item: DiscussionItem) => {
+    async (item: DiscussionPost) => {
       const message = [
-        `💬 ${item.author}`,
+        `💬 ${item.author.displayName}`,
         `🗳 ${collation.fullTitle}`,
         "",
         item.body,
         "",
-        `👍 ${item.likes} Likes · 💬 ${item.commentCount} Comments · 🔗 ${item.shares} Shares`,
+        `👍 ${item.likesCount} Likes`,
         "",
         "Shared via Citizen Monitors",
       ].join("\n");
@@ -128,57 +116,12 @@ export default function CollationDiscussionsTab({
     [collation.fullTitle, showToast]
   );
 
-  const handleNewComment = useCallback(
-    (text: string) => {
-      const next: DiscussionComment = {
-        id: String(Date.now()),
-        author: "@You",
-        body: text,
-        minutesAgo: 0,
-        likes: 0,
-        shares: 0,
-      };
-
-      setComments((prev) => [next, ...prev]);
-      enqueue({
-        type: "comment",
-        payload: { collationId: collation.id, text },
-      });
-      showToast({ type: "success", message: "Comment submitted." });
-    },
-    [showToast, enqueue, collation.id]
-  );
-
-  const handleOpinionSubmitted = useCallback(() => {
-    showToast({ type: "success", message: "Discussion post created." });
-  }, [showToast]);
-
-  const handleOpinionPayload = useCallback(
-    (payload: { opinion: string; audience: string; shareToSocial: boolean }) => {
-      const newDiscussion: DiscussionItem = {
-        id: `local-${Date.now()}`,
-        author: "@You",
-        body: payload.opinion,
-        minutesAgo: 0,
-        likes: 0,
-        commentCount: 0,
-        shares: 0,
-      };
-
-      setLocalDiscussions((prev) => [newDiscussion, ...prev]);
-
-      enqueue({
-        type: "opinion",
-        payload: {
-          collationId: collation.id,
-          opinion: payload.opinion,
-          audience: payload.audience,
-          shareToSocial: payload.shareToSocial,
-        },
-      });
-    },
-    [enqueue, collation.id]
-  );
+  const openComments = useCallback((postId: string) => {
+    setActivePostId(postId);
+    requestAnimationFrame(() => {
+      commentsRef.current?.present();
+    });
+  }, []);
 
   const openShareOpinion = useCallback(() => {
     requestAnimationFrame(() => {
@@ -186,7 +129,13 @@ export default function CollationDiscussionsTab({
     });
   }, []);
 
-  const hasDiscussions = localDiscussions.length > 0;
+  const handleOpinionSubmitted = useCallback(() => {
+    showToast({ type: "success", message: "Discussion post created." });
+  }, [showToast]);
+
+  const hasDiscussions = posts.length > 0;
+  const isInitialLoading = postsQuery.isLoading;
+  const hasError = postsQuery.isError && !hasDiscussions;
 
   return (
     <View style={styles.container}>
@@ -210,7 +159,19 @@ export default function CollationDiscussionsTab({
           </AppText>
         </View>
 
-        {!hasDiscussions ? (
+        {isInitialLoading ? (
+          <View style={styles.emptyWrap}>
+            <ActivityIndicator color={Theme.colors.primary} />
+          </View>
+        ) : hasError ? (
+          <View style={styles.emptyWrap}>
+            <NoElection width={110} height={110} />
+            <AppText style={styles.emptyTitle}>Couldn&apos;t load discussions</AppText>
+            <AppText style={styles.emptySubtitle}>
+              Pull down to try again.
+            </AppText>
+          </View>
+        ) : !hasDiscussions ? (
           <View style={styles.emptyWrap}>
             <NoElection width={110} height={110} />
             <AppText style={styles.emptyTitle}>No Discussion yet</AppText>
@@ -219,9 +180,9 @@ export default function CollationDiscussionsTab({
             </AppText>
           </View>
         ) : (
-          localDiscussions.map((item) => {
-            const isLiked = likedIds.has(item.id);
-            const displayLikes = localLikeCounts[item.id] ?? item.likes;
+          posts.map((item) => {
+            const previewImage = item.imageUrls?.[0];
+            const hasVideo = (item.videoUrls?.length ?? 0) > 0;
 
             return (
               <View key={item.id} style={styles.card}>
@@ -232,40 +193,62 @@ export default function CollationDiscussionsTab({
                       size={16}
                       color={Theme.colors.textMuted}
                     />
-                    <AppText style={styles.author}>{item.author}</AppText>
+                    <AppText style={styles.author} numberOfLines={1}>
+                      {item.author.displayName}
+                    </AppText>
                   </View>
-                  <AppText style={styles.timeText}>{item.minutesAgo} min ago</AppText>
+                  <AppText style={styles.timeText}>
+                    {formatTimeAgo(getMinutesAgo(item.createdAt))}
+                  </AppText>
                 </View>
 
                 <View style={styles.electionLabelRow}>
                   <View style={styles.electionDot} />
-                  <AppText style={styles.electionLabelText}>
+                  <AppText style={styles.electionLabelText} numberOfLines={1}>
                     {collation.fullTitle}
                   </AppText>
                 </View>
 
                 <AppText style={styles.body}>{item.body}</AppText>
 
+                {previewImage ? (
+                  <Image source={{ uri: previewImage }} style={styles.previewImage} />
+                ) : null}
+
+                {hasVideo ? (
+                  <View style={styles.videoTag}>
+                    <Ionicons name="videocam" size={14} color={Theme.colors.primary} />
+                    <AppText style={styles.videoTagText}>Video attached</AppText>
+                  </View>
+                ) : null}
+
                 <View style={styles.metaRow}>
                   <Pressable
-                    onPress={() => handleLike(item.id, item.likes)}
+                    onPress={() => handleLike(item.id)}
                     style={styles.metaItem}
                     hitSlop={6}
                   >
                     <Ionicons
-                      name={isLiked ? "thumbs-up" : "thumbs-up-outline"}
+                      name={item.isLikedByCurrentUser ? "thumbs-up" : "thumbs-up-outline"}
                       size={16}
-                      color={isLiked ? Theme.colors.primary : Theme.colors.textMuted}
+                      color={
+                        item.isLikedByCurrentUser
+                          ? Theme.colors.primary
+                          : Theme.colors.textMuted
+                      }
                     />
                     <AppText
-                      style={[styles.metaText, isLiked && { color: Theme.colors.primary }]}
+                      style={[
+                        styles.metaText,
+                        item.isLikedByCurrentUser && { color: Theme.colors.primary },
+                      ]}
                     >
-                      {displayLikes} Likes
+                      {item.likesCount} Likes
                     </AppText>
                   </Pressable>
 
                   <Pressable
-                    onPress={() => commentsRef.current?.present()}
+                    onPress={() => openComments(item.id)}
                     style={styles.metaItem}
                     hitSlop={6}
                   >
@@ -274,13 +257,11 @@ export default function CollationDiscussionsTab({
                       size={16}
                       color={Theme.colors.textMuted}
                     />
-                    <AppText style={styles.metaText}>
-                      {item.commentCount} Comments
-                    </AppText>
+                    <AppText style={styles.metaText}>Comments</AppText>
                   </Pressable>
 
                   <Pressable
-                    onPress={() => handleShare(item)}
+                    onPress={() => void handleShare(item)}
                     style={styles.metaItem}
                     hitSlop={6}
                   >
@@ -289,26 +270,38 @@ export default function CollationDiscussionsTab({
                       size={16}
                       color={Theme.colors.textMuted}
                     />
-                    <AppText style={styles.metaText}>{item.shares} Shares</AppText>
+                    <AppText style={styles.metaText}>Share</AppText>
                   </Pressable>
                 </View>
               </View>
             );
           })
         )}
+
+        {postsQuery.hasNextPage ? (
+          <Pressable
+            onPress={() => void postsQuery.fetchNextPage()}
+            style={styles.loadMoreBtn}
+            disabled={postsQuery.isFetchingNextPage}
+          >
+            <AppText style={styles.loadMoreText}>
+              {postsQuery.isFetchingNextPage ? "Loading..." : "Load more"}
+            </AppText>
+          </Pressable>
+        ) : null}
       </ScrollView>
 
       <StickyInput onPress={openShareOpinion} />
 
-      <CommentsBottomSheet
+      <DiscussionCommentsBottomSheet
         ref={commentsRef}
-        comments={comments}
-        onSubmitComment={handleNewComment}
+        electionId={electionId}
+        postId={activePostId}
       />
       <ShareOpinionBottomSheet
         ref={shareOpinionRef}
+        electionId={electionId}
         onSubmitted={handleOpinionSubmitted}
-        onPayload={handleOpinionPayload}
       />
     </View>
   );
@@ -334,7 +327,7 @@ function StickyInput({ onPress }: { onPress: () => void }) {
           <Ionicons name="chatbubbles-outline" size={20} color={Theme.colors.textMuted} />
         </View>
         <View style={styles.stickyInputFake}>
-          <AppText style={styles.stickyPlaceholder}>
+          <AppText style={styles.stickyPlaceholder} numberOfLines={1}>
             How Do You Feel About This Election Today?
           </AppText>
         </View>
@@ -369,9 +362,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 8,
   },
-  authorRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  authorRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
   author: {
+    flexShrink: 1,
     fontSize: 14,
     lineHeight: 18,
     color: Theme.colors.text,
@@ -386,12 +381,35 @@ const styles = StyleSheet.create({
     backgroundColor: "#EF4444",
   },
   electionLabelText: {
+    flexShrink: 1,
     fontSize: 12,
     lineHeight: 16,
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.medium,
   },
   body: { fontSize: 14, lineHeight: 22, color: Theme.colors.text },
+  previewImage: {
+    width: "100%",
+    height: 160,
+    borderRadius: 14,
+    resizeMode: "cover",
+  },
+  videoTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: "#EAFBF9",
+    borderRadius: 10,
+  },
+  videoTagText: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.body.medium,
+  },
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -400,6 +418,18 @@ const styles = StyleSheet.create({
   },
   metaItem: { flexDirection: "row", alignItems: "center", gap: 6 },
   metaText: { fontSize: 13, lineHeight: 16, color: Theme.colors.textMuted },
+  loadMoreBtn: {
+    alignSelf: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    marginTop: 4,
+  },
+  loadMoreText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.body.semibold,
+  },
   stickyWrap: {
     backgroundColor: Theme.colors.surface,
     borderTopWidth: 1,
@@ -433,6 +463,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingTop: 10,
+    paddingBottom: 20,
     gap: 10,
   },
   emptyTitle: {

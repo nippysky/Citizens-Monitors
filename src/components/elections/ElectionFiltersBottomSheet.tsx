@@ -184,6 +184,7 @@ export default function ElectionFiltersBottomSheet({
                       styles.filterPillText,
                       active && styles.filterPillTextActive,
                     ]}
+                    numberOfLines={1}
                   >
                     {statusLabel(status)}
                   </AppText>
@@ -211,6 +212,7 @@ export default function ElectionFiltersBottomSheet({
                       styles.filterPillText,
                       active && styles.filterPillTextActive,
                     ]}
+                    numberOfLines={1}
                   >
                     {getElectionTypeLabel(type)}
                   </AppText>

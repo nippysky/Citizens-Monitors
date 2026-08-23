@@ -24,6 +24,12 @@ export type ElectionVaultNestedElectionType = {
   electionName?: string;
 };
 
+export type ElectionVaultPoliticalParty = {
+  name: string;
+  code: string;
+  logo: string | null;
+};
+
 export type ElectionVaultElection = {
   _id?: string;
   election?: ElectionVaultNestedElectionType;
@@ -34,7 +40,7 @@ export type ElectionVaultElection = {
   incidentReports?: string[];
   resultsCount?: number;
   mockElection?: boolean;
-  politicalParties?: unknown[];
+  politicalParties?: ElectionVaultPoliticalParty[];
   createdAt?: string;
   updatedAt?: string;
   __v?: number;
@@ -225,6 +231,24 @@ export function getVaultElectionLocation(
   election?: ElectionVaultElection
 ): string {
   return election?.electionLocation?.trim() || "Polling unit submission";
+}
+
+/**
+ * Looks up a party's real logo URL from the API-provided `politicalParties`
+ * list by code (case/whitespace-insensitive). Returns null when there's no
+ * list, no match, or the matched entry has no logo — callers should fall
+ * back to a local static icon in that case.
+ */
+export function resolvePartyLogoUrl(
+  code: string,
+  parties: ElectionVaultPoliticalParty[] | null | undefined
+): string | null {
+  const list = Array.isArray(parties) ? parties : [];
+  const key = code.trim().toUpperCase();
+  if (!key) return null;
+
+  const match = list.find((party) => party.code?.trim().toUpperCase() === key);
+  return match?.logo?.trim() || null;
 }
 
 export function getActiveElectionIdFromResult(

@@ -38,14 +38,12 @@ import {
 import {
   abandonResultDraft,
   buildCommencementContext,
-  buildInitialIncidentDraft,
   buildInitialResultDraft,
   clearResultDraft,
   collectResultDraftMediaUris,
   CommencementContext,
   ElectionResultDraft,
   getResultDraft,
-  saveIncidentDraft,
   saveResultDraft,
   validateElectionResult,
 } from "@/lib/reporting";
@@ -960,6 +958,9 @@ export default function SubmitElectionReportScreen() {
                   styles.feedbackPillText,
                   active && styles.feedbackPillTextActive,
                 ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.85}
               >
                 {option.label}
               </AppText>
@@ -1130,20 +1131,6 @@ export default function SubmitElectionReportScreen() {
               )}
             </View>
 
-            {feedback.intimidationToday === "yes" ||
-            feedback.voteBuyingToday === "yes" ? (
-              <View style={styles.feedbackNudge}>
-                <Ionicons
-                  name="information-circle-outline"
-                  size={16}
-                  color="#C2410C"
-                />
-                <AppText style={styles.feedbackNudgeText}>
-                  After submitting, you can back this up with an incident
-                  report — photos and video count as evidence.
-                </AppText>
-              </View>
-            ) : null}
           </View>
 
           <AppText style={styles.sentimentNote}>
@@ -1178,64 +1165,18 @@ export default function SubmitElectionReportScreen() {
   }
 
   if (viewState === "success") {
-    const flaggedIssue =
-      feedback.intimidationToday === "yes" || feedback.voteBuyingToday === "yes";
-
-    // The verdict flagged intimidation / vote buying — nudge the user to back
-    // it up with a proper incident report (type pre-selected when possible).
-    const handleReportIncidentFromSuccess = async () => {
-      if (!draft) return;
-
-      const ctx = buildCommencementContext({
-        electionId: draft.electionId,
-        electionTitle: draft.electionTitle,
-        pollingUnitName: draft.pollingUnitName,
-        pollingUnitCode: draft.pollingUnitCode,
-        ward: draft.ward,
-        lga: draft.lga,
-        state: draft.state,
-      });
-
-      await saveIncidentDraft({
-        ...buildInitialIncidentDraft(ctx),
-        incidentType:
-          feedback.intimidationToday === "yes" ? "Voter Intimidation" : "",
-      });
-
-      router.replace({
-        pathname: Paths.reportIncident as never,
-        params: {
-          electionId: ctx.electionId,
-          electionTitle: ctx.electionTitle,
-          pollingUnitName: ctx.pollingUnitName,
-          pollingUnitCode: ctx.pollingUnitCode,
-          ward: ctx.ward,
-          lga: ctx.lga,
-          state: ctx.state,
-        },
-      });
-    };
-
+    // A user can only submit ONE report (result OR incident) per election —
+    // once a result is in, there's nothing left to "back up" with an
+    // incident report, so this screen no longer offers that path. Point
+    // straight to the Digital Vault, where the submission now lives.
     return (
       <ReportingOutcomeState
         variant="success"
         showConfetti
         title="Report Submitted"
         subtitle="Your participation today makes a difference. Thank You. Nigerians are seeing it now."
-        primaryActionLabel="Go To Collation"
-        onPrimaryAction={() => router.replace(Paths.appCollation)}
-        secondaryActionLabel={
-          flaggedIssue ? "Report What You Witnessed" : undefined
-        }
-        secondaryActionIcon="warning-outline"
-        onSecondaryAction={
-          flaggedIssue ? () => void handleReportIncidentFromSuccess() : undefined
-        }
-        infoCardText={
-          flaggedIssue
-            ? "You flagged intimidation or vote buying — filing an incident report with photos or video makes your account count as evidence."
-            : undefined
-        }
+        primaryActionLabel="Go To Digital Vault"
+        onPrimaryAction={() => router.replace(Paths.appDigitalVault as never)}
       />
     );
   }
@@ -2211,24 +2152,6 @@ const styles = StyleSheet.create({
     color: "#C2410C",
     textAlign: "center",
     marginTop: -6,
-  },
-  feedbackNudge: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    backgroundColor: "rgba(194,65,12,0.07)",
-    borderWidth: 1,
-    borderColor: "rgba(194,65,12,0.18)",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  feedbackNudgeText: {
-    flex: 1,
-    fontSize: 12.5,
-    lineHeight: 18,
-    color: "#9A3412",
-    fontFamily: Theme.fonts.body.medium,
   },
   sentimentBackBtn: {
     flexDirection: "row",

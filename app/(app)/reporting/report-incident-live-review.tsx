@@ -38,18 +38,6 @@ import { Theme } from "@/theme";
 
 type ViewState = "form" | "success";
 
-function buildCollationRoute(electionId: string) {
-  return {
-    pathname: Paths.appCollation as never,
-    params: {
-      tab: "overview",
-      collationId: electionId,
-      activeElectionId: electionId,
-      electionId,
-    },
-  };
-}
-
 function OfflineBanner() {
   return (
     <View style={styles.offlineBanner}>
@@ -246,12 +234,8 @@ export default function ReportIncidentLiveReviewScreen() {
         showConfetti
         title="Report Submitted"
         subtitle="Your participation today makes a difference. Thank You. Nigerians are seeing it now."
-        primaryActionLabel="Go To Collation"
-        onPrimaryAction={() => {
-          if (draft) {
-            router.replace(buildCollationRoute(draft.electionId));
-          }
-        }}
+        primaryActionLabel="Go To Digital Vault"
+        onPrimaryAction={() => router.replace(Paths.appDigitalVault as never)}
       />
     );
   }

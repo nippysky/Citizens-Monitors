@@ -8,6 +8,7 @@ import CommencementBottomSheet from "@/components/reporting/CommencementBottomSh
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
 import { useMyProfileQuery } from "@/hooks/api/useMyProfileQuery";
+import { useSubmissionGate } from "@/hooks/useSubmissionGate";
 import {
   asProfileLike,
   buildProfileCommencementContext,
@@ -115,13 +116,17 @@ export default function LiveElectionCard({ item, width, viewerRole }: Props) {
     });
   };
 
+  const { checkAndProceed } = useSubmissionGate();
+
   const handleSubmitResult = () => {
     if (!submitEnabled) {
       handleOpenCollation();
       return;
     }
 
-    commencementRef.current?.present();
+    void checkAndProceed(activeElectionId, () => {
+      commencementRef.current?.present();
+    });
   };
 
   const handleProceedResult = async (time: string) => {

@@ -229,8 +229,12 @@ function StatBox({
 }) {
   return (
     <View style={styles.statBox}>
-      <AppText style={[styles.statValue, { color: valueColor }]}>{value}</AppText>
-      <AppText style={styles.statLabel}>{label}</AppText>
+      <AppText style={[styles.statValue, { color: valueColor }]} numberOfLines={1}>
+        {value}
+      </AppText>
+      <AppText style={styles.statLabel} numberOfLines={2}>
+        {label}
+      </AppText>
     </View>
   );
 }
@@ -238,8 +242,12 @@ function StatBox({
 function FigureItem({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.figureItem}>
-      <AppText style={styles.figureLabel}>{label}</AppText>
-      <AppText style={styles.figureValue}>{value}</AppText>
+      <AppText style={styles.figureLabel} numberOfLines={2}>
+        {label}
+      </AppText>
+      <AppText style={styles.figureValue} numberOfLines={1}>
+        {value}
+      </AppText>
     </View>
   );
 }

@@ -103,6 +103,9 @@ function ChoicePill({
     >
       <AppText
         style={[styles.choiceText, active && styles.choiceTextActive]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.85}
       >
         {label}
       </AppText>

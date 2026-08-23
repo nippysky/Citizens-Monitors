@@ -36,7 +36,12 @@ export default function CollationContextTabs({ value, onChange }: Props) {
             style={styles.item}
             hitSlop={4}
           >
-            <AppText style={[styles.label, active && styles.labelActive]}>
+            <AppText
+              style={[styles.label, active && styles.labelActive]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.85}
+            >
               {tab.label}
             </AppText>
             <AnimatedLine active={active} />

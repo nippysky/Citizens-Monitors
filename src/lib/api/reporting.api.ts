@@ -370,6 +370,64 @@ export async function submitElectionResult(
   );
 }
 
+// ─── "Have I already submitted for this election?" ────────────────────────
+//
+// A user may submit EITHER an official result OR an incident report per
+// election, never both. Before opening the commencement sheet, callers hit
+// this endpoint; a non-empty `results`/`incidentReports` array means the
+// user should be routed straight to their Digital Vault instead.
+
+export type MySubmissionParty = {
+  name: string;
+  code: string;
+  logo: string | null;
+};
+
+export type MySubmissionElection = {
+  _id: string;
+  electionLocation?: string | null;
+  startDate?: string;
+  endDate?: string;
+  results: SubmitElectionResultResponse[];
+  incidentReports: SubmitIncidentReportResponse[];
+  resultsCount?: number;
+  mockElection?: boolean;
+  politicalParties: MySubmissionParty[];
+  createdAt?: string;
+  updatedAt?: string;
+  __v?: number;
+  electionType?: string;
+  electionName?: string;
+};
+
+export type MySubmissionResponse = {
+  election: MySubmissionElection;
+};
+
+export async function getMySubmission(
+  electionId: string
+): Promise<MySubmissionResponse> {
+  return apiRequest<MySubmissionResponse>(
+    `/elections/${encodeURIComponent(electionId)}/my-submission`,
+    { method: "GET" }
+  );
+}
+
+/** True when the response shows a prior result OR incident submission. */
+export function hasExistingSubmission(
+  response: MySubmissionResponse | null | undefined
+): boolean {
+  const election = response?.election;
+  if (!election) return false;
+
+  const results = Array.isArray(election.results) ? election.results : [];
+  const incidents = Array.isArray(election.incidentReports)
+    ? election.incidentReports
+    : [];
+
+  return results.length > 0 || incidents.length > 0;
+}
+
 export async function submitIncidentReport(
   payload: IncidentReportSubmitPayload
 ): Promise<SubmitIncidentReportResponse> {

@@ -350,26 +350,48 @@ export default function CollationScreen() {
           <CollationContextTabs value={activeTab} onChange={setActiveTab} />
         </View>
 
+        {/*
+          All three tabs stay MOUNTED and are toggled with `display`, not
+          conditionally rendered. Discussions (and Review Reports' local
+          confirm/flag state) live in component-local state with no backend
+          persistence yet — conditionally unmounting the inactive tabs was
+          wiping that state to its hardcoded-empty default every time the
+          user switched tabs and came back, which is exactly the "my
+          discussion post disappeared" bug. Keeping them mounted preserves
+          local state across tab switches for the rest of the session.
+        */}
         <View style={styles.body}>
-          {activeTab === "overview" ? (
+          <View style={activeTab === "overview" ? styles.tabPane : styles.tabPaneHidden}>
             <CollationOverviewTab
               collation={activeCollation}
               refreshing={isRefreshing}
               onRefresh={refreshAll}
             />
-          ) : activeTab === "review-reports" ? (
+          </View>
+
+          <View
+            style={
+              activeTab === "review-reports" ? styles.tabPane : styles.tabPaneHidden
+            }
+          >
             <CollationReviewReportsTab
               collation={activeCollation}
               refreshing={isRefreshing}
               onRefresh={refreshAll}
             />
-          ) : (
+          </View>
+
+          <View
+            style={
+              activeTab === "discussions" ? styles.tabPane : styles.tabPaneHidden
+            }
+          >
             <CollationDiscussionsTab
               collation={activeCollation}
               refreshing={isRefreshing}
               onRefresh={refreshAll}
             />
-          )}
+          </View>
         </View>
       </View>
     </AppGradientScreen>
@@ -394,6 +416,12 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     overflow: "hidden",
+  },
+  tabPane: {
+    flex: 1,
+  },
+  tabPaneHidden: {
+    display: "none",
   },
 
   loadingWrap: {

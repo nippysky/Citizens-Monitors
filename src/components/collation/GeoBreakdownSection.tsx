@@ -1,7 +1,5 @@
 // ─── src/components/collation/GeoBreakdownSection.tsx ─────────────────────────
-import { useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
 import { CollationItem, formatCompactNumber } from "@/data/collation";
@@ -14,46 +12,6 @@ export default function GeoBreakdownSection({ collation }: Props) {
   // Only show empty when there is genuinely no geo data — not based on
   // whether the viewer is assigned to a polling unit.
   const empty = !collation.geoBreakdown.length;
-
-  // Local state: agreed / flagged sets per item id
-  const [agreedIds, setAgreedIds] = useState<Set<string>>(new Set());
-  const [flaggedIds, setFlaggedIds] = useState<Set<string>>(new Set());
-
-  const toggleAgree = (id: string) => {
-    setAgreedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-        // Unflag if agreeing
-        setFlaggedIds((f) => {
-          const fn = new Set(f);
-          fn.delete(id);
-          return fn;
-        });
-      }
-      return next;
-    });
-  };
-
-  const toggleFlag = (id: string) => {
-    setFlaggedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-        // Un-agree if flagging
-        setAgreedIds((a) => {
-          const an = new Set(a);
-          an.delete(id);
-          return an;
-        });
-      }
-      return next;
-    });
-  };
 
   return (
     <View style={styles.wrap}>
@@ -83,20 +41,20 @@ export default function GeoBreakdownSection({ collation }: Props) {
         <View style={styles.list}>
           {collation.geoBreakdown.map((item) => {
             const total = item.parties.reduce((s, p) => s + p.percent, 0) || 1;
-            const agreed = agreedIds.has(item.id);
-            const flagged = flaggedIds.has(item.id);
 
             return (
               <View key={item.id} style={styles.card}>
                 <View style={styles.rowTop}>
-                  <AppText style={styles.cardTitle}>{item.name}</AppText>
-                  <AppText style={styles.cardMeta}>
+                  <AppText style={styles.cardTitle} numberOfLines={1}>
+                    {item.name}
+                  </AppText>
+                  <AppText style={styles.cardMeta} numberOfLines={1}>
                     {item.reports.toLocaleString()} results ·{" "}
                     {item.incidents.toLocaleString()} incidents
                   </AppText>
                 </View>
 
-                <AppText style={styles.coverageText}>
+                <AppText style={styles.coverageText} numberOfLines={1}>
                   {item.coveredUnits.toLocaleString()}/
                   {item.totalUnits.toLocaleString()} Polling Units
                 </AppText>
@@ -118,7 +76,7 @@ export default function GeoBreakdownSection({ collation }: Props) {
                   {item.parties.map((p) => (
                     <View key={`${item.id}-chip-${p.shortName}`} style={styles.partyChip}>
                       <View style={[styles.partyDot, { backgroundColor: p.color }]} />
-                      <AppText style={styles.partyChipText}>
+                      <AppText style={styles.partyChipText} numberOfLines={1}>
                         {p.shortName} ({p.percent}%)
                       </AppText>
                     </View>
@@ -126,55 +84,12 @@ export default function GeoBreakdownSection({ collation }: Props) {
                 </View>
 
                 <View style={styles.bottomRow}>
-                  <AppText style={styles.votesText}>
+                  <AppText style={styles.votesText} numberOfLines={1}>
                     {formatCompactNumber(item.totalVotes)} Votes
                   </AppText>
-                  <AppText style={styles.percentTotal}>
+                  <AppText style={styles.percentTotal} numberOfLines={1}>
                     {item.percentOfTotalVotes}% of total votes
                   </AppText>
-                </View>
-
-                {/* Agree / Flag actions */}
-                <View style={styles.actionsRow}>
-                  <Pressable
-                    onPress={() => toggleAgree(item.id)}
-                    style={({ pressed }) => [
-                      styles.actionBtn,
-                      agreed && styles.actionBtnAgreed,
-                      pressed && styles.actionBtnPressed,
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel={agreed ? "Remove agreement" : "Agree with this data"}
-                  >
-                    <Ionicons
-                      name={agreed ? "checkmark-circle" : "checkmark-circle-outline"}
-                      size={16}
-                      color={agreed ? "#FFFFFF" : Theme.colors.primary}
-                    />
-                    <AppText style={[styles.actionText, agreed && styles.actionTextAgreed]}>
-                      {agreed ? "Agreed" : "Agree"}
-                    </AppText>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => toggleFlag(item.id)}
-                    style={({ pressed }) => [
-                      styles.actionBtn,
-                      flagged && styles.actionBtnFlagged,
-                      pressed && styles.actionBtnPressed,
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel={flagged ? "Remove flag" : "Flag this data as inaccurate"}
-                  >
-                    <Ionicons
-                      name={flagged ? "flag" : "flag-outline"}
-                      size={16}
-                      color={flagged ? "#FFFFFF" : "#E45125"}
-                    />
-                    <AppText style={[styles.actionText, styles.actionTextFlag, flagged && styles.actionTextFlagged]}>
-                      {flagged ? "Flagged" : "Flag"}
-                    </AppText>
-                  </Pressable>
                 </View>
               </View>
             );
@@ -210,7 +125,11 @@ const styles = StyleSheet.create({
     color: Theme.colors.text,
     fontFamily: Theme.fonts.body.semibold,
   },
-  cardMeta: { fontSize: 12, lineHeight: 16, color: Theme.colors.textMuted },
+  cardMeta: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Theme.colors.textMuted,
+  },
   coverageText: { fontSize: 12, lineHeight: 16, color: Theme.colors.text },
   stackedBar: {
     flexDirection: "row",
@@ -237,48 +156,6 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.semibold,
-  },
-  actionsRow: {
-    flexDirection: "row",
-    gap: 10,
-    paddingTop: 2,
-  },
-  actionBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
-    borderWidth: 1.2,
-    borderColor: "rgba(5,163,156,0.30)",
-    backgroundColor: "rgba(5,163,156,0.06)",
-  },
-  actionBtnAgreed: {
-    backgroundColor: Theme.colors.primary,
-    borderColor: Theme.colors.primary,
-  },
-  actionBtnFlagged: {
-    backgroundColor: "#E45125",
-    borderColor: "#E45125",
-  },
-  actionBtnPressed: {
-    opacity: 0.78,
-  },
-  actionText: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: Theme.colors.primary,
-    fontFamily: Theme.fonts.body.semibold,
-  },
-  actionTextFlag: {
-    color: "#E45125",
-  },
-  actionTextAgreed: {
-    color: "#FFFFFF",
-  },
-  actionTextFlagged: {
-    color: "#FFFFFF",
   },
   emptyWrap: {
     alignItems: "center",

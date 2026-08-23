@@ -32,7 +32,7 @@ export default function ElectionStatusPill({
         pressed && styles.pressed,
       ]}
     >
-      <AppText style={[styles.text, selected && styles.textActive]}>
+      <AppText style={[styles.text, selected && styles.textActive]} numberOfLines={1}>
         {labelForValue(value)}
       </AppText>
     </Pressable>

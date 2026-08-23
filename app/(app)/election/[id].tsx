@@ -252,30 +252,50 @@ export default function ElectionDetailsScreen() {
                 void collationQuery.refetch();
               }}
             />
-          ) : activeTab === "overview" ? (
-            <CollationOverviewTab
-              collation={scenario.election}
-              refreshing={collationQuery.isRefetching}
-              onRefresh={() => {
-                void collationQuery.refetch();
-              }}
-            />
-          ) : activeTab === "review-collation" ? (
-            <CollationReviewReportsTab
-              collation={scenario.election}
-              refreshing={collationQuery.isRefetching}
-              onRefresh={() => {
-                void collationQuery.refetch();
-              }}
-            />
           ) : (
-            <CollationDiscussionsTab
-              collation={scenario.election}
-              refreshing={collationQuery.isRefetching}
-              onRefresh={() => {
-                void collationQuery.refetch();
-              }}
-            />
+            // Kept mounted, toggled with `display` rather than conditionally
+            // rendered — Discussions/Review Reports hold local-only state
+            // with no backend persistence yet, and unmounting on tab switch
+            // was wiping it (the "my discussion post disappeared" bug).
+            <>
+              <View style={activeTab === "overview" ? styles.tabPane : styles.tabPaneHidden}>
+                <CollationOverviewTab
+                  collation={scenario.election}
+                  refreshing={collationQuery.isRefetching}
+                  onRefresh={() => {
+                    void collationQuery.refetch();
+                  }}
+                />
+              </View>
+
+              <View
+                style={
+                  activeTab === "review-collation" ? styles.tabPane : styles.tabPaneHidden
+                }
+              >
+                <CollationReviewReportsTab
+                  collation={scenario.election}
+                  refreshing={collationQuery.isRefetching}
+                  onRefresh={() => {
+                    void collationQuery.refetch();
+                  }}
+                />
+              </View>
+
+              <View
+                style={
+                  activeTab === "discussions" ? styles.tabPane : styles.tabPaneHidden
+                }
+              >
+                <CollationDiscussionsTab
+                  collation={scenario.election}
+                  refreshing={collationQuery.isRefetching}
+                  onRefresh={() => {
+                    void collationQuery.refetch();
+                  }}
+                />
+              </View>
+            </>
           )}
         </View>
       </View>
@@ -886,6 +906,12 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     overflow: "hidden",
+  },
+  tabPane: {
+    flex: 1,
+  },
+  tabPaneHidden: {
+    display: "none",
   },
 
   fallbackScrollContent: {

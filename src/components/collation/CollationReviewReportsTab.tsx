@@ -481,7 +481,7 @@ function ActionRow({
             size={14}
             color={Theme.colors.primary}
           />
-          <AppText style={styles.confirmedText}>
+          <AppText style={styles.confirmedText} numberOfLines={1}>
             You confirmed this — thank you
           </AppText>
         </Pressable>
@@ -502,7 +502,7 @@ function ActionRow({
       <View style={styles.actionsRow}>
         <View style={styles.flaggedPill}>
           <Ionicons name="flag-outline" size={14} color="#F04A1D" />
-          <AppText style={styles.flaggedText}>
+          <AppText style={styles.flaggedText} numberOfLines={1}>
             Flagged - evidence under review
           </AppText>
         </View>

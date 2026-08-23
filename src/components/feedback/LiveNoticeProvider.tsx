@@ -16,6 +16,7 @@ import CommencementBottomSheet from "@/components/reporting/CommencementBottomSh
 import LocationPermissionModal from "@/components/reporting/LocationPermissionModal";
 import { Paths } from "@/constants/paths";
 import { useMyProfileQuery } from "@/hooks/api/useMyProfileQuery";
+import { useSubmissionGate } from "@/hooks/useSubmissionGate";
 import {
   asProfileLike,
   buildProfileCommencementContext,
@@ -221,13 +222,30 @@ export function LiveNoticeProvider({ children }: { children: ReactNode }) {
     [clearTimer],
   );
 
-  const openCommencement = useCallback((contextData?: CommencementContext) => {
-    setNoticeContext(buildCommencementContext(contextData));
+  const { checkAndProceed } = useSubmissionGate();
 
-    requestAnimationFrame(() => {
-      commencementRef.current?.present();
-    });
-  }, []);
+  const openCommencement = useCallback(
+    (contextData?: CommencementContext) => {
+      const ctx = buildCommencementContext(contextData);
+      const electionId = ctx.electionId;
+
+      if (!electionId) {
+        setNoticeContext(ctx);
+        requestAnimationFrame(() => {
+          commencementRef.current?.present();
+        });
+        return;
+      }
+
+      void checkAndProceed(electionId, () => {
+        setNoticeContext(ctx);
+        requestAnimationFrame(() => {
+          commencementRef.current?.present();
+        });
+      });
+    },
+    [checkAndProceed]
+  );
 
   const requestLocationForAction = useCallback(
     (onGranted: (geoLabel: string) => void) => {

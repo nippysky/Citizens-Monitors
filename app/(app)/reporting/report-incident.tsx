@@ -768,8 +768,8 @@ export default function ReportIncidentScreen() {
         showConfetti
         title="Report Submitted"
         subtitle="Your participation today makes a difference. Thank You. Nigerians are seeing it now."
-        primaryActionLabel="Go To Collation"
-        onPrimaryAction={() => router.replace(Paths.appCollation)}
+        primaryActionLabel="Go To Digital Vault"
+        onPrimaryAction={() => router.replace(Paths.appDigitalVault as never)}
       />
     );
   }
