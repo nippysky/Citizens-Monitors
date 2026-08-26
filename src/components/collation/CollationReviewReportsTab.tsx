@@ -1,11 +1,13 @@
 // ─── src/components/collation/CollationReviewReportsTab.tsx ───────────────────
-// Fixed: enqueue calls moved outside setConfirmedIds/setFlaggedIds updaters
-// to avoid "Cannot update component while rendering another" error.
+// Community Verification — real backend-backed (GET/POST
+// /elections/:id/collation/user-action). Replaces the old local-mock
+// implementation entirely.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
 import {
+  ActivityIndicator,
   Platform,
   Pressable,
   RefreshControl,
@@ -18,17 +20,30 @@ import { useCallback, useRef, useState } from "react";
 
 import AppText from "@/components/ui/AppText";
 import CollationAnimatedProgressBar from "@/components/collation/CollationAnimatedProgressBar";
-import FlagReportBottomSheet from "@/components/collation/FlagReportBottomSheet";
+import FlagReasonBottomSheet, {
+  FlagReasonSheetHandle,
+} from "@/components/collation/FlagReasonBottomSheet";
+import ReviewReportsSkeleton from "@/components/collation/ReviewReportsSkeleton";
 import SeeEvidenceBottomSheet, {
   EvidencePayload,
 } from "@/components/collation/SeeEvidenceBottomSheet";
+import PartyLogo from "@/components/shared/PartyLogo";
+import { useAuth } from "@/context/AuthContext";
 import { useAppToast } from "@/hooks/useAppToast";
-import { useOfflineSync } from "@/context/OfflineSyncContext";
+import {
+  useCollationReviewFeedQuery,
+  useCollationUserActionMutation,
+} from "@/hooks/api/useCollationReviewQueries";
+import {
+  CollationReviewAction,
+  CollationReviewIncidentItem,
+  CollationReviewResultItem,
+} from "@/lib/api/collationReview.api";
+import { formatTimeAgo } from "@/lib/formatTimeAgo";
 import { CollationItem, formatCompactNumber } from "@/data/collation";
 import { Theme } from "@/theme";
 import NoElection from "@/svgs/app/NoElection";
 import Incident from "@/svgs/app/collation/Incident";
-import { getPartyLogo } from "@/svgs/app/collation/parties";
 
 type Props = {
   collation: CollationItem;
@@ -36,190 +51,213 @@ type Props = {
   onRefresh?: () => void;
 };
 
+type FlagTarget = {
+  targetId: string;
+  dataType: "election" | "incident";
+};
+
+const PARTY_COLORS: Record<string, string> = {
+  APC: "#E84C3D",
+  LP: "#17A34A",
+  PDP: "#3C63E5",
+  NNPP: "#F29B2F",
+};
+const DEFAULT_PARTY_COLOR = "#C8CDD7";
+
+function getPartyColor(code: string): string {
+  return PARTY_COLORS[code.trim().toUpperCase()] ?? DEFAULT_PARTY_COLOR;
+}
+
+function getMinutesAgo(dateValue?: string): number {
+  if (!dateValue) return 0;
+
+  const date = new Date(dateValue);
+
+  if (Number.isNaN(date.getTime())) {
+    return 0;
+  }
+
+  return Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000));
+}
+
+function findMyAction(
+  actions: CollationReviewAction[],
+  userId: string | null
+): CollationReviewAction | undefined {
+  if (!userId) return undefined;
+  return actions.find((action) => action.userId === userId);
+}
+
 export default function CollationReviewReportsTab({
   collation,
   refreshing: externalRefreshing,
   onRefresh: externalRefresh,
 }: Props) {
   const { showToast } = useAppToast();
-  const { enqueue } = useOfflineSync();
+  const { user } = useAuth();
+  const myUserId = user?.id ?? null;
+
+  const electionId = collation.id;
+  const feedQuery = useCollationReviewFeedQuery(electionId);
+  const userActionMutation = useCollationUserActionMutation(electionId);
+
   const evidenceRef = useRef<BottomSheetModal>(null);
-  const flagRef = useRef<BottomSheetModal>(null);
+  const flagRef = useRef<FlagReasonSheetHandle>(null);
   const [selectedEvidence, setSelectedEvidence] =
     useState<EvidencePayload | null>(null);
-  const [flagTargetId, setFlagTargetId] = useState<string | null>(null);
-  const [localRefreshing, setLocalRefreshing] = useState(false);
-  const refreshing = externalRefreshing ?? localRefreshing;
+  const [flagTarget, setFlagTarget] = useState<FlagTarget | null>(null);
 
-  // Seed confirmed/flagged from data
-  const [confirmedIds, setConfirmedIds] = useState<Set<string>>(() => {
-    const s = new Set<string>();
-    collation.reviewReports.forEach((r) => {
-      if (r.isConfirmed) s.add(r.id);
-    });
-    return s;
-  });
-
-  const [flaggedIds, setFlaggedIds] = useState<Set<string>>(() => {
-    const s = new Set<string>();
-    collation.reviewReports.forEach((r) => {
-      if (r.flagged) s.add(r.id);
-    });
-    return s;
-  });
+  const refreshing = externalRefreshing ?? feedQuery.isRefetching;
 
   const onRefresh = useCallback(() => {
-    if (externalRefresh) {
-      externalRefresh();
-      return;
-    }
+    void feedQuery.refetch();
+    externalRefresh?.();
+  }, [externalRefresh, feedQuery]);
 
-    setLocalRefreshing(true);
-    setTimeout(() => setLocalRefreshing(false), 1400);
-  }, [externalRefresh]);
+  const results = feedQuery.data?.results.results ?? [];
+  const incidents = feedQuery.data?.results.incidentReports ?? [];
 
-  const buildEvidence = useCallback(
-    (report: (typeof collation.reviewReports)[number]): EvidencePayload => {
-      const isResult = report.type === "result";
-      const evidence = report.evidence;
-
-      return {
-        title: report.title,
-        note:
-          evidence?.note ??
-          (isResult
-            ? "Signed result sheet was captured immediately after polling unit collation."
-            : "Incident evidence was captured live at the polling unit."),
-        locationMeta: evidence?.locationMeta ?? collation.location,
-        pollingUnitName: evidence?.pollingUnitName ?? collation.location,
-        pollingUnitCode: evidence?.pollingUnitCode ?? collation.location,
-        observerHandle: evidence?.observerHandle ?? report.author,
-        submittedAt: evidence?.submittedAt ?? report.createdAgo,
-        verificationStatus:
-          evidence?.verificationStatus ?? (isResult ? "verified" : "pending"),
-        sourceType:
-          evidence?.sourceType ??
-          (isResult ? "observer-upload" : "community-report"),
-        electionName: evidence?.electionName ?? collation.fullTitle,
-        accreditedVoter:
-          evidence?.accreditedVoter ??
-          (isResult
-            ? formatCompactNumber(collation.officialSummary.accreditedVoters)
-            : "—"),
-        rejectedVotes:
-          evidence?.rejectedVotes ??
-          (isResult
-            ? formatCompactNumber(collation.officialSummary.rejectedVotes)
-            : "—"),
-        spoiledBallots:
-          evidence?.spoiledBallots ??
-          (isResult
-            ? formatCompactNumber(collation.officialSummary.spoiledBallots)
-            : "—"),
-        usedBallots:
-          evidence?.usedBallots ??
-          (isResult
-            ? formatCompactNumber(collation.officialSummary.usedBallots)
-            : "—"),
-        unusedBallots:
-          evidence?.unusedBallots ??
-          (isResult
-            ? formatCompactNumber(collation.officialSummary.unusedBallots)
-            : "—"),
-        imageUri: evidence?.imageUri,
-        videoUri: evidence?.videoUri,
-      };
-    },
-    [collation],
+  const buildResultEvidence = useCallback(
+    (item: CollationReviewResultItem): EvidencePayload => ({
+      title: `${item.electionName} Result`,
+      imageUri: item.resultPicture?.url,
+      videoUri: item.resultVideo?.url,
+      note: `Signed result sheet captured at ${item.pollingUnit}.`,
+      accreditedVoter: formatCompactNumber(
+        collation.officialSummary.accreditedVoters
+      ),
+      rejectedVotes: formatCompactNumber(collation.officialSummary.rejectedVotes),
+      spoiledBallots: formatCompactNumber(
+        collation.officialSummary.spoiledBallots
+      ),
+      usedBallots: formatCompactNumber(collation.officialSummary.usedBallots),
+      unusedBallots: formatCompactNumber(collation.officialSummary.unusedBallots),
+      locationMeta: item.pollingUnit,
+      pollingUnitName: item.pollingUnit,
+      pollingUnitCode: item.pollingUnit,
+      observerHandle: "Field Observer",
+      submittedAt: formatTimeAgo(getMinutesAgo(item.uploadedAt)),
+      verificationStatus: item.agreed ? "verified" : "pending",
+      sourceType: "observer-upload",
+      electionName: collation.fullTitle,
+    }),
+    [collation]
   );
 
-  const handleOpenEvidence = useCallback(
-    (report: (typeof collation.reviewReports)[number]) => {
-      setSelectedEvidence(buildEvidence(report));
+  const buildIncidentEvidence = useCallback(
+    (item: CollationReviewIncidentItem): EvidencePayload => ({
+      title: item.selectIncident,
+      imageUri: item.incidentPictures?.[0]?.url,
+      videoUri: item.incidentVideos?.[0]?.url,
+      note: item.incidentNote,
+      locationMeta: item.pollingUnit,
+      pollingUnitName: item.pollingUnit,
+      pollingUnitCode: item.pollingUnit,
+      observerHandle: "Field Observer",
+      submittedAt: formatTimeAgo(getMinutesAgo(item.uploadedAt)),
+      verificationStatus: item.agreed ? "verified" : "pending",
+      sourceType: "community-report",
+      electionName: collation.fullTitle,
+    }),
+    [collation]
+  );
+
+  const openResultEvidence = useCallback(
+    (item: CollationReviewResultItem) => {
+      setSelectedEvidence(buildResultEvidence(item));
       requestAnimationFrame(() => evidenceRef.current?.present());
     },
-    [buildEvidence, collation],
+    [buildResultEvidence]
   );
 
-  // ── Toggle confirm (undo-able) ──
-  // enqueue is called AFTER the state updater, never inside it.
-  const handleToggleConfirm = useCallback(
-    (id: string) => {
-      const wasConfirmed = confirmedIds.has(id);
-
-      // 1. Update local state
-      setConfirmedIds((prev) => {
-        const next = new Set(prev);
-        if (wasConfirmed) next.delete(id);
-        else next.add(id);
-        return next;
-      });
-
-      // 2. Queue for sync (outside the updater)
-      enqueue({
-        type: "confirm-report",
-        payload: {
-          reportId: id,
-          action: wasConfirmed ? "undo-confirm" : "confirm",
-        },
-      });
-
-      // 3. Toast
-      showToast({
-        type: "success",
-        message: wasConfirmed
-          ? "Confirmation undone."
-          : "Report confirmed — thank you.",
-      });
+  const openIncidentEvidence = useCallback(
+    (item: CollationReviewIncidentItem) => {
+      setSelectedEvidence(buildIncidentEvidence(item));
+      requestAnimationFrame(() => evidenceRef.current?.present());
     },
-    [confirmedIds, enqueue, showToast],
+    [buildIncidentEvidence]
   );
 
-  // ── Flag (permanent) ──
-  const handleOpenFlag = useCallback((id: string) => {
-    setFlagTargetId(id);
-    requestAnimationFrame(() => flagRef.current?.present());
+  const handleConfirm = useCallback(
+    (targetId: string, dataType: FlagTarget["dataType"]) => {
+      userActionMutation.mutate(
+        { targetId, action: "agree", dataType },
+        {
+          onSuccess: () => {
+            showToast({
+              type: "success",
+              message: "Report confirmed — thank you.",
+            });
+          },
+          onError: (error) => {
+            showToast({
+              type: "error",
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Couldn't confirm this report.",
+            });
+          },
+        }
+      );
+    },
+    [showToast, userActionMutation]
+  );
+
+  const handleOpenFlag = useCallback((target: FlagTarget) => {
+    setFlagTarget(target);
+    flagRef.current?.present();
   }, []);
 
-  const handleFlagSubmitted = useCallback(() => {
-    if (flagTargetId) {
-      setFlaggedIds((prev) => new Set(prev).add(flagTargetId));
+  const handleFlagSubmit = useCallback(
+    (reason: string) => {
+      if (!flagTarget) return;
 
-      // enqueue outside updater
-      enqueue({ type: "flag-report", payload: { reportId: flagTargetId } });
-    }
-    showToast({
-      type: "success",
-      message: "Report flagged — evidence under review.",
-    });
-  }, [flagTargetId, enqueue, showToast]);
+      userActionMutation.mutate(
+        { ...flagTarget, action: "flag", flagReason: reason },
+        {
+          onSuccess: () => {
+            flagRef.current?.dismiss();
+            showToast({
+              type: "success",
+              message: "Report flagged — evidence under review.",
+            });
+          },
+          onError: (error) => {
+            showToast({
+              type: "error",
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Couldn't flag this report.",
+            });
+          },
+        }
+      );
+    },
+    [flagTarget, showToast, userActionMutation]
+  );
 
-  // ── Share ──
-  const handleShare = useCallback(
-    async (report: (typeof collation.reviewReports)[number]) => {
-      const isResult = report.type === "result";
-      const partyLines = isResult
-        ? collation.parties
-            .map(
-              (p) =>
-                `${p.shortName}: ${formatCompactNumber(p.votes)} votes (${p.percent}%)`,
-            )
-            .join("\n")
-        : "";
+  const handleShareResult = useCallback(
+    async (item: CollationReviewResultItem) => {
+      const totalVotes = item.partiesVotes.reduce((sum, p) => sum + p.count, 0);
+      const partyLines = item.partiesVotes
+        .map((p) => {
+          const percent = totalVotes > 0 ? Math.round((p.count / totalVotes) * 100) : 0;
+          return `${p.party}: ${formatCompactNumber(p.count)} votes (${percent}%)`;
+        })
+        .join("\n");
+
       const message = [
         `📊 ${collation.fullTitle}`,
         "",
-        isResult
-          ? "Result Report — EC8A"
-          : `⚠️ ${report.tag ?? "Incident Report"}`,
+        "Result Report — EC8A",
+        `Polling Unit: ${item.pollingUnit}`,
         "",
-        report.body,
-        partyLines ? `\n${partyLines}` : "",
+        partyLines,
         "",
         "Shared via Citizen Monitors",
-      ]
-        .filter(Boolean)
-        .join("\n");
+      ].join("\n");
 
       try {
         await Share.share({ message });
@@ -227,55 +265,34 @@ export default function CollationReviewReportsTab({
         showToast({ type: "error", message: "Unable to share right now." });
       }
     },
-    [collation, showToast],
+    [collation.fullTitle, showToast]
   );
 
-  const resultReports = collation.reviewReports.filter(
-    (r) => r.type === "result",
-  );
-  const incidentReports = collation.reviewReports.filter(
-    (r) => r.type === "incident",
+  const handleShareIncident = useCallback(
+    async (item: CollationReviewIncidentItem) => {
+      const message = [
+        `📊 ${collation.fullTitle}`,
+        "",
+        `⚠️ ${item.selectIncident}`,
+        `Polling Unit: ${item.pollingUnit}`,
+        "",
+        item.incidentNote,
+        "",
+        "Shared via Citizen Monitors",
+      ].join("\n");
+
+      try {
+        await Share.share({ message });
+      } catch {
+        showToast({ type: "error", message: "Unable to share right now." });
+      }
+    },
+    [collation.fullTitle, showToast]
   );
 
-  /* ── Empty state ── */
-  if (!collation.canReviewReports) {
-    return (
-      <>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.pageContent}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={Theme.colors.primary}
-              colors={[Theme.colors.primary]}
-            />
-          }
-        >
-          <View style={styles.section}>
-            <AppText style={styles.sectionTitle}>
-              Community Verification
-            </AppText>
-            <AppText style={styles.sectionSubtitle}>
-              Review reports submitted by observers for {collation.fullTitle}.
-              Confirm what&apos;s accurate, and flag what&apos;s false.
-            </AppText>
-          </View>
-          <View style={styles.emptyWrap}>
-            <NoElection width={110} height={110} />
-            <AppText style={styles.emptyTitle}>No Election Report yet</AppText>
-            <AppText style={styles.emptySubtitle}>
-              Citizen Monitor have not commenced operation yet.
-            </AppText>
-          </View>
-        </ScrollView>
-        <SeeEvidenceBottomSheet ref={evidenceRef} evidence={selectedEvidence} />
-        <FlagReportBottomSheet ref={flagRef} />
-      </>
-    );
-  }
+  const isInitialLoading = feedQuery.isLoading;
+  const hasError = feedQuery.isError && results.length === 0 && incidents.length === 0;
+  const isEmpty = !isInitialLoading && !hasError && results.length === 0 && incidents.length === 0;
 
   return (
     <>
@@ -292,7 +309,6 @@ export default function CollationReviewReportsTab({
           />
         }
       >
-        {/* ── Community Verification ── */}
         <View style={styles.section}>
           <AppText style={styles.sectionTitle}>Community Verification</AppText>
           <AppText style={styles.sectionSubtitle}>
@@ -301,158 +317,201 @@ export default function CollationReviewReportsTab({
           </AppText>
         </View>
 
-        {/* ── Result reports ── */}
-        {resultReports.map((report) => {
-          const isConf = confirmedIds.has(report.id);
-          const isFlag = flaggedIds.has(report.id);
-
-          return (
-            <View key={report.id}>
-              <View style={styles.resultHeaderRow}>
-                <View style={styles.resultDotRow}>
-                  <View style={styles.redDot} />
-                  <AppText style={styles.resultLabel}>
-                    Result Report — EC8A
-                  </AppText>
-                </View>
-                <View style={styles.timeRow}>
-                  <Ionicons
-                    name="time-outline"
-                    size={12}
-                    color={Theme.colors.textMuted}
-                  />
-                  <AppText style={styles.timeText}>{report.createdAgo}</AppText>
-                </View>
-              </View>
-
-              <View style={styles.resultCard}>
-                <AppText style={styles.resultElectionTitle}>
-                  {collation.fullTitle} Result
-                </AppText>
-                {collation.parties.map((p) => {
-                  const Logo = getPartyLogo(p.logoKey);
-                  return (
-                    <View key={p.id} style={styles.partyBlock}>
-                      <View style={styles.partyTopRow}>
-                        <View style={styles.partyLeftGroup}>
-                          <Logo width={32} height={24} />
-                          <AppText style={styles.partyName}>
-                            {p.shortName} ({formatCompactNumber(p.votes)} votes)
-                          </AppText>
-                        </View>
-                        <AppText
-                          style={[styles.partyPercent, { color: p.color }]}
-                        >
-                          {p.percent}%
-                        </AppText>
-                      </View>
-                      <CollationAnimatedProgressBar
-                        progress={p.percent}
-                        height={6}
-                        color={p.color}
-                        trackColor="#E5E7EB"
-                      />
-                    </View>
-                  );
-                })}
-              </View>
-
-              <View style={styles.resultFooter}>
-                <Pressable
-                  onPress={() => handleOpenEvidence(report)}
-                  hitSlop={8}
-                >
-                  <AppText style={styles.linkText}>
-                    See Evidence Here &gt;
-                  </AppText>
-                </Pressable>
-                <AppText style={styles.reviewCount}>
-                  {report.reviewCount} People have reviewed
-                </AppText>
-                <ActionRow
-                  isConfirmed={isConf}
-                  isFlagged={isFlag}
-                  onConfirm={() => handleToggleConfirm(report.id)}
-                  onFlag={() => handleOpenFlag(report.id)}
-                  onShare={() => handleShare(report)}
-                />
-              </View>
-              <View style={styles.sectionDivider} />
-            </View>
-          );
-        })}
-
-        {/* ── Incident header ── */}
-        {incidentReports.length > 0 ? (
-          <View style={styles.incidentSectionHeader}>
-            <AppText style={styles.incidentSectionTitle}>
-              Incidents during {collation.fullTitle}
+        {isInitialLoading ? (
+          <ReviewReportsSkeleton />
+        ) : hasError ? (
+          <View style={styles.emptyWrap}>
+            <NoElection width={110} height={110} />
+            <AppText style={styles.emptyTitle}>
+              Couldn&apos;t load reports
+            </AppText>
+            <AppText style={styles.emptySubtitle}>
+              Pull down to try again.
             </AppText>
           </View>
-        ) : null}
+        ) : isEmpty ? (
+          <View style={styles.emptyWrap}>
+            <NoElection width={110} height={110} />
+            <AppText style={styles.emptyTitle}>No Reports to Review Yet</AppText>
+            <AppText style={styles.emptySubtitle}>
+              Reports submitted by observers will appear here for community
+              verification.
+            </AppText>
+          </View>
+        ) : (
+          <>
+            {/* ── Result reports ── */}
+            {results.map((item) => {
+              const myAction = findMyAction(item.actions, myUserId);
+              const totalVotes = item.partiesVotes.reduce(
+                (sum, p) => sum + p.count,
+                0
+              );
 
-        {/* ── Incidents with thread line ── */}
-        {incidentReports.map((report, index) => {
-          const isLast = index === incidentReports.length - 1;
-          const isConf = confirmedIds.has(report.id);
-          const isFlag = flaggedIds.has(report.id);
-
-          return (
-            <View key={report.id} style={styles.incidentRow}>
-              <View style={styles.incidentLeftCol}>
-                <View style={styles.incidentIconWrap}>
-                  <Incident width={40} height={40} />
-                </View>
-                {!isLast ? <View style={styles.threadLine} /> : null}
-              </View>
-
-              <View style={styles.incidentContent}>
-                <View style={styles.incidentHeadRow}>
-                  <View>
-                    <AppText style={styles.incidentLabel}>Incident:</AppText>
-                    <AppText style={styles.incidentTime}>
-                      {report.createdAgo}
-                    </AppText>
-                  </View>
-                  {report.tag ? (
-                    <View style={styles.tagPill}>
-                      <AppText style={styles.tagText}>{report.tag}</AppText>
+              return (
+                <View key={item.electionId}>
+                  <View style={styles.resultHeaderRow}>
+                    <View style={styles.resultDotRow}>
+                      <View style={styles.redDot} />
+                      <AppText style={styles.resultLabel} numberOfLines={1}>
+                        Result Report — EC8A
+                      </AppText>
                     </View>
-                  ) : null}
+                    <View style={styles.timeRow}>
+                      <Ionicons
+                        name="time-outline"
+                        size={12}
+                        color={Theme.colors.textMuted}
+                      />
+                      <AppText style={styles.timeText}>
+                        {formatTimeAgo(getMinutesAgo(item.uploadedAt))}
+                      </AppText>
+                    </View>
+                  </View>
+
+                  <View style={styles.resultCard}>
+                    <AppText style={styles.resultElectionTitle} numberOfLines={2}>
+                      {item.electionName} Result
+                    </AppText>
+                    {item.partiesVotes.map((party) => {
+                      const percent =
+                        totalVotes > 0
+                          ? Math.round((party.count / totalVotes) * 100)
+                          : 0;
+                      const color = getPartyColor(party.party);
+
+                      return (
+                        <View key={party._id} style={styles.partyBlock}>
+                          <View style={styles.partyTopRow}>
+                            <View style={styles.partyLeftGroup}>
+                              <PartyLogo code={party.party} size={26} />
+                              <AppText style={styles.partyName} numberOfLines={1}>
+                                {party.party} ({formatCompactNumber(party.count)}{" "}
+                                votes)
+                              </AppText>
+                            </View>
+                            <AppText style={[styles.partyPercent, { color }]}>
+                              {percent}%
+                            </AppText>
+                          </View>
+                          <CollationAnimatedProgressBar
+                            progress={percent}
+                            height={6}
+                            color={color}
+                            trackColor="#E5E7EB"
+                          />
+                        </View>
+                      );
+                    })}
+                  </View>
+
+                  <View style={styles.resultFooter}>
+                    <Pressable onPress={() => openResultEvidence(item)} hitSlop={8}>
+                      <AppText style={styles.linkText}>
+                        See Evidence Here &gt;
+                      </AppText>
+                    </Pressable>
+                    <AppText style={styles.reviewCount}>
+                      {item.actions.length} People have reviewed
+                    </AppText>
+                    <ActionRow
+                      myAction={myAction}
+                      busy={userActionMutation.isPending}
+                      onConfirm={() => handleConfirm(item.electionId, "election")}
+                      onFlag={() =>
+                        handleOpenFlag({
+                          targetId: item.electionId,
+                          dataType: "election",
+                        })
+                      }
+                      onShare={() => void handleShareResult(item)}
+                    />
+                  </View>
+                  <View style={styles.sectionDivider} />
                 </View>
+              );
+            })}
 
-                <AppText style={styles.incidentBody}>{report.body}</AppText>
-
-                <Pressable
-                  onPress={() => handleOpenEvidence(report)}
-                  hitSlop={8}
-                >
-                  <AppText style={styles.linkText}>See evidence &gt;</AppText>
-                </Pressable>
-
-                <View style={styles.thinDivider} />
-
-                <AppText style={styles.reviewCount}>
-                  {report.reviewCount} People have reviewed
+            {/* ── Incident header ── */}
+            {incidents.length > 0 ? (
+              <View style={styles.incidentSectionHeader}>
+                <AppText style={styles.incidentSectionTitle}>
+                  Incidents during {collation.fullTitle}
                 </AppText>
-
-                <ActionRow
-                  isConfirmed={isConf}
-                  isFlagged={isFlag}
-                  onConfirm={() => handleToggleConfirm(report.id)}
-                  onFlag={() => handleOpenFlag(report.id)}
-                  onShare={() => handleShare(report)}
-                />
               </View>
-            </View>
-          );
-        })}
+            ) : null}
+
+            {/* ── Incidents with thread line ── */}
+            {incidents.map((item, index) => {
+              const isLast = index === incidents.length - 1;
+              const myAction = findMyAction(item.actions, myUserId);
+
+              return (
+                <View key={item.electionId} style={styles.incidentRow}>
+                  <View style={styles.incidentLeftCol}>
+                    <View style={styles.incidentIconWrap}>
+                      <Incident width={40} height={40} />
+                    </View>
+                    {!isLast ? <View style={styles.threadLine} /> : null}
+                  </View>
+
+                  <View style={styles.incidentContent}>
+                    <View style={styles.incidentHeadRow}>
+                      <View style={{ flex: 1 }}>
+                        <AppText style={styles.incidentLabel}>Incident:</AppText>
+                        <AppText style={styles.incidentTime}>
+                          {formatTimeAgo(getMinutesAgo(item.uploadedAt))}
+                        </AppText>
+                      </View>
+                      <View style={styles.tagPill}>
+                        <AppText style={styles.tagText} numberOfLines={1}>
+                          {item.selectIncident}
+                        </AppText>
+                      </View>
+                    </View>
+
+                    <AppText style={styles.incidentBody}>
+                      {item.incidentNote}
+                    </AppText>
+
+                    <Pressable onPress={() => openIncidentEvidence(item)} hitSlop={8}>
+                      <AppText style={styles.linkText}>See evidence &gt;</AppText>
+                    </Pressable>
+
+                    <View style={styles.thinDivider} />
+
+                    <AppText style={styles.reviewCount}>
+                      {item.actions.length} People have reviewed
+                    </AppText>
+
+                    <ActionRow
+                      myAction={myAction}
+                      busy={userActionMutation.isPending}
+                      onConfirm={() => handleConfirm(item.electionId, "incident")}
+                      onFlag={() =>
+                        handleOpenFlag({
+                          targetId: item.electionId,
+                          dataType: "incident",
+                        })
+                      }
+                      onShare={() => void handleShareIncident(item)}
+                    />
+                  </View>
+                </View>
+              );
+            })}
+          </>
+        )}
 
         <View style={{ height: 120 }} />
       </ScrollView>
 
       <SeeEvidenceBottomSheet ref={evidenceRef} evidence={selectedEvidence} />
-      <FlagReportBottomSheet ref={flagRef} onSubmitted={handleFlagSubmitted} />
+      <FlagReasonBottomSheet
+        ref={flagRef}
+        submitting={userActionMutation.isPending}
+        onSubmit={handleFlagSubmit}
+      />
     </>
   );
 }
@@ -460,22 +519,22 @@ export default function CollationReviewReportsTab({
 /* ───── Action Row ───── */
 
 function ActionRow({
-  isConfirmed,
-  isFlagged,
+  myAction,
+  busy,
   onConfirm,
   onFlag,
   onShare,
 }: {
-  isConfirmed: boolean;
-  isFlagged: boolean;
+  myAction: CollationReviewAction | undefined;
+  busy: boolean;
   onConfirm: () => void;
   onFlag: () => void;
   onShare: () => void;
 }) {
-  if (isConfirmed) {
+  if (myAction?.action === "agree") {
     return (
       <View style={styles.actionsRow}>
-        <Pressable onPress={onConfirm} style={styles.confirmedPill}>
+        <View style={styles.confirmedPill}>
           <Ionicons
             name="thumbs-up-outline"
             size={14}
@@ -484,7 +543,7 @@ function ActionRow({
           <AppText style={styles.confirmedText} numberOfLines={1}>
             You confirmed this — thank you
           </AppText>
-        </Pressable>
+        </View>
         <Pressable onPress={onShare} style={styles.shareBtn} hitSlop={6}>
           <Ionicons
             name="share-social-outline"
@@ -497,7 +556,7 @@ function ActionRow({
     );
   }
 
-  if (isFlagged) {
+  if (myAction?.action === "flag") {
     return (
       <View style={styles.actionsRow}>
         <View style={styles.flaggedPill}>
@@ -521,15 +580,15 @@ function ActionRow({
   return (
     <View style={styles.actionsRow}>
       <View style={styles.buttonRow}>
-        <Pressable onPress={onConfirm} style={styles.confirmBtn}>
-          <Ionicons
-            name="thumbs-up-outline"
-            size={14}
-            color={Theme.colors.primary}
-          />
+        <Pressable onPress={onConfirm} disabled={busy} style={styles.confirmBtn}>
+          {busy ? (
+            <ActivityIndicator size="small" color={Theme.colors.primary} />
+          ) : (
+            <Ionicons name="thumbs-up-outline" size={14} color={Theme.colors.primary} />
+          )}
           <AppText style={styles.confirmBtnText}>Confirm</AppText>
         </Pressable>
-        <Pressable onPress={onFlag} style={styles.flagBtn}>
+        <Pressable onPress={onFlag} disabled={busy} style={styles.flagBtn}>
           <Ionicons name="flag-outline" size={14} color="#F04A1D" />
           <AppText style={styles.flagBtnText}>Flag</AppText>
         </Pressable>
@@ -549,12 +608,6 @@ function ActionRow({
 const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingTop: 16 },
-  pageContent: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 32,
-    gap: 14,
-  },
 
   section: { gap: 8, marginBottom: 18 },
   sectionTitle: {
@@ -574,8 +627,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 12,
+    gap: 8,
   },
-  resultDotRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  resultDotRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
   redDot: {
     width: 8,
     height: 8,
@@ -583,6 +637,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#EF4444",
   },
   resultLabel: {
+    flexShrink: 1,
     fontSize: 14,
     lineHeight: 18,
     color: Theme.colors.primary,
@@ -627,7 +682,7 @@ const styles = StyleSheet.create({
     gap: 10,
     flex: 1,
   },
-  partyName: { fontSize: 13, lineHeight: 18, color: Theme.colors.text },
+  partyName: { flexShrink: 1, fontSize: 13, lineHeight: 18, color: Theme.colors.text },
   partyPercent: {
     fontSize: 14,
     lineHeight: 18,
@@ -678,6 +733,7 @@ const styles = StyleSheet.create({
   },
   incidentTime: { fontSize: 11, lineHeight: 16, color: Theme.colors.textMuted },
   tagPill: {
+    maxWidth: 160,
     minHeight: 24,
     borderRadius: 999,
     paddingHorizontal: 10,

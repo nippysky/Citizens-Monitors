@@ -18,11 +18,11 @@ import { useAppToast } from "@/hooks/useAppToast";
 import { useCreateDiscussionPostMutation } from "@/hooks/api/useDiscussionQueries";
 import { Theme } from "@/theme";
 
-// The backend's discussion-post endpoint has no scope/visibility field (it
-// takes body/allowSocialShare/useAnonymousDisplay/images/videos only) — so
-// this picker is currently UI-only and not sent with the post. Kept per
-// product direction; ask backend if a real scope field is planned.
-type Audience = "my-polling-unit" | "ward";
+// The "Who can see this discussion?" audience picker was removed entirely —
+// the backend's discussion-post endpoint has no scope/visibility field (it
+// only accepts body/allowSocialShare/useAnonymousDisplay/images/videos), so
+// the picker had no effect and was misleading users. Only fields the API
+// actually accepts are rendered below.
 
 type Props = {
   electionId: string;
@@ -40,7 +40,6 @@ const ShareOpinionBottomSheet = forwardRef<BottomSheetModal, Props>(
       useCollationMedia();
     const createPostMutation = useCreateDiscussionPostMutation(electionId);
     const [opinion, setOpinion] = useState("");
-    const [audience, setAudience] = useState<Audience>("my-polling-unit");
     const [social, setSocial] = useState(true);
     const [anonymous, setAnonymous] = useState(false);
     const [imgAsset, setImgAsset] = useState<PickedMedia | null>(null);
@@ -94,7 +93,6 @@ const ShareOpinionBottomSheet = forwardRef<BottomSheetModal, Props>(
 
         // Reset
         setOpinion("");
-        setAudience("my-polling-unit");
         setSocial(true);
         setAnonymous(false);
         setImgAsset(null);
@@ -217,26 +215,6 @@ const ShareOpinionBottomSheet = forwardRef<BottomSheetModal, Props>(
                 </Pressable>
               </View>
             ) : null}
-          </View>
-
-          <View style={st.sec}>
-            <AppText style={st.label}>Who can see this discussion?</AppText>
-            <View style={st.audWrap}>
-              {(["my-polling-unit", "ward"] as Audience[]).map((a) => (
-                <Pressable
-                  key={a}
-                  onPress={() => setAudience(a)}
-                  style={[st.chip, audience === a && st.chipOn]}
-                >
-                  <AppText
-                    style={[st.chipText, audience === a && st.chipTextOn]}
-                    numberOfLines={1}
-                  >
-                    {a === "my-polling-unit" ? "Polling Unit" : "Ward"}
-                  </AppText>
-                </Pressable>
-              ))}
-            </View>
           </View>
 
           <View style={st.switchRow}>
@@ -377,27 +355,6 @@ const st = StyleSheet.create({
     fontSize: 13,
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.medium,
-  },
-  audWrap: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  chip: {
-    minHeight: 42,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    backgroundColor: "#F4F5F7",
-    borderWidth: 1,
-    borderColor: "#DDE3EA",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  chipOn: { backgroundColor: "#F3FFFD", borderColor: Theme.colors.primary },
-  chipText: {
-    fontSize: 14,
-    color: Theme.colors.text,
-    fontFamily: Theme.fonts.body.medium,
-  },
-  chipTextOn: {
-    color: Theme.colors.primary,
-    fontFamily: Theme.fonts.body.semibold,
   },
   switchRow: {
     minHeight: 52,
