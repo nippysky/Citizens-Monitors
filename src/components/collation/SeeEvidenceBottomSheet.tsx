@@ -6,14 +6,9 @@ import {
 } from "@gorhom/bottom-sheet";
 import { useBottomSheetBackHandler } from "@/hooks/useBottomSheetBackHandler";
 import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { forwardRef, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  ImageBackground,
-  Pressable,
-  StyleSheet,
-  View,
-} from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AppText from "@/components/ui/AppText";
@@ -50,9 +45,6 @@ export type EvidencePayload = {
 
 type Props = { evidence: EvidencePayload | null };
 
-const DEMO_IMG = "https://images.unsplash.com/photo-1577563908411-5077b6dc7624?auto=format&fit=crop&w=1200&q=80";
-const DEMO_VID = "https://www.w3schools.com/html/mov_bbb.mp4";
-
 const SeeEvidenceBottomSheet = forwardRef<BottomSheetModal, Props>(
   function SeeEvidenceBottomSheet({ evidence }, ref) {
     const insets = useSafeAreaInsets();
@@ -60,13 +52,15 @@ const SeeEvidenceBottomSheet = forwardRef<BottomSheetModal, Props>(
     const { handleSheetChange } = useBottomSheetBackHandler(
       ref as React.RefObject<BottomSheetModal | null>
     );
-    const [imgLoading, setImgLoading] = useState(true);
     const [imgFailed, setImgFailed] = useState(false);
 
     if (!evidence) return null;
 
-    const imageUri = evidence.imageUri ?? DEMO_IMG;
-    const videoUri = evidence.videoUri ?? DEMO_VID;
+    // Never substitute placeholder media for evidence that wasn't actually
+    // submitted — an honest "no evidence" state beats a demo image/video
+    // that looks like real proof.
+    const imageUri = evidence.imageUri?.trim() || null;
+    const videoUri = evidence.videoUri?.trim() || null;
     const status = evidence.verificationStatus ?? "verified";
     const source = evidence.sourceType ?? "observer-upload";
 
@@ -147,26 +141,21 @@ const SeeEvidenceBottomSheet = forwardRef<BottomSheetModal, Props>(
               <Badge icon="image-outline" text="Image" />
             </View>
             <View style={styles.mediaCard}>
-              {!imgFailed ? (
-                <ImageBackground
+              {imageUri && !imgFailed ? (
+                <Image
                   source={{ uri: imageUri }}
                   style={styles.img}
-                  imageStyle={{ resizeMode: "cover" }}
-                  onLoadStart={() => { setImgLoading(true); setImgFailed(false); }}
-                  onLoadEnd={() => setImgLoading(false)}
-                  onError={() => { setImgLoading(false); setImgFailed(true); }}
-                >
-                  {imgLoading ? (
-                    <View style={styles.imgOverlay}>
-                      <ActivityIndicator color={Theme.colors.primary} />
-                      <AppText style={styles.imgOverlayText}>Loading evidence image...</AppText>
-                    </View>
-                  ) : null}
-                </ImageBackground>
+                  contentFit="cover"
+                  transition={150}
+                  cachePolicy="memory-disk"
+                  onError={() => setImgFailed(true)}
+                />
               ) : (
                 <View style={styles.imgFallback}>
                   <Ionicons name="image-outline" size={24} color={Theme.colors.textMuted} />
-                  <AppText style={styles.imgFallbackTitle}>Evidence image unavailable</AppText>
+                  <AppText style={styles.imgFallbackTitle}>
+                    {imageUri ? "Evidence image unavailable" : "No image evidence submitted"}
+                  </AppText>
                 </View>
               )}
             </View>
@@ -180,7 +169,14 @@ const SeeEvidenceBottomSheet = forwardRef<BottomSheetModal, Props>(
               <Badge icon="videocam-outline" text="Video" />
             </View>
             <View style={styles.mediaCard}>
-              <CollationVideoPlayer uri={videoUri} title="Cumulative result announcement" subtitle="Tap to load the verified video evidence" posterMode />
+              {videoUri ? (
+                <CollationVideoPlayer uri={videoUri} title="Cumulative result announcement" subtitle="Tap to load the verified video evidence" posterMode />
+              ) : (
+                <View style={styles.imgFallback}>
+                  <Ionicons name="videocam-outline" size={24} color={Theme.colors.textMuted} />
+                  <AppText style={styles.imgFallbackTitle}>No video evidence submitted</AppText>
+                </View>
+              )}
             </View>
             <InfoStrip icon="mic-outline" text="Video evidence should include voice proof of place and context so the announcement remains authentic and verifiable." />
           </View>
@@ -202,7 +198,6 @@ const SeeEvidenceBottomSheet = forwardRef<BottomSheetModal, Props>(
             <AppText style={styles.secSub}>These figures were extracted from the polling unit result evidence submitted for this election report.</AppText>
             <View style={styles.statsGrid}>
               <StatCell label="Accredited Voter" value={evidence.accreditedVoter ?? NOT_PROVIDED} />
-              <StatCell label="Rejected Votes" value={evidence.rejectedVotes ?? NOT_PROVIDED} />
               <StatCell label="Spoiled Ballot Papers" value={evidence.spoiledBallots ?? NOT_PROVIDED} />
               <StatCell label="Used Ballot Papers" value={evidence.usedBallots ?? NOT_PROVIDED} />
               <StatCell label="Unused Ballot Papers" value={evidence.unusedBallots ?? NOT_PROVIDED} />

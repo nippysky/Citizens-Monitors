@@ -88,19 +88,6 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function isVideoAsset(asset: ImagePicker.ImagePickerAsset) {
-  const uri = asset.uri.toLowerCase();
-  return (
-    asset.type === "video" ||
-    (asset.mimeType ?? "").startsWith("video/") ||
-    uri.endsWith(".mp4") ||
-    uri.endsWith(".mov") ||
-    uri.endsWith(".3gp") ||
-    uri.endsWith(".m4v") ||
-    uri.endsWith(".webm")
-  );
-}
-
 function IncidentTypeIcon({
   label,
   size,
@@ -219,14 +206,20 @@ function EvidenceSection({
   items,
   onOpenCamera,
   onOpenGallery,
+  onAddVideoCamera,
+  onAddVideoGallery,
   onRemoveItem,
   busy,
+  canAddVideo,
 }: {
   items: EvidenceItem[];
   onOpenCamera: () => void;
   onOpenGallery: () => void;
+  onAddVideoCamera: () => void;
+  onAddVideoGallery: () => void;
   onRemoveItem: (item: EvidenceItem) => void;
   busy: boolean;
+  canAddVideo: boolean;
 }) {
   const featured = items[0] ?? null;
   const remaining = items.slice(1);
@@ -289,7 +282,7 @@ function EvidenceSection({
           >
             <Ionicons name="camera-outline" size={14} color="#FFFFFF" />
             <AppText style={styles.addMoreChipPrimaryText}>
-              {busy ? "Opening..." : "Add media"}
+              {busy ? "Opening..." : "Add photo"}
             </AppText>
           </Pressable>
 
@@ -312,7 +305,48 @@ function EvidenceSection({
                 busy && styles.addMoreChipSecondaryTextDisabled,
               ]}
             >
-              {busy ? "Opening..." : "Add from gallery"}
+              {busy ? "Opening..." : "Photo from gallery"}
+            </AppText>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {canAddVideo ? (
+        <View style={styles.evidenceActionBar}>
+          <Pressable
+            onPress={onAddVideoCamera}
+            disabled={busy}
+            style={[
+              styles.addMoreChipPrimary,
+              busy && styles.addMoreChipDisabled,
+            ]}
+          >
+            <Ionicons name="videocam-outline" size={14} color="#FFFFFF" />
+            <AppText style={styles.addMoreChipPrimaryText}>
+              {busy ? "Opening..." : "Record video"}
+            </AppText>
+          </Pressable>
+
+          <Pressable
+            onPress={onAddVideoGallery}
+            disabled={busy}
+            style={[
+              styles.addMoreChipSecondary,
+              busy && styles.addMoreChipDisabledSecondary,
+            ]}
+          >
+            <Ionicons
+              name="film-outline"
+              size={14}
+              color={busy ? "#94A3B8" : Theme.colors.primary}
+            />
+            <AppText
+              style={[
+                styles.addMoreChipSecondaryText,
+                busy && styles.addMoreChipSecondaryTextDisabled,
+              ]}
+            >
+              {busy ? "Opening..." : "Video from gallery"}
             </AppText>
           </Pressable>
         </View>
@@ -511,6 +545,13 @@ export default function ReportIncidentScreen() {
 
   const evidenceItems = buildEvidenceItems();
 
+  // Photo and video pickers are kept as SEPARATE calls, each locked to a
+  // single mediaType (["images"] / ["videos"]) rather than one combined
+  // ["images", "videos"] picker. The combined call is where video selection
+  // was silently failing on Android — some OS/library versions only surface
+  // the images tab when both types are requested at once. Two single-type
+  // pickers is the same proven pattern already used successfully for result
+  // evidence in submit-election-report.tsx.
   const openCameraEvidence = async () => {
     if (!draft) return;
 
@@ -521,38 +562,20 @@ export default function ReportIncidentScreen() {
       await delay(180);
 
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ["images", "videos"],
+        mediaTypes: ["images"],
         quality: 0.9,
         allowsEditing: false,
-        videoMaxDuration: 180,
       });
 
       if (result.canceled || !result.assets?.length) return;
 
       const asset = result.assets[0];
-      const isVideo = isVideoAsset(asset);
 
       const staged = await stageMediaFile({
         sourceUri: asset.uri,
-        kind: isVideo ? "video" : "image",
-        mimeType: asset.mimeType ?? (isVideo ? "video/mp4" : "image/jpeg"),
+        kind: "image",
+        mimeType: asset.mimeType ?? "image/jpeg",
       });
-
-      if (isVideo) {
-        if (draft.videoEvidenceUris.length >= 1) {
-          showToast({
-            type: "success",
-            message: "You can attach only one camera/gallery video here.",
-          });
-          return;
-        }
-
-        await updateDraft({
-          ...draft,
-          videoEvidenceUris: [...draft.videoEvidenceUris, staged.localUri].slice(0, 1),
-        });
-        return;
-      }
 
       await updateDraft({
         ...draft,
@@ -571,32 +594,25 @@ export default function ReportIncidentScreen() {
       await delay(180);
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images", "videos"],
+        mediaTypes: ["images"],
         quality: 0.85,
         allowsEditing: false,
         allowsMultipleSelection: true,
-        selectionLimit: 6,
+        selectionLimit: 5,
       });
 
       if (result.canceled || !result.assets?.length) return;
 
       const nextImages = [...draft.imageEvidenceUris];
-      const nextVideos = [...draft.videoEvidenceUris];
 
       for (const asset of result.assets) {
-        const isVideo = isVideoAsset(asset);
-
         const staged = await stageMediaFile({
           sourceUri: asset.uri,
-          kind: isVideo ? "video" : "image",
-          mimeType: asset.mimeType ?? (isVideo ? "video/mp4" : "image/jpeg"),
+          kind: "image",
+          mimeType: asset.mimeType ?? "image/jpeg",
         });
 
-        if (isVideo) {
-          if (nextVideos.length < 1) {
-            nextVideos.push(staged.localUri);
-          }
-        } else if (nextImages.length < 5) {
+        if (nextImages.length < 5) {
           nextImages.push(staged.localUri);
         }
       }
@@ -604,7 +620,85 @@ export default function ReportIncidentScreen() {
       await updateDraft({
         ...draft,
         imageEvidenceUris: nextImages.slice(0, 5),
-        videoEvidenceUris: nextVideos.slice(0, 1),
+      });
+    });
+  };
+
+  const addVideoFromCamera = async () => {
+    if (!draft) return;
+
+    if (draft.videoEvidenceUris.length >= 1) {
+      showToast({
+        type: "success",
+        message: "You can attach only one camera/gallery video here.",
+      });
+      return;
+    }
+
+    await withPickerGuard(async () => {
+      const allowed = await ensureCameraPermission();
+      if (!allowed) return;
+
+      await delay(180);
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["videos"],
+        videoMaxDuration: 180,
+        quality: 0.85,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+
+      const asset = result.assets[0];
+
+      const staged = await stageMediaFile({
+        sourceUri: asset.uri,
+        kind: "video",
+        mimeType: asset.mimeType ?? "video/mp4",
+      });
+
+      await updateDraft({
+        ...draft,
+        videoEvidenceUris: [staged.localUri],
+      });
+    });
+  };
+
+  const addVideoFromGallery = async () => {
+    if (!draft) return;
+
+    if (draft.videoEvidenceUris.length >= 1) {
+      showToast({
+        type: "success",
+        message: "You can attach only one camera/gallery video here.",
+      });
+      return;
+    }
+
+    await withPickerGuard(async () => {
+      const allowed = await ensureMediaLibraryPermission();
+      if (!allowed) return;
+
+      await delay(180);
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["videos"],
+        quality: 0.85,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+
+      const asset = result.assets[0];
+
+      const staged = await stageMediaFile({
+        sourceUri: asset.uri,
+        kind: "video",
+        mimeType: asset.mimeType ?? "video/mp4",
+      });
+
+      await updateDraft({
+        ...draft,
+        videoEvidenceUris: [staged.localUri],
       });
     });
   };
@@ -962,10 +1056,13 @@ export default function ReportIncidentScreen() {
             items={evidenceItems}
             onOpenCamera={openCameraEvidence}
             onOpenGallery={addEvidenceFromGallery}
+            onAddVideoCamera={() => void addVideoFromCamera()}
+            onAddVideoGallery={() => void addVideoFromGallery()}
             onRemoveItem={(item) => {
               void handleRemoveEvidenceItem(item);
             }}
             busy={pickerBusy}
+            canAddVideo={draft.videoEvidenceUris.length < 1}
           />
         </View>
 

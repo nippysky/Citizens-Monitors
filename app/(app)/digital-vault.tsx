@@ -16,6 +16,7 @@ import EditElectionResultSheet from "@/components/me/EditElectionResultSheet";
 import ReportSummarySheet from "@/components/me/ReportSummarySheet";
 import AppText from "@/components/ui/AppText";
 import BackButton from "@/components/ui/BackButton";
+import { QueuedAction, useOfflineSync } from "@/context/OfflineSyncContext";
 import { useAppToast } from "@/hooks/useAppToast";
 import {
   useDeleteElectionResultMutation,
@@ -34,6 +35,7 @@ import {
   getVaultElectionType,
   isVaultResult,
 } from "@/lib/api/electionVault.api";
+import { ElectionResultDraft, IncidentDraft } from "@/lib/reporting";
 import { Theme } from "@/theme";
 import ElectionNotification from "@/svgs/app/profile/ElectionNotification";
 import HouseOfRepsElection from "@/svgs/app/HouseOfRepsElection";
@@ -149,6 +151,128 @@ function getTopPartySummary(result: ElectionVaultResult): string {
 
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
+}
+
+const PENDING_ID_PREFIX = "pending-";
+
+function isPendingSubmission(item: ElectionVaultSubmission): boolean {
+  return item.id.startsWith(PENDING_ID_PREFIX);
+}
+
+/**
+ * Offline-first: a result/incident report the user just submitted (online
+ * or off) sits in OfflineSyncContext's queue until it's actually delivered
+ * to the backend. Without this, the Digital Vault — which only reads the
+ * remote `/profile/election-vault` endpoint — would show nothing until the
+ * background sync completes, even though the user was just told "Report
+ * Submitted". This turns each unsynced queue item into the same shape the
+ * real list renders, tagged as pending, so it appears INSTANTLY and is
+ * quietly replaced by the real record once sync succeeds and the vault
+ * query is invalidated.
+ */
+function buildPendingVaultSubmissions(
+  queue: QueuedAction[]
+): ElectionVaultSubmission[] {
+  const pendingItems: ElectionVaultSubmission[] = [];
+
+  for (const item of queue) {
+    if (item.synced) continue;
+
+    if (item.type === "submit-election-report") {
+      const draft = item.payload as unknown as ElectionResultDraft;
+      if (!draft.electionId) continue;
+
+      const createdAt = new Date(item.createdAt).toISOString();
+
+      const partiesVotes = Array.isArray(draft.votesPerParty)
+        ? draft.votesPerParty
+            .filter((vote) => vote.party?.trim())
+            .map((vote) => ({
+              party: vote.party.trim().toUpperCase(),
+              count: Number(vote.votes) || 0,
+            }))
+        : [];
+
+      const data: ElectionVaultResult = {
+        _id: `${PENDING_ID_PREFIX}${item.id}`,
+        election: {
+          _id: draft.electionId,
+          election: {
+            _id: draft.electionId,
+            electionName: draft.electionTitle,
+          },
+          electionLocation: draft.state ?? null,
+        },
+        state: draft.state,
+        lga: draft.lga,
+        ward: draft.ward,
+        pollingUnit: draft.pollingUnitName,
+        resultPicture: draft.signedResultImageUri
+          ? { url: draft.signedResultImageUri }
+          : undefined,
+        resultVideo: draft.resultAnnouncementVideoUri
+          ? { url: draft.resultAnnouncementVideoUri }
+          : undefined,
+        partiesVotes,
+        createdAt,
+      };
+
+      pendingItems.push({
+        kind: "result",
+        id: `${PENDING_ID_PREFIX}${item.id}`,
+        createdAt,
+        data,
+      });
+
+      continue;
+    }
+
+    if (item.type === "submit-incident-report") {
+      const draft = item.payload as unknown as IncidentDraft;
+      if (!draft.electionId) continue;
+
+      const createdAt = new Date(item.createdAt).toISOString();
+
+      const incidentVideoUris = [
+        ...(draft.videoEvidenceUris ?? []),
+        draft.liveVideoUri,
+      ].filter((uri): uri is string => Boolean(uri?.trim()));
+
+      const data: ElectionVaultIncident = {
+        _id: `${PENDING_ID_PREFIX}${item.id}`,
+        election: {
+          _id: draft.electionId,
+          election: {
+            _id: draft.electionId,
+            electionName: draft.electionTitle,
+          },
+          electionLocation: draft.state ?? null,
+        },
+        state: draft.state,
+        lga: draft.lga,
+        ward: draft.ward,
+        pollingUnit: draft.pollingUnitName,
+        selectIncident: draft.incidentType,
+        incidentNote: draft.description,
+        incidentPictures: (draft.imageEvidenceUris ?? []).map((url) => ({
+          url,
+        })),
+        incidentVideos: incidentVideoUris.map((url) => ({ url })),
+        createdAt,
+      };
+
+      pendingItems.push({
+        kind: "incident",
+        id: `${PENDING_ID_PREFIX}${item.id}`,
+        createdAt,
+        data,
+      });
+    }
+  }
+
+  // Newest pending item first — a report someone just submitted should be
+  // the first thing they see.
+  return pendingItems.reverse();
 }
 
 function SkeletonBlock({
@@ -270,6 +394,8 @@ function SubmissionCard({
   onOpen: (item: ElectionVaultSubmission) => void;
   onEditResult: (result: ElectionVaultResult) => void;
 }) {
+  const pending = isPendingSubmission(item);
+
   if (isVaultResult(item)) {
     const result = item.data;
     const electionName = getVaultElectionName(result.election);
@@ -290,14 +416,25 @@ function SubmissionCard({
                 Result Report — EC8A
               </AppText>
 
-              <View style={styles.typePill}>
-                <Ionicons
-                  name="checkmark-done-outline"
-                  size={12}
-                  color={Theme.colors.primary}
-                />
-                <AppText style={styles.typePillText}>Result</AppText>
-              </View>
+              {pending ? (
+                <View style={styles.pendingPill}>
+                  <Ionicons
+                    name="cloud-upload-outline"
+                    size={12}
+                    color="#D97706"
+                  />
+                  <AppText style={styles.pendingPillText}>Pending Sync</AppText>
+                </View>
+              ) : (
+                <View style={styles.typePill}>
+                  <Ionicons
+                    name="checkmark-done-outline"
+                    size={12}
+                    color={Theme.colors.primary}
+                  />
+                  <AppText style={styles.typePillText}>Result</AppText>
+                </View>
+              )}
             </View>
 
             <AppText style={styles.electionName} numberOfLines={1}>
@@ -346,14 +483,23 @@ function SubmissionCard({
             </AppText>
           </View>
 
-          <Pressable
-            onPress={() => onEditResult(result)}
-            style={styles.editButton}
-            hitSlop={8}
-          >
-            <Ionicons name="create-outline" size={15} color="#FFFFFF" />
-            <AppText style={styles.editButtonText}>Edit</AppText>
-          </Pressable>
+          {pending ? (
+            <View style={styles.pendingFooterNote}>
+              <Ionicons name="time-outline" size={13} color="#D97706" />
+              <AppText style={styles.pendingFooterNoteText}>
+                Waiting for connection
+              </AppText>
+            </View>
+          ) : (
+            <Pressable
+              onPress={() => onEditResult(result)}
+              style={styles.editButton}
+              hitSlop={8}
+            >
+              <Ionicons name="create-outline" size={15} color="#FFFFFF" />
+              <AppText style={styles.editButtonText}>Edit</AppText>
+            </Pressable>
+          )}
         </View>
       </Pressable>
     );
@@ -378,12 +524,23 @@ function SubmissionCard({
               {incident.selectIncident || "Incident Report"}
             </AppText>
 
-            <View style={[styles.typePill, styles.incidentPill]}>
-              <Ionicons name="warning-outline" size={12} color="#D97706" />
-              <AppText style={[styles.typePillText, styles.incidentPillText]}>
-                Incident
-              </AppText>
-            </View>
+            {pending ? (
+              <View style={styles.pendingPill}>
+                <Ionicons
+                  name="cloud-upload-outline"
+                  size={12}
+                  color="#D97706"
+                />
+                <AppText style={styles.pendingPillText}>Pending Sync</AppText>
+              </View>
+            ) : (
+              <View style={[styles.typePill, styles.incidentPill]}>
+                <Ionicons name="warning-outline" size={12} color="#D97706" />
+                <AppText style={[styles.typePillText, styles.incidentPillText]}>
+                  Incident
+                </AppText>
+              </View>
+            )}
           </View>
 
           <AppText style={styles.electionName} numberOfLines={1}>
@@ -450,6 +607,7 @@ export default function DigitalVaultScreen() {
   const editRef = useRef<BottomSheetModal>(null);
 
   const { showToast } = useAppToast();
+  const { queue: offlineQueue } = useOfflineSync();
 
   const vaultQuery = useElectionVaultQuery();
   const updateResultMutation = useUpdateElectionResultMutation();
@@ -461,9 +619,13 @@ export default function DigitalVaultScreen() {
   const [selectedResult, setSelectedResult] =
     useState<ElectionVaultResult | null>(null);
 
+  // Offline-first: submissions still waiting in the sync queue show up
+  // immediately, ahead of whatever the server already knows about.
   const submissions = useMemo(() => {
-    return buildElectionVaultSubmissions(vaultQuery.data);
-  }, [vaultQuery.data]);
+    const pending = buildPendingVaultSubmissions(offlineQueue);
+    const synced = buildElectionVaultSubmissions(vaultQuery.data);
+    return [...pending, ...synced];
+  }, [offlineQueue, vaultQuery.data]);
 
   const summary = vaultQuery.data?.summary ?? {
     totalSubmissions: 0,
@@ -861,6 +1023,35 @@ const styles = StyleSheet.create({
   },
   incidentPillText: {
     color: "#D97706",
+  },
+  pendingPill: {
+    minHeight: 26,
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    backgroundColor: "rgba(245,158,11,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(245,158,11,0.22)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  pendingPillText: {
+    fontSize: 11,
+    lineHeight: 15,
+    color: "#D97706",
+    fontFamily: Theme.fonts.body.semibold,
+  },
+  pendingFooterNote: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+  },
+  pendingFooterNoteText: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: "#D97706",
+    fontFamily: Theme.fonts.body.medium,
   },
   electionName: {
     fontSize: 12,

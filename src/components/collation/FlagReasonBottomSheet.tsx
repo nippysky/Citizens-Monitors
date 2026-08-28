@@ -35,7 +35,10 @@ const FlagReasonBottomSheet = forwardRef<FlagReasonSheetHandle, Props>(
     const insets = useSafeAreaInsets();
     const sheetRef = useRef<BottomSheetModal>(null);
     const { handleSheetChange } = useBottomSheetBackHandler(sheetRef);
-    const snaps = useMemo(() => ["50%"], []);
+    // A single generous snap point (not a modest 50%) so the reason textarea
+    // and footer button stay clear of the keyboard once it rises — matching
+    // the project's established fix for bottom sheets with text inputs.
+    const snaps = useMemo(() => ["82%"], []);
     const [reason, setReason] = useState("");
 
     useImperativeHandle(ref, () => ({
@@ -121,7 +124,7 @@ const FlagReasonBottomSheet = forwardRef<FlagReasonSheetHandle, Props>(
             title={submitting ? "Submitting..." : "Submit Flag"}
             onPress={submit}
             disabled={!canSubmit}
-            loading={submitting}
+            loading={Boolean(submitting)}
             style={{ marginVertical: 0 }}
           />
         </View>

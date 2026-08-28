@@ -14,12 +14,17 @@ import {
 
 import { pulseQueryKeys } from "@/hooks/api/usePulseQueries";
 import { reportingQueryKeys } from "@/hooks/api/useReportingMutations";
+import { collationReviewQueryKeys } from "@/hooks/api/useCollationReviewQueries";
 import {
   mapDraftToElectionResultPayload,
   mapDraftToIncidentReportPayload,
   submitElectionResult,
   submitIncidentReport,
 } from "@/lib/api/reporting.api";
+import {
+  submitCollationUserAction,
+  CollationUserActionPayload,
+} from "@/lib/api/collationReview.api";
 import {
   createPulseComment,
   createPulsePost,
@@ -41,7 +46,8 @@ export type QueuedActionType =
   | "pulse-create-post"
   | "pulse-like-post"
   | "pulse-create-comment"
-  | "pulse-like-comment";
+  | "pulse-like-comment"
+  | "collation-user-action";
 
 export type QueuedAction = {
   id: string;
@@ -62,6 +68,7 @@ type SyncResult = {
   ok: boolean;
   invalidatePulse?: boolean;
   invalidateReportingElectionId?: string;
+  invalidateCollationReviewElectionId?: string;
 };
 
 const STORAGE_KEY = "@citizen_monitors/offline_queue";
@@ -193,8 +200,15 @@ async function syncQueuedAction(item: QueuedAction): Promise<SyncResult> {
       case "submit-election-report": {
         const electionId = getElectionId(item.payload);
 
+        // A queued item missing its election id can never be submitted — but
+        // treating that as "ok" would silently drop real user data (looks
+        // synced, nothing ever reaches the backend). Keep it queued instead;
+        // it's a bug to investigate, not a fire we should paper over.
         if (!electionId) {
-          return { ok: true };
+          console.log(
+            "Queued submit-election-report is missing electionId — keeping queued.",
+          );
+          return { ok: false };
         }
 
         await submitElectionResult(
@@ -211,7 +225,10 @@ async function syncQueuedAction(item: QueuedAction): Promise<SyncResult> {
         const electionId = getElectionId(item.payload);
 
         if (!electionId) {
-          return { ok: true };
+          console.log(
+            "Queued submit-incident-report is missing electionId — keeping queued.",
+          );
+          return { ok: false };
         }
 
         await submitIncidentReport(
@@ -221,6 +238,32 @@ async function syncQueuedAction(item: QueuedAction): Promise<SyncResult> {
         );
 
         return { ok: true, invalidateReportingElectionId: electionId };
+      }
+
+      case "collation-user-action": {
+        const electionId = getElectionId(item.payload);
+        const targetId = getString(item.payload, "targetId");
+        const action = getString(item.payload, "action");
+        const dataType = getString(item.payload, "dataType");
+
+        if (!electionId || !targetId || !action || !dataType) {
+          console.log(
+            "Queued collation-user-action is missing required fields — keeping queued.",
+          );
+          return { ok: false };
+        }
+
+        await submitCollationUserAction({
+          electionId,
+          payload: {
+            targetId,
+            action: action as CollationUserActionPayload["action"],
+            dataType: dataType as CollationUserActionPayload["dataType"],
+            flagReason: getNullableString(item.payload, "flagReason") ?? undefined,
+          },
+        });
+
+        return { ok: true, invalidateCollationReviewElectionId: electionId };
       }
 
       case "submit-incident-feedback":
@@ -303,6 +346,7 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
       let currentQueue = [...queue];
       let shouldInvalidatePulse = false;
       const reportingElectionIds = new Set<string>();
+      const collationReviewElectionIds = new Set<string>();
 
       for (const item of pending) {
         const result = await syncQueuedAction(item);
@@ -317,6 +361,10 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
 
         if (result.invalidateReportingElectionId) {
           reportingElectionIds.add(result.invalidateReportingElectionId);
+        }
+
+        if (result.invalidateCollationReviewElectionId) {
+          collationReviewElectionIds.add(result.invalidateCollationReviewElectionId);
         }
 
         currentQueue = currentQueue.map((entry) =>
@@ -355,6 +403,12 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
           });
         });
       }
+
+      collationReviewElectionIds.forEach((electionId) => {
+        void queryClient.invalidateQueries({
+          queryKey: collationReviewQueryKeys.feed(electionId),
+        });
+      });
 
       syncingRef.current = false;
     };

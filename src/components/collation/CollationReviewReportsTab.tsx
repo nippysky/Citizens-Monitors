@@ -7,7 +7,6 @@
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
 import {
-  ActivityIndicator,
   Platform,
   Pressable,
   RefreshControl,
@@ -17,6 +16,7 @@ import {
   View,
 } from "react-native";
 import { useCallback, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import AppText from "@/components/ui/AppText";
 import CollationAnimatedProgressBar from "@/components/collation/CollationAnimatedProgressBar";
@@ -29,15 +29,17 @@ import SeeEvidenceBottomSheet, {
 } from "@/components/collation/SeeEvidenceBottomSheet";
 import PartyLogo from "@/components/shared/PartyLogo";
 import { useAuth } from "@/context/AuthContext";
+import { useOfflineSync } from "@/context/OfflineSyncContext";
 import { useAppToast } from "@/hooks/useAppToast";
 import {
+  collationReviewQueryKeys,
   useCollationReviewFeedQuery,
-  useCollationUserActionMutation,
 } from "@/hooks/api/useCollationReviewQueries";
 import {
   CollationReviewAction,
   CollationReviewIncidentItem,
   CollationReviewResultItem,
+  CollationUserActionResponse,
 } from "@/lib/api/collationReview.api";
 import { formatTimeAgo } from "@/lib/formatTimeAgo";
 import { CollationItem, formatCompactNumber } from "@/data/collation";
@@ -88,6 +90,83 @@ function findMyAction(
   return actions.find((action) => action.userId === userId);
 }
 
+/**
+ * Offline-first: agree/unagree/flag update the on-screen list INSTANTLY by
+ * patching the cached feed directly, before the real network call ever
+ * happens. `enqueue()` (see below) hands the actual delivery to
+ * OfflineSyncContext, which retries in the background whether we're online
+ * or not. The user never waits on a network round-trip to see their tap
+ * register.
+ */
+function applyOptimisticReviewAction(
+  current: CollationUserActionResponse | undefined,
+  params: {
+    targetId: string;
+    dataType: "election" | "incident";
+    action: "agree" | "unagree" | "flag";
+    myUserId: string;
+    flagReason?: string;
+  }
+): CollationUserActionResponse | undefined {
+  if (!current) return current;
+
+  const patchActions = (
+    actions: CollationReviewAction[]
+  ): CollationReviewAction[] => {
+    const withoutMine = actions.filter((a) => a.userId !== params.myUserId);
+
+    if (params.action === "unagree") {
+      return withoutMine;
+    }
+
+    return [
+      ...withoutMine,
+      {
+        userId: params.myUserId,
+        action: params.action,
+        _id: `local-${Date.now()}`,
+        flagReason: params.flagReason,
+      },
+    ];
+  };
+
+  if (params.dataType === "election") {
+    return {
+      ...current,
+      results: {
+        ...current.results,
+        results: current.results.results.map((item) =>
+          item.electionId === params.targetId
+            ? {
+                ...item,
+                actions: patchActions(item.actions),
+                agreed: params.action === "agree" ? true : item.agreed,
+                flagged: params.action === "flag" ? true : item.flagged,
+              }
+            : item
+        ),
+      },
+    };
+  }
+
+  return {
+    ...current,
+    results: {
+      ...current.results,
+      incidentReports: current.results.incidentReports.map((item) =>
+        item.electionId === params.targetId
+          ? {
+              ...item,
+              actions: patchActions(item.actions),
+              agreed: params.action === "agree" ? true : item.agreed,
+              flagged: params.action === "flag" ? true : item.flagged,
+            }
+          : item
+      ),
+    },
+  };
+}
+
 export default function CollationReviewReportsTab({
   collation,
   refreshing: externalRefreshing,
@@ -96,10 +175,11 @@ export default function CollationReviewReportsTab({
   const { showToast } = useAppToast();
   const { user } = useAuth();
   const myUserId = user?.id ?? null;
+  const queryClient = useQueryClient();
+  const { enqueue, isOnline } = useOfflineSync();
 
   const electionId = collation.id;
   const feedQuery = useCollationReviewFeedQuery(electionId);
-  const userActionMutation = useCollationUserActionMutation(electionId);
 
   const evidenceRef = useRef<BottomSheetModal>(null);
   const flagRef = useRef<FlagReasonSheetHandle>(null);
@@ -178,30 +258,60 @@ export default function CollationReviewReportsTab({
     [buildIncidentEvidence]
   );
 
-  const handleConfirm = useCallback(
-    (targetId: string, dataType: FlagTarget["dataType"]) => {
-      userActionMutation.mutate(
-        { targetId, action: "agree", dataType },
-        {
-          onSuccess: () => {
-            showToast({
-              type: "success",
-              message: "Report confirmed — thank you.",
-            });
-          },
-          onError: (error) => {
-            showToast({
-              type: "error",
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "Couldn't confirm this report.",
-            });
-          },
-        }
+  // ── Offline-first core: patch the cache instantly, then hand delivery to
+  // OfflineSyncContext's background queue. The user sees the result of their
+  // tap immediately, whether they're online or not — the actual network
+  // call happens later (or right away, if online) without blocking the UI.
+  const queueReviewAction = useCallback(
+    (params: {
+      targetId: string;
+      dataType: FlagTarget["dataType"];
+      action: "agree" | "unagree" | "flag";
+      flagReason?: string;
+    }) => {
+      const effectiveUserId = myUserId ?? "local-user";
+
+      queryClient.setQueryData<CollationUserActionResponse>(
+        collationReviewQueryKeys.feed(electionId),
+        (current) =>
+          applyOptimisticReviewAction(current, {
+            ...params,
+            myUserId: effectiveUserId,
+          })
       );
+
+      enqueue({
+        type: "collation-user-action",
+        payload: {
+          electionId,
+          targetId: params.targetId,
+          action: params.action,
+          dataType: params.dataType,
+          ...(params.flagReason ? { flagReason: params.flagReason } : {}),
+        },
+      });
     },
-    [showToast, userActionMutation]
+    [electionId, enqueue, myUserId, queryClient]
+  );
+
+  const handleConfirm = useCallback(
+    (targetId: string, dataType: FlagTarget["dataType"], isCurrentlyAgreed: boolean) => {
+      queueReviewAction({
+        targetId,
+        dataType,
+        action: isCurrentlyAgreed ? "unagree" : "agree",
+      });
+
+      showToast({
+        type: "success",
+        message: isCurrentlyAgreed
+          ? "Confirmation undone."
+          : isOnline
+            ? "Report confirmed — thank you."
+            : "Confirmed offline — will sync automatically once you're back online.",
+      });
+    },
+    [isOnline, queueReviewAction, showToast]
   );
 
   const handleOpenFlag = useCallback((target: FlagTarget) => {
@@ -213,29 +323,17 @@ export default function CollationReviewReportsTab({
     (reason: string) => {
       if (!flagTarget) return;
 
-      userActionMutation.mutate(
-        { ...flagTarget, action: "flag", flagReason: reason },
-        {
-          onSuccess: () => {
-            flagRef.current?.dismiss();
-            showToast({
-              type: "success",
-              message: "Report flagged — evidence under review.",
-            });
-          },
-          onError: (error) => {
-            showToast({
-              type: "error",
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "Couldn't flag this report.",
-            });
-          },
-        }
-      );
+      queueReviewAction({ ...flagTarget, action: "flag", flagReason: reason });
+
+      flagRef.current?.dismiss();
+      showToast({
+        type: "success",
+        message: isOnline
+          ? "Report flagged — evidence under review."
+          : "Flagged offline — will sync automatically once you're back online.",
+      });
     },
-    [flagTarget, showToast, userActionMutation]
+    [flagTarget, isOnline, queueReviewAction, showToast]
   );
 
   const handleShareResult = useCallback(
@@ -416,8 +514,13 @@ export default function CollationReviewReportsTab({
                     </AppText>
                     <ActionRow
                       myAction={myAction}
-                      busy={userActionMutation.isPending}
-                      onConfirm={() => handleConfirm(item.electionId, "election")}
+                      onConfirm={() =>
+                        handleConfirm(
+                          item.electionId,
+                          "election",
+                          myAction?.action === "agree"
+                        )
+                      }
                       onFlag={() =>
                         handleOpenFlag({
                           targetId: item.electionId,
@@ -486,8 +589,13 @@ export default function CollationReviewReportsTab({
 
                     <ActionRow
                       myAction={myAction}
-                      busy={userActionMutation.isPending}
-                      onConfirm={() => handleConfirm(item.electionId, "incident")}
+                      onConfirm={() =>
+                        handleConfirm(
+                          item.electionId,
+                          "incident",
+                          myAction?.action === "agree"
+                        )
+                      }
                       onFlag={() =>
                         handleOpenFlag({
                           targetId: item.electionId,
@@ -507,11 +615,7 @@ export default function CollationReviewReportsTab({
       </ScrollView>
 
       <SeeEvidenceBottomSheet ref={evidenceRef} evidence={selectedEvidence} />
-      <FlagReasonBottomSheet
-        ref={flagRef}
-        submitting={userActionMutation.isPending}
-        onSubmit={handleFlagSubmit}
-      />
+      <FlagReasonBottomSheet ref={flagRef} onSubmit={handleFlagSubmit} />
     </>
   );
 }
@@ -520,13 +624,11 @@ export default function CollationReviewReportsTab({
 
 function ActionRow({
   myAction,
-  busy,
   onConfirm,
   onFlag,
   onShare,
 }: {
   myAction: CollationReviewAction | undefined;
-  busy: boolean;
   onConfirm: () => void;
   onFlag: () => void;
   onShare: () => void;
@@ -534,16 +636,16 @@ function ActionRow({
   if (myAction?.action === "agree") {
     return (
       <View style={styles.actionsRow}>
-        <View style={styles.confirmedPill}>
+        <Pressable onPress={onConfirm} style={styles.confirmedPill} hitSlop={4}>
           <Ionicons
-            name="thumbs-up-outline"
+            name="thumbs-up"
             size={14}
             color={Theme.colors.primary}
           />
           <AppText style={styles.confirmedText} numberOfLines={1}>
-            You confirmed this — thank you
+            You confirmed this — tap to undo
           </AppText>
-        </View>
+        </Pressable>
         <Pressable onPress={onShare} style={styles.shareBtn} hitSlop={6}>
           <Ionicons
             name="share-social-outline"
@@ -580,15 +682,11 @@ function ActionRow({
   return (
     <View style={styles.actionsRow}>
       <View style={styles.buttonRow}>
-        <Pressable onPress={onConfirm} disabled={busy} style={styles.confirmBtn}>
-          {busy ? (
-            <ActivityIndicator size="small" color={Theme.colors.primary} />
-          ) : (
-            <Ionicons name="thumbs-up-outline" size={14} color={Theme.colors.primary} />
-          )}
+        <Pressable onPress={onConfirm} style={styles.confirmBtn}>
+          <Ionicons name="thumbs-up-outline" size={14} color={Theme.colors.primary} />
           <AppText style={styles.confirmBtnText}>Confirm</AppText>
         </Pressable>
-        <Pressable onPress={onFlag} disabled={busy} style={styles.flagBtn}>
+        <Pressable onPress={onFlag} style={styles.flagBtn}>
           <Ionicons name="flag-outline" size={14} color="#F04A1D" />
           <AppText style={styles.flagBtnText}>Flag</AppText>
         </Pressable>
