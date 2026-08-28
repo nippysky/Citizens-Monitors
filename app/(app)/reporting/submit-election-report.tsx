@@ -52,6 +52,7 @@ import {
   ensureMediaLibraryPermission,
 } from "@/lib/permissions";
 import { deleteStagedMediaFiles, stageMediaFile } from "@/lib/offlineMedia";
+import { shouldQueueAfterError } from "@/lib/offlineSubmission";
 import {
   formatPartyPickerLabel,
   getPartyInfo,
@@ -906,19 +907,34 @@ export default function SubmitElectionReportScreen() {
 
       showToast({ type: "success", message: "Report submitted successfully." });
     } catch (error) {
-      enqueue({ type: "submit-election-report", payload: queuePayload });
-      // Clear the stored draft (like the offline path) but KEEP the staged
-      // files — the queued upload still needs them.
-      await clearResultDraft();
-      setViewState("success");
+      // Only genuine connectivity failures get queued for background sync.
+      // Anything else (a validation error, an auth failure, a real bug) is
+      // NOT something a retry will ever fix — silently queueing it would
+      // tell the user "saved, will sync" about a request that can never
+      // succeed. Surface those instead so the user can actually act on it.
+      if (shouldQueueAfterError(error)) {
+        enqueue({ type: "submit-election-report", payload: queuePayload });
+        // Clear the stored draft (like the offline path) but KEEP the
+        // staged files — the queued upload still needs them.
+        await clearResultDraft();
+        setViewState("success");
 
-      showToast({
-        type: "success",
-        message:
-          "Report saved offline. It will sync automatically when connection is stable.",
-      });
+        showToast({
+          type: "success",
+          message:
+            "Report saved offline. It will sync automatically when connection is stable.",
+        });
+      } else {
+        showToast({
+          type: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Couldn't submit this report. Please try again.",
+        });
+      }
 
-      console.log("Election result queued:", error);
+      console.log("Election result submit failed:", error);
     } finally {
       setLoading(false);
     }

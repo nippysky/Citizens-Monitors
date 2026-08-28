@@ -8,6 +8,7 @@ import {
   BottomSheetBackdrop,
   BottomSheetModal,
   BottomSheetScrollView,
+  BottomSheetTextInput,
 } from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
 import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from "react";
@@ -113,6 +114,7 @@ const FlagReasonBottomSheet = forwardRef<FlagReasonSheetHandle, Props>(
               multiline
               inputWrapperStyle={styles.taWrap}
               style={styles.ta}
+              InputComponent={BottomSheetTextInput}
             />
           </View>
         </BottomSheetScrollView>

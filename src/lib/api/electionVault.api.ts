@@ -132,12 +132,18 @@ export type ElectionVaultSubmission =
       id: string;
       createdAt?: string;
       data: ElectionVaultResult;
+      /** Set only for locally-queued items the sync engine gave up on. */
+      failed?: boolean;
+      lastError?: string;
     }
   | {
       kind: "incident";
       id: string;
       createdAt?: string;
       data: ElectionVaultIncident;
+      /** Set only for locally-queued items the sync engine gave up on. */
+      failed?: boolean;
+      lastError?: string;
     };
 
 export type UpdateElectionResultPayload = {

@@ -20,6 +20,7 @@ import {
   usePulseViewerQuery,
 } from "@/hooks/api/usePulseQueries";
 import { PulseComment } from "@/lib/api/pulse.api";
+import { shouldQueueAfterError } from "@/lib/offlineSubmission";
 import { Theme } from "@/theme";
 
 export type DiscussionComment = {
@@ -78,18 +79,6 @@ function getViewerName(params: {
   return name || "@You";
 }
 
-function shouldQueueAfterError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-
-  const message = error.message.toLowerCase();
-
-  return (
-    message.includes("unable to reach") ||
-    message.includes("network") ||
-    message.includes("connection") ||
-    message.includes("timeout")
-  );
-}
 
 const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
   function CommentsBottomSheet(

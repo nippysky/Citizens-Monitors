@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 import { useQueryClient } from "@tanstack/react-query";
+import { AppState } from "react-native";
 import {
   createContext,
   ReactNode,
@@ -33,16 +34,12 @@ import {
   PulseVisibilityScope,
 } from "@/lib/api/pulse.api";
 import { ElectionResultDraft, IncidentDraft } from "@/lib/reporting";
+import { ApiError } from "@/lib/api/http";
+import { useAppToast } from "@/hooks/useAppToast";
 
 export type QueuedActionType =
-  | "flag-report"
-  | "comment"
-  | "opinion"
-  | "like"
-  | "confirm-report"
   | "submit-election-report"
   | "submit-incident-report"
-  | "submit-incident-feedback"
   | "pulse-create-post"
   | "pulse-like-post"
   | "pulse-create-comment"
@@ -55,6 +52,17 @@ export type QueuedAction = {
   payload: Record<string, unknown>;
   createdAt: number;
   synced: boolean;
+  /**
+   * True once the sync engine has given up retrying this item — the backend
+   * gave a definitive rejection (a 4xx: bad request, validation failure, a
+   * business rule like "you must submit a result before you can flag") that
+   * will NEVER succeed no matter how many times it's retried. Distinct from
+   * simply being unsynced: a failed item is done being retried but is kept
+   * (not silently dropped) so its data and failure reason stay visible
+   * rather than vanishing, or lying to the user with "Pending Sync" forever.
+   */
+  failed?: boolean;
+  lastError?: string;
 };
 
 type OfflineSyncContextValue = {
@@ -66,6 +74,13 @@ type OfflineSyncContextValue = {
 
 type SyncResult = {
   ok: boolean;
+  /**
+   * Set when `ok` is false AND the failure is definitive (a 4xx rejection)
+   * rather than a "try again later" condition (network failure, timeout,
+   * 5xx). Permanent failures stop being retried.
+   */
+  permanent?: boolean;
+  error?: string;
   invalidatePulse?: boolean;
   invalidateReportingElectionId?: string;
   invalidateCollationReviewElectionId?: string;
@@ -81,6 +96,19 @@ async function persistQueue(items: QueuedAction[]) {
   } catch {
     // Best effort only.
   }
+}
+
+// Serializes AsyncStorage writes so they always land in the order they were
+// issued. Without this, two overlapping persistQueue calls — e.g. one from
+// enqueue() firing while a runSync() pass is mid-upload — can resolve out of
+// order: the write that STARTED first but FINISHES last silently overwrites
+// newer queue contents with stale ones on disk, permanently dropping
+// whatever the newer write added. There is only ever one OfflineSyncProvider
+// mounted, so a module-level chain (rather than a ref) is correct here.
+let persistChain: Promise<void> = Promise.resolve();
+function schedulePersist(items: QueuedAction[]): Promise<void> {
+  persistChain = persistChain.then(() => persistQueue(items));
+  return persistChain;
 }
 
 function getString(payload: Record<string, unknown>, key: string): string {
@@ -114,6 +142,27 @@ function getVisibilityScope(
 
 function getElectionId(payload: Record<string, unknown>): string {
   return getString(payload, "electionId") || getString(payload, "election");
+}
+
+/** Human-friendly label for a permanently-failed queued item's toast. */
+function describeFailedQueueItem(type: QueuedActionType, error: string): string {
+  switch (type) {
+    case "submit-election-report":
+      return `Your election result couldn't be submitted: ${error}`;
+    case "submit-incident-report":
+      return `Your incident report couldn't be submitted: ${error}`;
+    case "collation-user-action":
+      return `Your action on that report couldn't be saved: ${error}`;
+    case "pulse-create-post":
+      return `Your post couldn't be shared: ${error}`;
+    case "pulse-create-comment":
+      return `Your comment couldn't be posted: ${error}`;
+    case "pulse-like-post":
+    case "pulse-like-comment":
+      return `That like couldn't be saved: ${error}`;
+    default:
+      return error;
+  }
 }
 
 function getElectionFeedback(payload: Record<string, unknown>) {
@@ -266,28 +315,58 @@ async function syncQueuedAction(item: QueuedAction): Promise<SyncResult> {
         return { ok: true, invalidateCollationReviewElectionId: electionId };
       }
 
-      case "submit-incident-feedback":
-      case "flag-report":
-      case "comment":
-      case "opinion":
-      case "like":
-      case "confirm-report":
-        return { ok: false };
-
       default:
         return { ok: false };
     }
   } catch (error) {
-    console.log("Sync failed:", error);
-    return { ok: false };
+    const message = error instanceof Error ? error.message : String(error);
+
+    console.log(
+      `Sync failed for queued "${item.type}" (id ${item.id}):`,
+      message,
+    );
+
+    // A 4xx from the backend (validation failure, business rule rejection —
+    // e.g. "you must submit a result before you can flag") is a definitive
+    // "no", not a "try again later". Retrying it every 15 seconds forever
+    // can never make it succeed; it just burns battery/data while the UI
+    // dishonestly says "Pending Sync" on something that's already dead.
+    // Network failures, timeouts, and 5xx server errors are NOT marked
+    // permanent — those genuinely can resolve on the next attempt.
+    const permanent =
+      error instanceof ApiError && error.status >= 400 && error.status < 500;
+
+    return { ok: false, permanent, error: message };
   }
 }
 
+// How often we retry the pending queue even when nothing else has changed.
+// This is the single most important number in this file: without a timer
+// like this, a sync attempt that fails once (a dropped connection mid
+// upload, a cold-start race, a NetInfo false negative) never gets retried
+// until the NEXT unrelated queue mutation or connectivity flip — which can
+// be minutes or hours later, or never. Real offline-first apps (Notion,
+// WhatsApp, Linear) all poll a pending outbox on an interval for exactly
+// this reason.
+const RETRY_INTERVAL_MS = 15_000;
+
 export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
+  const { showToast } = useAppToast();
 
   const [queue, setQueue] = useState<QueuedAction[]>([]);
   const [isOnline, setIsOnline] = useState(true);
+
+  // The single source of truth for queue reads and writes. `enqueue` and
+  // `runSync` both mutate THIS synchronously and then call `setQueue` to
+  // mirror it into React state for rendering — never the other way around.
+  // An earlier version mirrored ref-from-state via a `useEffect`, which was
+  // a real bug: a state update queued by one write could commit AFTER a
+  // newer synchronous ref mutation from a concurrent write, and the effect
+  // would silently overwrite the ref with stale contents — permanently
+  // dropping whatever the newer write had added (e.g. a "like" tapped while
+  // a large evidence video was still mid-upload in the background).
+  const queueRef = useRef<QueuedAction[]>([]);
 
   const syncingRef = useRef(false);
 
@@ -297,7 +376,9 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
 
       try {
         const parsed = JSON.parse(raw) as QueuedAction[];
-        setQueue(parsed.filter((item) => !item.synced));
+        const restored = parsed.filter((item) => !item.synced);
+        queueRef.current = restored;
+        setQueue(restored);
       } catch {
         // Ignore corrupted queue.
       }
@@ -323,35 +404,71 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
         synced: false,
       };
 
-      queueMicrotask(() => {
-        setQueue((prev) => {
-          const next = [...prev, item];
-          void persistQueue(next);
-          return next;
-        });
-      });
+      // Synchronous: queueRef.current must reflect this new item
+      // immediately — a runSync() pass could be mid-await right now and
+      // will re-read queueRef.current before it next persists.
+      const next = [...queueRef.current, item];
+      queueRef.current = next;
+      setQueue(next);
+      void schedulePersist(next);
     },
     [],
   );
 
-  useEffect(() => {
-    if (!isOnline || syncingRef.current) return;
+  // The actual sync pass. Deliberately does NOT gate on `isOnline` — that
+  // flag comes from NetInfo's reachability heuristic, which can read false
+  // on some networks/devices even when the API is perfectly reachable. The
+  // real connectivity test is just making the request: if we're truly
+  // offline it fails fast and the item stays queued for the next attempt,
+  // same as if the check had blocked it — but a wrong "offline" reading can
+  // never permanently wedge the queue.
+  const runSync = useCallback(async () => {
+    if (syncingRef.current) return;
 
-    const pending = queue.filter((item) => !item.synced);
+    // Failed items are excluded — the sync engine has already given up
+    // retrying them (a definitive 4xx rejection), so they're not "pending"
+    // anymore even though they're still unsynced.
+    const pending = queueRef.current.filter(
+      (item) => !item.synced && !item.failed,
+    );
     if (!pending.length) return;
 
     syncingRef.current = true;
 
-    const run = async () => {
-      let currentQueue = [...queue];
+    try {
       let shouldInvalidatePulse = false;
       const reportingElectionIds = new Set<string>();
       const collationReviewElectionIds = new Set<string>();
+      // IDs synced/failed during THIS pass. Never derive the next queue
+      // snapshot from a variable captured at the top of the function —
+      // queueRef.current is re-read fresh on every iteration below, so a
+      // concurrent enqueue() that lands mid-await (this loop awaits a real
+      // network call per item, which can take up to 3 minutes for a
+      // multipart upload) is folded in rather than clobbered.
+      const syncedIds = new Set<string>();
+      const failedErrors = new Map<string, string>();
+      const newlyFailed: { item: QueuedAction; error: string }[] = [];
 
       for (const item of pending) {
         const result = await syncQueuedAction(item);
 
         if (!result.ok) {
+          if (result.permanent) {
+            const message = result.error ?? "This couldn't be submitted.";
+            failedErrors.set(item.id, message);
+            newlyFailed.push({ item, error: message });
+
+            const next = queueRef.current.map((entry) =>
+              failedErrors.has(entry.id)
+                ? { ...entry, failed: true, lastError: failedErrors.get(entry.id) }
+                : entry,
+            );
+
+            queueRef.current = next;
+            setQueue(next);
+            await schedulePersist(next);
+          }
+
           continue;
         }
 
@@ -367,18 +484,34 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
           collationReviewElectionIds.add(result.invalidateCollationReviewElectionId);
         }
 
-        currentQueue = currentQueue.map((entry) =>
-          entry.id === item.id ? { ...entry, synced: true } : entry,
+        syncedIds.add(item.id);
+
+        const next = queueRef.current.map((entry) =>
+          syncedIds.has(entry.id) ? { ...entry, synced: true } : entry,
         );
 
-        setQueue(currentQueue);
-        await persistQueue(currentQueue);
+        queueRef.current = next;
+        setQueue(next);
+        await schedulePersist(next);
       }
 
-      const compacted = currentQueue.filter((item) => !item.synced);
+      // Failed items are kept (data + reason preserved for Digital Vault to
+      // show), only truly synced ones are dropped from the stored queue.
+      const compacted = queueRef.current.filter((item) => !item.synced);
 
+      queueRef.current = compacted;
       setQueue(compacted);
-      await persistQueue(compacted);
+      await schedulePersist(compacted);
+
+      // One toast per newly-failed item — turns an invisible perpetual
+      // "Pending Sync" into something the user actually sees and can act on
+      // (or relay back as a bug report) instead of staring at a stuck spinner.
+      newlyFailed.forEach(({ item, error }) => {
+        showToast({
+          type: "error",
+          message: describeFailedQueueItem(item.type, error),
+        });
+      });
 
       if (shouldInvalidatePulse) {
         void queryClient.invalidateQueries({
@@ -401,6 +534,13 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
           void queryClient.invalidateQueries({
             queryKey: reportingQueryKeys.electionCollation(electionId),
           });
+          // The submission just synced — cards showing "Submitted" derived
+          // this instantly from the local queue, but now that the queue
+          // entry is gone, this refetch is what keeps them showing
+          // "Submitted" going forward (server-confirmed, not just local).
+          void queryClient.invalidateQueries({
+            queryKey: reportingQueryKeys.mySubmission(electionId),
+          });
         });
       }
 
@@ -409,15 +549,46 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
           queryKey: collationReviewQueryKeys.feed(electionId),
         });
       });
-
+    } finally {
       syncingRef.current = false;
-    };
+    }
+  }, [queryClient, showToast]);
 
-    void run();
-  }, [isOnline, queue, queryClient]);
+  // Trigger 1: any queue mutation (new item enqueued, or a previous pass
+  // just marked something synced).
+  useEffect(() => {
+    void runSync();
+  }, [queue, runSync]);
+
+  // Trigger 2: connectivity coming back.
+  useEffect(() => {
+    if (isOnline) void runSync();
+  }, [isOnline, runSync]);
+
+  // Trigger 3: app returning to the foreground — the most common moment a
+  // user's connection has actually changed since they last looked.
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") void runSync();
+    });
+
+    return () => subscription.remove();
+  }, [runSync]);
+
+  // Trigger 4: the safety net. Retries on a fixed cadence regardless of
+  // what NetInfo or AppState think is happening, so a queue item can never
+  // sit untouched indefinitely.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      void runSync();
+    }, RETRY_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, [runSync]);
 
   const pendingCount = useMemo(() => {
-    return queue.filter((item) => !item.synced).length;
+    // Failed items are excluded — they're done retrying, not "pending".
+    return queue.filter((item) => !item.synced && !item.failed).length;
   }, [queue]);
 
   const value = useMemo(

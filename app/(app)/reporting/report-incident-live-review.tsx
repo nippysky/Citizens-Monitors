@@ -27,6 +27,7 @@ import {
   submitIncidentReport,
 } from "@/lib/api/reporting.api";
 import { deleteStagedMediaFiles } from "@/lib/offlineMedia";
+import { shouldQueueAfterError } from "@/lib/offlineSubmission";
 import {
   clearIncidentDraft,
   collectIncidentDraftMediaUris,
@@ -205,23 +206,39 @@ export default function ReportIncidentLiveReviewScreen() {
 
       setViewState("success");
     } catch (error) {
-      enqueue({
-        type: "submit-incident-report",
-        payload: queuePayload,
-      });
+      // Only genuine connectivity failures get queued for background sync.
+      // Anything else (a validation error, an auth failure, a real bug) is
+      // NOT something a retry will ever fix — silently queueing it would
+      // tell the user "saved, will sync" about a request that can never
+      // succeed. Surface those instead so the user can actually act on it.
+      if (shouldQueueAfterError(error)) {
+        enqueue({
+          type: "submit-incident-report",
+          payload: queuePayload,
+        });
 
-      // Clear the stored draft (like the offline path) but KEEP the staged
-      // files — the queued upload still needs them.
-      await clearIncidentDraft();
+        // Clear the stored draft (like the offline path) but KEEP the
+        // staged files — the queued upload still needs them.
+        await clearIncidentDraft();
 
-      showToast({
-        type: "success",
-        message:
-          "Live incident saved offline. It will sync automatically when connection is stable.",
-      });
+        showToast({
+          type: "success",
+          message:
+            "Live incident saved offline. It will sync automatically when connection is stable.",
+        });
 
-      setViewState("success");
-      console.log("Live incident queued:", error);
+        setViewState("success");
+      } else {
+        showToast({
+          type: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Couldn't submit this incident report. Please try again.",
+        });
+      }
+
+      console.log("Live incident submit failed:", error);
     } finally {
       setSubmitting(false);
     }

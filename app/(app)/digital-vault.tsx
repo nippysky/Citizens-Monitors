@@ -183,6 +183,9 @@ function buildPendingVaultSubmissions(
       if (!draft.electionId) continue;
 
       const createdAt = new Date(item.createdAt).toISOString();
+      const uploadLocation = draft.uploadLocation
+        ? { ...draft.uploadLocation, accuracy: draft.uploadLocation.accuracy ?? undefined }
+        : undefined;
 
       const partiesVotes = Array.isArray(draft.votesPerParty)
         ? draft.votesPerParty
@@ -207,6 +210,7 @@ function buildPendingVaultSubmissions(
         lga: draft.lga,
         ward: draft.ward,
         pollingUnit: draft.pollingUnitName,
+        uploadLocation,
         resultPicture: draft.signedResultImageUri
           ? { url: draft.signedResultImageUri }
           : undefined,
@@ -214,7 +218,13 @@ function buildPendingVaultSubmissions(
           ? { url: draft.resultAnnouncementVideoUri }
           : undefined,
         partiesVotes,
+        timeBegan: draft.votingStartTime,
+        accreditedVoters: Number(draft.accreditedVoters) || undefined,
+        rejectedPapers: Number(draft.rejectedVoters) || undefined,
+        spoiledBallotPapers: Number(draft.spoiledBallotPapers) || undefined,
+        usedBallotPapers: Number(draft.usedBallotPapers) || undefined,
         createdAt,
+        updatedAt: createdAt,
       };
 
       pendingItems.push({
@@ -222,6 +232,8 @@ function buildPendingVaultSubmissions(
         id: `${PENDING_ID_PREFIX}${item.id}`,
         createdAt,
         data,
+        failed: item.failed,
+        lastError: item.lastError,
       });
 
       continue;
@@ -232,6 +244,9 @@ function buildPendingVaultSubmissions(
       if (!draft.electionId) continue;
 
       const createdAt = new Date(item.createdAt).toISOString();
+      const uploadLocation = draft.uploadLocation
+        ? { ...draft.uploadLocation, accuracy: draft.uploadLocation.accuracy ?? undefined }
+        : undefined;
 
       const incidentVideoUris = [
         ...(draft.videoEvidenceUris ?? []),
@@ -252,13 +267,16 @@ function buildPendingVaultSubmissions(
         lga: draft.lga,
         ward: draft.ward,
         pollingUnit: draft.pollingUnitName,
+        uploadLocation,
         selectIncident: draft.incidentType,
         incidentNote: draft.description,
+        electionRating: draft.electionRating || undefined,
         incidentPictures: (draft.imageEvidenceUris ?? []).map((url) => ({
           url,
         })),
         incidentVideos: incidentVideoUris.map((url) => ({ url })),
         createdAt,
+        updatedAt: createdAt,
       };
 
       pendingItems.push({
@@ -266,6 +284,8 @@ function buildPendingVaultSubmissions(
         id: `${PENDING_ID_PREFIX}${item.id}`,
         createdAt,
         data,
+        failed: item.failed,
+        lastError: item.lastError,
       });
     }
   }
@@ -394,7 +414,12 @@ function SubmissionCard({
   onOpen: (item: ElectionVaultSubmission) => void;
   onEditResult: (result: ElectionVaultResult) => void;
 }) {
-  const pending = isPendingSubmission(item);
+  // A "failed" item is also a locally-queued one, but the sync engine has
+  // already given up retrying it (a definitive backend rejection) — it
+  // should never be shown as "Pending Sync" since it isn't going anywhere
+  // without the user doing something about it.
+  const failed = isPendingSubmission(item) && Boolean(item.failed);
+  const pending = isPendingSubmission(item) && !failed;
 
   if (isVaultResult(item)) {
     const result = item.data;
@@ -416,7 +441,16 @@ function SubmissionCard({
                 Result Report — EC8A
               </AppText>
 
-              {pending ? (
+              {failed ? (
+                <View style={styles.failedPill}>
+                  <Ionicons
+                    name="alert-circle-outline"
+                    size={12}
+                    color={Theme.colors.danger}
+                  />
+                  <AppText style={styles.failedPillText}>Sync Failed</AppText>
+                </View>
+              ) : pending ? (
                 <View style={styles.pendingPill}>
                   <Ionicons
                     name="cloud-upload-outline"
@@ -483,7 +517,18 @@ function SubmissionCard({
             </AppText>
           </View>
 
-          {pending ? (
+          {failed ? (
+            <View style={styles.failedFooterNote}>
+              <Ionicons
+                name="close-circle-outline"
+                size={13}
+                color={Theme.colors.danger}
+              />
+              <AppText style={styles.failedFooterNoteText} numberOfLines={1}>
+                {item.lastError || "Couldn't be submitted"}
+              </AppText>
+            </View>
+          ) : pending ? (
             <View style={styles.pendingFooterNote}>
               <Ionicons name="time-outline" size={13} color="#D97706" />
               <AppText style={styles.pendingFooterNoteText}>
@@ -524,7 +569,16 @@ function SubmissionCard({
               {incident.selectIncident || "Incident Report"}
             </AppText>
 
-            {pending ? (
+            {failed ? (
+              <View style={styles.failedPill}>
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={12}
+                  color={Theme.colors.danger}
+                />
+                <AppText style={styles.failedPillText}>Sync Failed</AppText>
+              </View>
+            ) : pending ? (
               <View style={styles.pendingPill}>
                 <Ionicons
                   name="cloud-upload-outline"
@@ -589,14 +643,27 @@ function SubmissionCard({
           </AppText>
         </View>
 
-        <View style={styles.openButton}>
-          <ElectionNotification width={18} height={18} />
-          <Ionicons
-            name="chevron-forward"
-            size={16}
-            color={Theme.colors.textMuted}
-          />
-        </View>
+        {failed ? (
+          <View style={styles.failedFooterNote}>
+            <Ionicons
+              name="close-circle-outline"
+              size={13}
+              color={Theme.colors.danger}
+            />
+            <AppText style={styles.failedFooterNoteText} numberOfLines={1}>
+              {item.lastError || "Couldn't be submitted"}
+            </AppText>
+          </View>
+        ) : (
+          <View style={styles.openButton}>
+            <ElectionNotification width={18} height={18} />
+            <Ionicons
+              name="chevron-forward"
+              size={16}
+              color={Theme.colors.textMuted}
+            />
+          </View>
+        )}
       </View>
     </Pressable>
   );
@@ -1051,6 +1118,37 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     color: "#D97706",
+    fontFamily: Theme.fonts.body.medium,
+  },
+  failedPill: {
+    minHeight: 26,
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    backgroundColor: "rgba(220,38,38,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(220,38,38,0.22)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  failedPillText: {
+    fontSize: 11,
+    lineHeight: 15,
+    color: Theme.colors.danger,
+    fontFamily: Theme.fonts.body.semibold,
+  },
+  failedFooterNote: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+  },
+  failedFooterNoteText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
+    color: Theme.colors.danger,
     fontFamily: Theme.fonts.body.medium,
   },
   electionName: {

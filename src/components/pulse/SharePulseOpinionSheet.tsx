@@ -31,6 +31,7 @@ import {
   usePulseViewerQuery,
 } from "@/hooks/api/usePulseQueries";
 import { useGenerateAnonymousUsernameMutation } from "@/hooks/api/useProfileMutations";
+import { shouldQueueAfterError } from "@/lib/offlineSubmission";
 import { Theme } from "@/theme";
 
 type Props = {
@@ -40,19 +41,6 @@ type Props = {
 function getFullName(firstName?: string, lastName?: string): string {
   const name = [firstName, lastName].filter(Boolean).join(" ").trim();
   return name || "Citizen";
-}
-
-function shouldQueueAfterError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-
-  const message = error.message.toLowerCase();
-
-  return (
-    message.includes("unable to reach") ||
-    message.includes("network") ||
-    message.includes("connection") ||
-    message.includes("timeout")
-  );
 }
 
 const SharePulseOpinionSheet = forwardRef<BottomSheetModal, Props>(

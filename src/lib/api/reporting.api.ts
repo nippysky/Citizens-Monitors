@@ -1,3 +1,5 @@
+import { File } from "expo-file-system";
+
 import { apiRequest } from "@/lib/api/http";
 import type { ElectionResultDraft, IncidentDraft, ReportingUploadLocation } from "@/lib/reporting";
 
@@ -164,17 +166,45 @@ function createNativeFile(uri: string, fallbackName: string): ReactNativeFile {
   };
 }
 
+/**
+ * Local `file://` URIs staged for an offline-queued submission can go stale
+ * (moved, deleted, or — before evidence storage was moved to Paths.document
+ * — purged by the OS's cache eviction). Uploading a URI that no longer
+ * exists fails the ENTIRE multipart request with a generic "Unable to reach
+ * the server" error, indistinguishable from a real connectivity problem —
+ * which is exactly what silently wedges a submission in "Pending Sync"
+ * forever even with a perfectly good connection. Non-local (remote) URIs are
+ * assumed valid; only `file://` URIs are checked.
+ */
+function localFileExists(uri: string): boolean {
+  if (!uri.startsWith("file://")) return true;
+
+  try {
+    return new File(uri).exists;
+  } catch {
+    return false;
+  }
+}
+
 function appendFile(
   formData: FormData,
   key: string,
   uri: string | null | undefined,
   fallbackName: string
 ): void {
-  if (!uri?.trim()) return;
+  const trimmed = uri?.trim();
+  if (!trimmed) return;
+
+  if (!localFileExists(trimmed)) {
+    // Skip just this file rather than letting a missing photo/video block
+    // the rest of an otherwise perfectly submittable report forever.
+    console.log(`Skipping missing evidence file for "${key}":`, trimmed);
+    return;
+  }
 
   formData.append(
     key,
-    createNativeFile(uri, fallbackName) as unknown as Blob
+    createNativeFile(trimmed, fallbackName) as unknown as Blob
   );
 }
 

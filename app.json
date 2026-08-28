@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "citizenmonitors",
     "runtimeVersion": {
-      "policy": "appVersion"
+      "policy": "fingerprint"
     },
     "userInterfaceStyle": "light",
     "ios": {

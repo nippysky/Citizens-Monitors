@@ -32,6 +32,7 @@ import {
   mapDraftToIncidentReportPayload,
   submitIncidentReport,
 } from "@/lib/api/reporting.api";
+import { shouldQueueAfterError } from "@/lib/offlineSubmission";
 import {
   abandonIncidentDraft,
   buildCommencementContext,
@@ -835,21 +836,36 @@ export default function ReportIncidentScreen() {
         message: "Incident report submitted successfully.",
       });
     } catch (error) {
-      enqueue({
-        type: "submit-incident-report",
-        payload: queuePayload,
-      });
+      // Only genuine connectivity failures get queued for background sync.
+      // Anything else (a validation error, an auth failure, a real bug) is
+      // NOT something a retry will ever fix — silently queueing it would
+      // tell the user "saved, will sync" about a request that can never
+      // succeed. Surface those instead so the user can actually act on it.
+      if (shouldQueueAfterError(error)) {
+        enqueue({
+          type: "submit-incident-report",
+          payload: queuePayload,
+        });
 
-      await clearIncidentDraft();
-      setViewState("success");
+        await clearIncidentDraft();
+        setViewState("success");
 
-      showToast({
-        type: "success",
-        message:
-          "Incident saved offline. It will sync automatically when connection is stable.",
-      });
+        showToast({
+          type: "success",
+          message:
+            "Incident saved offline. It will sync automatically when connection is stable.",
+        });
+      } else {
+        showToast({
+          type: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Couldn't submit this incident report. Please try again.",
+        });
+      }
 
-      console.log("Incident report queued:", error);
+      console.log("Incident report submit failed:", error);
     } finally {
       setLoading(false);
     }

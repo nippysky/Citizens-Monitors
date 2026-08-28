@@ -14,6 +14,8 @@ export const reportingQueryKeys = {
   collation: ["collation"] as const,
   electionCollation: (electionId: string) =>
     ["collation", "detail", electionId] as const,
+  mySubmission: (electionId: string) =>
+    ["election-my-submission", electionId] as const,
 };
 
 export function useSubmitElectionResultMutation() {
@@ -28,6 +30,9 @@ export function useSubmitElectionResultMutation() {
       void queryClient.invalidateQueries({ queryKey: reportingQueryKeys.collation });
       void queryClient.invalidateQueries({
         queryKey: reportingQueryKeys.electionCollation(payload.electionId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: reportingQueryKeys.mySubmission(payload.electionId),
       });
     },
   });
@@ -45,6 +50,9 @@ export function useSubmitIncidentReportMutation() {
       void queryClient.invalidateQueries({ queryKey: reportingQueryKeys.collation });
       void queryClient.invalidateQueries({
         queryKey: reportingQueryKeys.electionCollation(payload.electionId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: reportingQueryKeys.mySubmission(payload.electionId),
       });
     },
   });

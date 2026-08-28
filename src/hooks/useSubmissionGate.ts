@@ -11,7 +11,10 @@ import { router } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useAppToast } from "@/hooks/useAppToast";
+import { useOfflineSync } from "@/context/OfflineSyncContext";
+import { reportingQueryKeys } from "@/hooks/api/useReportingMutations";
 import { Paths } from "@/constants/paths";
+import { hasPendingLocalSubmission } from "@/lib/offlineSubmission";
 import {
   getMySubmission,
   hasExistingSubmission,
@@ -20,6 +23,7 @@ import {
 export function useSubmissionGate() {
   const queryClient = useQueryClient();
   const { showToast } = useAppToast();
+  const { queue } = useOfflineSync();
   const checkingRef = useRef(false);
 
   /**
@@ -40,12 +44,22 @@ export function useSubmissionGate() {
         return;
       }
 
+      if (hasPendingLocalSubmission(queue, id)) {
+        showToast({
+          type: "success",
+          message:
+            "You've already submitted a report for this election — here it is in your Digital Vault.",
+        });
+        router.push(Paths.appDigitalVault as never);
+        return;
+      }
+
       if (checkingRef.current) return;
       checkingRef.current = true;
 
       try {
         const response = await queryClient.fetchQuery({
-          queryKey: ["election-my-submission", id],
+          queryKey: reportingQueryKeys.mySubmission(id),
           queryFn: () => getMySubmission(id),
           staleTime: 10_000,
         });
@@ -67,7 +81,7 @@ export function useSubmissionGate() {
 
       onEligible();
     },
-    [queryClient, showToast]
+    [queue, queryClient, showToast]
   );
 
   return { checkAndProceed };

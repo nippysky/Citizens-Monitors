@@ -1,10 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
+import { Paths } from "@/constants/paths";
 import type { ElectionItem, ElectionType } from "@/data/elections";
 import { getElectionTypeLabel } from "@/data/elections";
+import { useHasSubmission } from "@/hooks/useHasSubmission";
 import HouseOfRepsElection from "@/svgs/app/HouseOfRepsElection";
 import PresidentialElection from "@/svgs/app/PresidentialElection";
 import SenatorElection from "@/svgs/app/SenatorElection";
@@ -78,6 +81,16 @@ export default function ElectionCard({
 
   // Reporting is only meaningful while an election is actually running.
   const showSubmit = isLive && canSubmit && Boolean(onSubmitPress);
+
+  const electionId = item.activeElectionId || item.id;
+  const { hasSubmission } = useHasSubmission(electionId, {
+    enabled: showSubmit,
+  });
+
+  const handleViewVault = (event: { stopPropagation: () => void }) => {
+    event.stopPropagation();
+    router.push(Paths.appDigitalVault as never);
+  };
 
   const handleCardPress = () => {
     if (isLive) {
@@ -193,7 +206,31 @@ export default function ElectionCard({
           </View>
         ) : null}
 
-        {showSubmit ? (
+        {showSubmit && hasSubmission ? (
+          <Pressable
+            onPress={handleViewVault}
+            style={({ pressed }) => [
+              styles.submittedBtn,
+              pressed && styles.submitBtnPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={`Already submitted a report for ${item.title} — view in Digital Vault`}
+          >
+            <Ionicons
+              name="checkmark-circle"
+              size={17}
+              color={Theme.colors.success}
+            />
+            <AppText style={styles.submittedBtnText}>
+              Submitted · View in Vault
+            </AppText>
+            <Ionicons
+              name="chevron-forward"
+              size={15}
+              color={Theme.colors.success}
+            />
+          </Pressable>
+        ) : showSubmit ? (
           <Pressable
             onPress={(event) => {
               // Don't let the card's own press handler also fire.
@@ -393,6 +430,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 19,
     color: "#FFFFFF",
+    fontFamily: Theme.fonts.body.semibold,
+  },
+
+  submittedBtn: {
+    marginTop: 8,
+    minHeight: 42,
+    borderRadius: 12,
+    backgroundColor: "rgba(16,185,129,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(16,185,129,0.28)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    paddingHorizontal: 12,
+  },
+
+  submittedBtnText: {
+    fontSize: 13.5,
+    lineHeight: 18,
+    color: Theme.colors.success,
     fontFamily: Theme.fonts.body.semibold,
   },
 });

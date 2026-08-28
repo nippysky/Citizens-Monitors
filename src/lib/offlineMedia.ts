@@ -12,7 +12,18 @@ export type StagedMedia = {
   size: number | null;
 };
 
-const REPORTING_MEDIA_DIR = new Directory(Paths.cache, "citizen-monitors", "reporting-media");
+// IMPORTANT: this must be Paths.document, NOT Paths.cache. Staged evidence
+// backs offline-queued submissions that can sit unsynced for hours (no
+// connectivity, app backgrounded, etc.) — Paths.cache is explicitly
+// documented as "a place to store files that can be deleted by the system
+// when the device runs low on storage." A cache-purged file permanently
+// breaks that queued submission: every retry re-reads a URI that no longer
+// exists, fails with a generic "Unable to reach the server" error that looks
+// identical to a real connectivity problem, and the item is stuck in
+// "Pending Sync" forever with no way to recover. Paths.document is "safe
+// from being deleted by the system" — the correct home for anything an
+// offline queue depends on.
+const REPORTING_MEDIA_DIR = new Directory(Paths.document, "citizen-monitors", "reporting-media");
 
 function ensureReportingMediaDir() {
   try {

@@ -8,6 +8,7 @@ import CommencementBottomSheet from "@/components/reporting/CommencementBottomSh
 import AppText from "@/components/ui/AppText";
 import { Paths } from "@/constants/paths";
 import { useMyProfileQuery } from "@/hooks/api/useMyProfileQuery";
+import { useHasSubmission } from "@/hooks/useHasSubmission";
 import { useSubmissionGate } from "@/hooks/useSubmissionGate";
 import {
   asProfileLike,
@@ -117,10 +118,20 @@ export default function LiveElectionCard({ item, width, viewerRole }: Props) {
   };
 
   const { checkAndProceed } = useSubmissionGate();
+  const { hasSubmission } = useHasSubmission(activeElectionId, {
+    enabled: submitEnabled,
+  });
 
   const handleSubmitResult = () => {
     if (!submitEnabled) {
       handleOpenCollation();
+      return;
+    }
+
+    // Already know the answer — skip straight to the Vault rather than
+    // re-running the async gate check.
+    if (hasSubmission) {
+      router.push(Paths.appDigitalVault as never);
       return;
     }
 
@@ -265,21 +276,49 @@ export default function LiveElectionCard({ item, width, viewerRole }: Props) {
           style={({ pressed }) => [
             styles.submitButton,
             !submitEnabled && styles.submitButtonDisabled,
+            submitEnabled && hasSubmission && styles.submitButtonDone,
             pressed && styles.pressed,
           ]}
+          accessibilityRole="button"
+          accessibilityLabel={
+            submitEnabled && hasSubmission
+              ? "Submitted — view in Digital Vault"
+              : submitEnabled
+                ? "Submit report"
+                : "View collation"
+          }
         >
           <Ionicons
-            name={submitEnabled ? "document-text-outline" : "eye-outline"}
+            name={
+              !submitEnabled
+                ? "eye-outline"
+                : hasSubmission
+                  ? "checkmark-circle"
+                  : "document-text-outline"
+            }
             size={18}
-            color={Theme.colors.primary}
+            color={
+              submitEnabled && hasSubmission
+                ? Theme.colors.success
+                : Theme.colors.primary
+            }
           />
-          <AppText style={styles.submitButtonText}>
-            {submitEnabled ? "Submit" : "View"}
+          <AppText
+            style={[
+              styles.submitButtonText,
+              submitEnabled && hasSubmission && styles.submitButtonDoneText,
+            ]}
+          >
+            {!submitEnabled ? "View" : hasSubmission ? "Submitted" : "Submit"}
           </AppText>
           <Ionicons
             name="chevron-forward"
             size={17}
-            color={Theme.colors.primary}
+            color={
+              submitEnabled && hasSubmission
+                ? Theme.colors.success
+                : Theme.colors.primary
+            }
           />
         </Pressable>
       </View>
@@ -463,11 +502,20 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
 
+  submitButtonDone: {
+    backgroundColor: "rgba(16,185,129,0.08)",
+    borderColor: Theme.colors.success,
+  },
+
   submitButtonText: {
     fontSize: 15,
     lineHeight: 20,
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.body.semibold,
+  },
+
+  submitButtonDoneText: {
+    color: Theme.colors.success,
   },
 
   pressed: {
