@@ -1,7 +1,5 @@
-// ─── src/components/me/MeProfileCard.tsx ──────────────────────────────────────
 // Red solid border for "Complete your profile" (observer pending)
 // Green dashed border for "Observer Registration" (volunteer)
-// ─────────────────────────────────────────────────────────────────────────────
 
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, View } from "react-native";

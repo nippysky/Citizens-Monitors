@@ -489,7 +489,6 @@ export default function ElectionsScreen() {
         />
       </View>
 
-
       <ElectionFiltersBottomSheet
         sheetRef={filterSheetRef}
         value={filters}

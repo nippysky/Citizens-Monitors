@@ -1,4 +1,4 @@
-// ─── app/(app)/press/[id].tsx ────────────────────────────────────────────────
+// app/(app)/press/[id].tsx
 // URL alias for Universal/App Links. The website publishes press articles at
 // https://www.citizenmonitors.com/press/<slug>, so when such a link opens the
 // app, expo-router lands here — redirect to the real press-coverage screen.

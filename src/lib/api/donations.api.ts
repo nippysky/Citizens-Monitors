@@ -1,13 +1,9 @@
-// ─── src/lib/api/donations.api.ts ────────────────────────────────────────────
-//
 // Donations, backed by Stripe Checkout (a hosted payment page) — confirmed
 // and implemented by the backend team:
-//
-//   POST /donations/checkout          → creates a donation + Stripe Checkout
-//                                        Session, returns a hosted page URL.
-//   GET  /donations/session/:sessionId → the source of truth for whether that
-//                                        session was actually paid.
-//
+// POST /donations/checkout → creates a donation + Stripe Checkout
+// Session, returns a hosted page URL.
+// GET /donations/session/:sessionId → the source of truth for whether that
+// session was actually paid.
 // The app never touches a Stripe key of any kind. It asks the backend for a
 // checkout link, opens it in the system browser (Safari View Controller on
 // iOS, Chrome Custom Tabs on Android — not an embedded WebView), and once

@@ -1,4 +1,3 @@
-// ─── src/components/collation/DiscussionCommentsBottomSheet.tsx ───────────
 // Comments for a Collation discussion post — real backend-backed (mirrors
 // src/components/collation/CommentsBottomSheet.tsx, which is Pulse-specific;
 // this is the Collation-discussion equivalent so neither feature risks

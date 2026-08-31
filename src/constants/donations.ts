@@ -1,5 +1,3 @@
-// ─── src/constants/donations.ts ──────────────────────────────────────────────
-
 /** Preset donation amounts in NGN (major units, e.g. 1000 = ₦1,000). */
 export const DONATION_PRESET_AMOUNTS = [1000, 2500, 5000, 10000, 25000] as const;
 

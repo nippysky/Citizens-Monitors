@@ -1,16 +1,12 @@
-// ─── src/components/auth/SessionLockScreen.tsx ───────────────────────────────
-//
 // Shown when a returning user's session has expired but their credentials are
 // vaulted behind device security. One tap (or the auto-prompt) restores the
 // session — no email, no password.
-//
 // Design notes
-// ────────────
 // - Auto-prompts once on mount, like Revolut / Monzo / banking apps.
 // - Names the exact unlock method the device offers (Face ID / Touch ID /
-//   Fingerprint / PIN) so the ask is never ambiguous.
+// Fingerprint / PIN) so the ask is never ambiguous.
 // - Separates "you cancelled" from "we couldn't reach the server" — a network
-//   failure must not look like a rejected fingerprint.
+// failure must not look like a rejected fingerprint.
 // - Always offers a password escape hatch.
 
 import { Ionicons } from "@expo/vector-icons";

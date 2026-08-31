@@ -1,6 +1,4 @@
-// ─── src/lib/auth/jwt.ts ─────────────────────────────────────────────────────
 // Minimal, dependency-free JWT inspection.
-//
 // We only ever READ the unverified payload to learn when a token expires —
 // signature verification stays server-side. This lets the app know a stored
 // session is dead BEFORE rendering the app shell, instead of discovering it

@@ -1,4 +1,3 @@
-// ─── src/components/pulse/PulsePostButton.tsx ────────────────────────────────
 import { Entypo } from "@expo/vector-icons";
 
 import FloatingActionButton from "@/components/ui/FloatingActionButton";

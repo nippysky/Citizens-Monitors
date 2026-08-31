@@ -1,5 +1,3 @@
-// ─── src/components/me/MeHeader.tsx ───────────────────────────────────────────
-
 import { Image, StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";

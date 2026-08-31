@@ -1,4 +1,3 @@
-// ─── src/components/collation/SentimentAnalysisSection.tsx ────────────────────
 import { useEffect, useRef, useState } from "react";
 import {
   Modal,
@@ -65,7 +64,6 @@ type MonitoringCardItem = {
     | "active-observers"
     | "avg-submission-time";
 };
-
 
 function isPresidentialElection(collation: CollationItem) {
   const source = collation as CollationItem & {
@@ -433,10 +431,9 @@ export default function SentimentAnalysisSection({ collation }: Props) {
   );
 }
 
-/* ───── SVG SWAP SLOTS ─────
-   Replace each return block with your real SVG component once you confirm
-   the exact component names/paths. Everything else can stay unchanged.
-*/
+// SVG SWAP SLOTS
+// Replace each return block with your real SVG component once you confirm
+// the exact component names/paths. Everything else can stay unchanged.
 
 function IncidentTypeIcon({
   iconKey,
@@ -538,7 +535,7 @@ function MonitoringMetricIcon({
   }
 }
 
-/* ───── Smart scope control ───── */
+// Smart scope control
 
 function ScopeFilterControl({
   value,
@@ -560,7 +557,7 @@ function ScopeFilterControl({
   return <ScopeSelect value={value} onChange={onChange} />;
 }
 
-/* ───── Independent dropdown select ───── */
+// Independent dropdown select
 
 function ScopeSelect({
   value,
@@ -655,7 +652,7 @@ function ScopeSelect({
   );
 }
 
-/* ───── Donut chart ───── */
+// Donut chart
 
 function AnimatedDonut({
   score,

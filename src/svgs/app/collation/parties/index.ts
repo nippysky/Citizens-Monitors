@@ -1,6 +1,4 @@
-// ─── src/svgs/parties/index.tsx ───────────────────────────────────────────────
 // Compact party badge SVGs matching Figma. Import as <APC />, <LP />, etc.
-// ─────────────────────────────────────────────────────────────────────────────
 
 import React from "react";
 import APC from "../APC";
@@ -10,8 +8,6 @@ import PDP from "../PDP";
 import OtherParties from "../OtherParties";
 
 type BadgeProps = { width?: number; height?: number };
-
-
 
 // Lookup helper — use in components that receive `logoKey` from data.
 const partyLogos: Record<string, React.FC<BadgeProps>> = {

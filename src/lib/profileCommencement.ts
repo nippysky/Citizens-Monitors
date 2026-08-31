@@ -1,4 +1,3 @@
-// ─── src/lib/profileCommencement.ts ──────────────────────────────────────────
 // Single source of truth for the user's polling-unit details in reporting
 // flows. Every user has exactly ONE polling unit regardless of election, so
 // every entry point (LiveNotice banner, Elections FAB, etc.) must build the

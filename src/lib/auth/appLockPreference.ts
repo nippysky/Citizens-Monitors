@@ -1,13 +1,10 @@
-// ─── src/lib/auth/appLockPreference.ts ───────────────────────────────────────
 // User preference for the biometric App Lock.
-//
 // Separation of concerns (important):
-//   • STAYING SIGNED IN  → refresh token (sessionRefresh.ts). Automatic, and
-//                          nothing to do with biometrics.
-//   • APP LOCK           → this preference. Purely a privacy choice: should
-//                          the app demand Face ID / fingerprint / PIN before
-//                          revealing content?
-//
+// • STAYING SIGNED IN → refresh token (sessionRefresh.ts). Automatic, and
+// nothing to do with biometrics.
+// • APP LOCK → this preference. Purely a privacy choice: should
+// the app demand Face ID / fingerprint / PIN before
+// revealing content?
 // Default is OFF, so a user who never touches settings simply opens the app
 // and is straight in — exactly the requested behaviour.
 

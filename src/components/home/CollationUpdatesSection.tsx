@@ -12,8 +12,6 @@ type Props = {
   items: ElectionUpdateItem[];
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 /**
  * Tries to detect the pattern "ISO_DATE - ISO_DATE" in the info string and
  * formats it as a human-readable date range. Falls back to returning the
@@ -76,8 +74,6 @@ function getTagConfig(tag: ElectionUpdateItem["tag"]): {
     iconName: "checkmark-done-outline",
   };
 }
-
-// ─── UpdateCard ───────────────────────────────────────────────────────────────
 
 function UpdateCard({ item }: { item: ElectionUpdateItem }) {
   const cfg = getTagConfig(item.tag);
@@ -159,8 +155,6 @@ function UpdateCard({ item }: { item: ElectionUpdateItem }) {
   );
 }
 
-// ─── Section ──────────────────────────────────────────────────────────────────
-
 export default function CollationUpdatesSection({ items }: Props) {
   if (!items.length) return null;
 
@@ -187,8 +181,6 @@ export default function CollationUpdatesSection({ items }: Props) {
     </View>
   );
 }
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   wrap: {

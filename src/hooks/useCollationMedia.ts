@@ -1,6 +1,4 @@
-// ─── src/hooks/useCollationMedia.ts ──────────────────────────────────────────
 // Camera, gallery, location — now aligned with centralized permission helpers.
-// ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useCallback } from "react";
 import * as ImagePicker from "expo-image-picker";

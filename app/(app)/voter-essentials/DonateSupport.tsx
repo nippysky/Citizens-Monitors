@@ -1,7 +1,5 @@
-// ─── app/(app)/voter-essentials/DonateSupport.tsx ────────────────────────────
-//
+// app/(app)/voter-essentials/DonateSupport.tsx
 // Donate & Support — native amount picker + Stripe Checkout.
-//
 // The donor picks/enters a naira amount entirely in native UI. Tapping
 // Donate asks our backend for a Stripe Checkout Session and opens it in the
 // system browser sheet (Safari View Controller / Chrome Custom Tabs) — a

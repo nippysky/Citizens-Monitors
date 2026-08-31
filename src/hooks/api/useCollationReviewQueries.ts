@@ -1,4 +1,3 @@
-// ─── src/hooks/api/useCollationReviewQueries.ts ────────────────────────────
 // Collation "Review Reports" — Community Verification (agree/flag).
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";

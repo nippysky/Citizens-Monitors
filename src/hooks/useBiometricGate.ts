@@ -1,15 +1,10 @@
-// ─── src/hooks/useBiometricGate.ts ───────────────────────────────────────────
-//
 // Biometric App Lock.
-//
 // This is PURELY a privacy gate, and it is OFF unless the user turns it on in
 // Settings → App Lock. It has nothing to do with staying signed in: the
 // refresh token handles that silently (see lib/auth/sessionRefresh.ts).
-//
-//   App Lock OFF (default) → open the app, you're straight in.
-//   App Lock ON            → Face ID / fingerprint / PIN before content shows,
-//                            on cold start and after a real absence.
-//
+// App Lock OFF (default) → open the app, you're straight in.
+// App Lock ON → Face ID / fingerprint / PIN before content shows,
+// on cold start and after a real absence.
 // A short grace period means hopping to another app to copy a code doesn't
 // force a re-unlock.
 
@@ -58,7 +53,6 @@ export function useBiometricGate(isAuthenticated: boolean) {
   const backgroundedAtRef = useRef<number | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
-  // ── Initial gate ──────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
 
@@ -108,7 +102,7 @@ export function useBiometricGate(isAuthenticated: boolean) {
     };
   }, [isAuthenticated]);
 
-  // ── Re-lock after a genuine absence ───────────────────────────────────────
+  // ── Re-lock after a genuine absence
   useEffect(() => {
     if (!isAuthenticated) return;
 

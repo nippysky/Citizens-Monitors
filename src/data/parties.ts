@@ -1,9 +1,7 @@
-// ─── src/data/parties.ts ──────────────────────────────────────────────────────
 // Single source of truth for Nigerian political parties used by the election
 // report submission flow. To switch to production data:
-//   → replace PARTY_CATALOG below with the live INEC-registered list
-//   → keep the shape ({ code, fullName }) and helpers intact
-// ─────────────────────────────────────────────────────────────────────────────
+// → replace PARTY_CATALOG below with the live INEC-registered list
+// → keep the shape ({ code, fullName }) and helpers intact
 
 export type PartyInfo = {
   code: string; // e.g. "APC" — canonical short identifier used in the draft
@@ -40,8 +38,6 @@ export const PARTY_CATALOG: PartyInfo[] = [
   { code: "ZLP", fullName: "Zenith Labour Party" },
 ];
 
-/* ─── Helpers ─────────────────────────────────────────────────────────────── */
-
 export function getPartyInfo(code: string): PartyInfo | undefined {
   if (!code) return undefined;
   const normalized = code.trim().toUpperCase();
@@ -69,7 +65,7 @@ export function isGenericOthersEntry(code: string): boolean {
   );
 }
 
-/* ─── Picker label formatting ─────────────────────────────────────────────── */
+// Picker label formatting
 
 // The SelectPickerSheet renders each option as a single string — so we pack
 // both code and full name into the label, and parse the code back out on

@@ -400,8 +400,7 @@ export async function submitElectionResult(
   );
 }
 
-// ─── "Have I already submitted for this election?" ────────────────────────
-//
+// "Have I already submitted for this election?"
 // A user may submit EITHER an official result OR an incident report per
 // election, never both. Before opening the commencement sheet, callers hit
 // this endpoint; a non-empty `results`/`incidentReports` array means the

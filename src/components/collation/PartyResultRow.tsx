@@ -1,4 +1,3 @@
-// ─── src/components/collation/PartyResultRow.tsx ─────────────────────────────
 import { StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";

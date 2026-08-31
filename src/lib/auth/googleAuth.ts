@@ -20,9 +20,7 @@ import {
   statusCodes,
 } from "@react-native-google-signin/google-signin";
 
-// ---------------------------------------------------------------------------
 // Result types
-// ---------------------------------------------------------------------------
 
 export type GoogleSignInSuccess = {
   kind: "success";
@@ -54,9 +52,7 @@ export type GoogleSignInResult =
   | GoogleSignInCancelled
   | GoogleSignInError;
 
-// ---------------------------------------------------------------------------
 // Lazy configuration
-// ---------------------------------------------------------------------------
 
 let isConfigured = false;
 
@@ -133,9 +129,7 @@ function ensureConfigured(): boolean {
   return true;
 }
 
-// ---------------------------------------------------------------------------
 // Sign-in
-// ---------------------------------------------------------------------------
 
 /**
  * Trigger the native Google Sign-In flow.
@@ -262,9 +256,7 @@ export async function signInWithGoogle(): Promise<GoogleSignInResult> {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Cleanup
-// ---------------------------------------------------------------------------
 
 /**
  * Best-effort sign-out from Google. Safe to call even if user was never

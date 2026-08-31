@@ -1,4 +1,3 @@
-// ─── src/components/collation/FlagReasonBottomSheet.tsx ───────────────────
 // Lightweight reason-capture sheet for flagging a Review Reports submission.
 // The real /collation/user-action "flag" endpoint only requires a
 // `flagReason` string alongside the target id — no location/media, unlike

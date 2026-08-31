@@ -1,4 +1,3 @@
-// ─── src/components/collation/GeoBreakdownSection.tsx ─────────────────────────
 import { StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";

@@ -1,5 +1,3 @@
-// ─── src/hooks/useSubmissionGate.ts ───────────────────────────────────────
-//
 // A user may submit EITHER an official result OR an incident report per
 // election, never both. Every entry point that opens the commencement sheet
 // (Elections tab, the home LiveElectionCard, the global LiveNotice banner)

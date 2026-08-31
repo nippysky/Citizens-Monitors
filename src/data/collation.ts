@@ -166,7 +166,6 @@ export type CollationElectionSource = {
   status: string;
 };
 
-
 const WAT_TIME_ZONE = "Africa/Lagos";
 
 const PARTY_COLORS: Record<string, string> = {

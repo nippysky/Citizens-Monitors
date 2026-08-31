@@ -72,7 +72,7 @@ export function TourProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  /* ── Auto-start the tour once after onboarding ───────────────────────────── */
+  // ── Auto-start the tour once after onboarding
 
   useEffect(() => {
     let cancelled = false;
@@ -114,8 +114,6 @@ export function TourProvider({ children }: { children: ReactNode }) {
 
   const isLastStep = currentStepIndex >= TOUR_STEPS.length - 1;
 
-  /* ── Target registry ─────────────────────────────────────────────────────── */
-
   const registerTarget = useCallback((id: string, rect: TourTargetRect) => {
     setTargets((prev) => {
       const existing = prev[id];
@@ -143,7 +141,7 @@ export function TourProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  /* ── Cross-tab navigation ────────────────────────────────────────────────── */
+  // ── Cross-tab navigation
 
   useEffect(() => {
     if (!isActive || !currentStep) return;
@@ -163,8 +161,6 @@ export function TourProvider({ children }: { children: ReactNode }) {
       router.navigate(currentStep.route as never);
     }
   }, [isActive, currentStep, pathname]);
-
-  /* ── Actions ─────────────────────────────────────────────────────────────── */
 
   const startTour = useCallback(() => {
     clearAutoStartTimer();

@@ -7,19 +7,13 @@ import {
   FaqResponse,
 } from "@/lib/api/faq.api";
 
-// ─── Query keys ───────────────────────────────────────────────────────────────
-
 export const faqQueryKeys = {
   general: ["faq", "general"] as const,
   observer: ["faq", "observer"] as const,
 };
 
-// ─── Cache config ─────────────────────────────────────────────────────────────
-
 const FAQ_STALE_TIME = 5 * 60 * 1000;  // 5 min
 const FAQ_GC_TIME   = 60 * 60 * 1000; // 1 hr
-
-// ─── Hooks ────────────────────────────────────────────────────────────────────
 
 /**
  * Fetches GET /faq which returns { title, subtitle, categories: FaqCategory[] }.

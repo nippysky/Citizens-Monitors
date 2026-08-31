@@ -1,4 +1,3 @@
-// ─── src/lib/notifications.ts ────────────────────────────────────────────────
 // Pure notification utilities. No React, no app state, no backend calls.
 // Backend sync and React lifecycle live in NotificationsGate.
 

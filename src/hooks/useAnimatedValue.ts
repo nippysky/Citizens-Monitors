@@ -1,4 +1,3 @@
-// ─── src/hooks/useAnimatedValue.ts ───────────────────────────────────────────
 import { useState } from "react";
 import { Animated } from "react-native";
 

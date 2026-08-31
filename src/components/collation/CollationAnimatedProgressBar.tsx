@@ -1,6 +1,4 @@
-// ─── src/components/collation/CollationAnimatedProgressBar.tsx ────────────────
 // Fixed: no longer reads shared value during render.
-// ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect } from "react";
 import { StyleSheet, View } from "react-native";

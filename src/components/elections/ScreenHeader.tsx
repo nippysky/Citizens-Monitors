@@ -1,7 +1,5 @@
-// ─── src/components/app/ScreenHeader.tsx ─────────────────────────────────────
 // Generic top-bar used across Elections, Collation, and future screens.
 // Drop-in replacement for the old ElectionsHeader — just rename imports.
-// ─────────────────────────────────────────────────────────────────────────────
 
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, View } from "react-native";

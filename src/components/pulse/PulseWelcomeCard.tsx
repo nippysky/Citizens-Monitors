@@ -1,7 +1,5 @@
-// ─── src/components/pulse/PulseWelcomeCard.tsx ────────────────────────────────
 // Default intro article pinned at the top of the Pulse feed for every user.
 // Written by Ade Haastrup (Co-founder, Citizen Monitors).
-// ─────────────────────────────────────────────────────────────────────────────
 
 import { useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";

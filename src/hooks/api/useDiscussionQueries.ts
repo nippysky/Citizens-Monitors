@@ -1,4 +1,3 @@
-// ─── src/hooks/api/useDiscussionQueries.ts ────────────────────────────────
 // Collation "Election Discussion" — mirrors usePulseQueries.ts's structure,
 // scoped per-election instead of globally.
 

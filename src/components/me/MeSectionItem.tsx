@@ -1,4 +1,3 @@
-// ─── src/components/me/MeSectionItem.tsx ──────────────────────────────────────
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, View } from "react-native";
 

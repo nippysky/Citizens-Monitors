@@ -1,6 +1,4 @@
-// ─── src/components/feedback/AppScreenLoader.tsx ──────────────────────────────
 // Branded loader: Citizen icon + smooth multi-color bar animation.
-// ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect } from "react";
 import { Animated, Easing, Modal, StyleSheet, View } from "react-native";

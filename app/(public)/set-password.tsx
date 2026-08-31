@@ -64,9 +64,7 @@ export default function SetPasswordScreen() {
 
   const onSubmit = handleSubmit(async (values) => {
     try {
-      // -----------------------------------------------------------------------
       // Reset-password flow (OTP-based) — UNCHANGED
-      // -----------------------------------------------------------------------
       if (flow === "reset-password") {
         if (!email || !otp) {
           showToast({
@@ -93,13 +91,10 @@ export default function SetPasswordScreen() {
         return;
       }
 
-      // -----------------------------------------------------------------------
       // Sign-up flow (Google OAuth password setup)
-      //
       // User is already authenticated — apiRequest auto-attaches the Bearer
       // token from SecureStore. After success, send them to the onboarding
       // wizard with their email so it can drive submitDetails/selectRole/etc.
-      // -----------------------------------------------------------------------
       const response = await setPasswordMutation.mutateAsync({
         password: values.password,
         confirmPassword: values.confirmPassword,

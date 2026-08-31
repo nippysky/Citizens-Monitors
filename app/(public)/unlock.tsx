@@ -1,4 +1,4 @@
-// ─── app/(public)/unlock.tsx ─────────────────────────────────────────────────
+// app/(public)/unlock.tsx
 // Returning-user unlock route. Reached when a stored session has expired but
 // credentials are vaulted behind device security, so the user can get back in
 // with Face ID / fingerprint / PIN instead of retyping a password.

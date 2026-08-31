@@ -394,8 +394,6 @@ export async function submitObserverRole(
 //
 // ============================================================================
 
-// ----- Types -----------------------------------------------------------------
-
 export type GoogleAuthPayload = {
   /** The ID token returned by Google's native SDK to the mobile app.
    *  Backend verifies its `aud` claim against our Web OAuth Client ID and
@@ -428,8 +426,6 @@ export type GoogleAuthResponse = {
    */
   nextStep?: string;
 };
-
-// ----- Request ---------------------------------------------------------------
 
 /**
  * Google ID tokens issued by the mobile SDK have a 1-hour lifetime.
@@ -485,8 +481,6 @@ export async function googleAuth(
 // for an already-authenticated user choosing a password for the first time.
 // ============================================================================
 
-// ----- Types -----------------------------------------------------------------
-
 export type SetPasswordPayload = {
   password: string;
   confirmPassword: string;
@@ -500,8 +494,6 @@ export type SetPasswordResponse = {
    *  user to the onboarding wizard after a successful set-password. */
   nextStep?: string;
 };
-
-// ----- Request ---------------------------------------------------------------
 
 export async function setPassword(
   payload: SetPasswordPayload

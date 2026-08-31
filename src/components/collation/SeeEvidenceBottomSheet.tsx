@@ -1,4 +1,3 @@
-// ─── src/components/collation/SeeEvidenceBottomSheet.tsx ──────────────────────
 import {
   BottomSheetBackdrop,
   BottomSheetModal,
@@ -234,7 +233,7 @@ const SeeEvidenceBottomSheet = forwardRef<BottomSheetModal, Props>(
 
 export default SeeEvidenceBottomSheet;
 
-/* ─── helpers ─── */
+// helpers
 
 function MetaCell({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string }) {
   return (
@@ -284,7 +283,7 @@ function VmRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-/* ─── styles ─── */
+// styles
 
 const styles = StyleSheet.create({
   bg: { backgroundColor: Theme.colors.background, borderTopLeftRadius: 28, borderTopRightRadius: 28 },

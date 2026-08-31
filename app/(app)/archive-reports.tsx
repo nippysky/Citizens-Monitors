@@ -1,4 +1,4 @@
-// ─── src/app/(app)/archive-reports.tsx ────────────────────────────────────────
+// src/app/(app)/archive-reports.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useMemo, useState } from "react";

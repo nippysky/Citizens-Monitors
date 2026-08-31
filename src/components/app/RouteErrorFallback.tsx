@@ -1,11 +1,7 @@
-// ─── src/components/app/RouteErrorFallback.tsx ───────────────────────────────
-//
 // Shared fallback UI for Expo Router's per-route ErrorBoundary export.
-//
 // Without this, an uncaught render error anywhere in the app produces the
 // exact bug the client reported on Collation: the screen goes completely
 // blank/black, because nothing renders and there's nothing to fall back to.
-//
 // Expo Router wraps any route file that exports `ErrorBoundary` in a real
 // React error boundary: https://docs.expo.dev/router/error-handling/
 // This component is that fallback, reused everywhere so every screen fails

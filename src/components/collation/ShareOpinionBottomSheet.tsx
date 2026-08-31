@@ -1,4 +1,3 @@
-// ─── src/components/collation/ShareOpinionBottomSheet.tsx ─────────────────────
 import {
   BottomSheetBackdrop,
   BottomSheetModal,

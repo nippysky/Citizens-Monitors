@@ -1,7 +1,5 @@
-// ─── src/components/collation/CollationDiscussionTab.tsx ───────────────────────
 // Functional discussion tab — real backend-backed (create/list posts, like,
 // comment). (Named singular to match the existing import in election/[id].tsx.)
-// ─────────────────────────────────────────────────────────────────────────────
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
 import { usePathname } from "expo-router";

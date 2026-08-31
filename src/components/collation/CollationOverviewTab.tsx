@@ -1,4 +1,3 @@
-// ─── src/components/collation/CollationOverviewTab.tsx ────────────────────────
 import { useCallback, useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import {

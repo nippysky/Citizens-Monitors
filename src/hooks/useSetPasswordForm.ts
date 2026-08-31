@@ -2,7 +2,6 @@ import { SetPasswordFormValues, setPasswordSchema } from "@/lib/auth/schema/set-
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 
-
 export function useSetPasswordForm() {
   return useForm<SetPasswordFormValues>({
     resolver: zodResolver(setPasswordSchema),

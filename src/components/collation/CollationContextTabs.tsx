@@ -1,4 +1,3 @@
-// ─── src/components/collation/CollationContextTabs.tsx ────────────────────────
 import { useEffect } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import Animated, {

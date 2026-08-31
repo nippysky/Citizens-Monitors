@@ -42,9 +42,7 @@ export default function SignInScreen() {
     isGoogleSigningIn ||
     googleMutation.isPending;
 
-  // ---------------------------------------------------------------------------
   // Email + password sign-in (unchanged)
-  // ---------------------------------------------------------------------------
 
   const onSubmit = handleSubmit(async (values) => {
     const email = values.email.trim().toLowerCase();
@@ -85,13 +83,10 @@ export default function SignInScreen() {
     }
   });
 
-  // ---------------------------------------------------------------------------
   // Google sign-in
-  //
   // Same endpoint as sign-up. Backend tells us via `requiresPasswordSetup`
   // whether to send the user to the set-password screen (first-time Google
   // user) or straight to app home (returning user).
-  // ---------------------------------------------------------------------------
 
   const handleGoogleContinue = async (): Promise<void> => {
     setIsGoogleSigningIn(true);

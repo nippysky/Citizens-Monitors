@@ -1,5 +1,3 @@
-// ─── src/constants/paths.ts ───────────────────────────────────────────────────
-
 export const Paths = {
   welcome: "/(public)/welcome",
   signIn: "/(public)/sign-in",

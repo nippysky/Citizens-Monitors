@@ -1,17 +1,11 @@
-// ─── src/components/auth/BiometricLockScreen.tsx ─────────────────────────────
-//
 // Full-screen lock overlay shown when the biometric gate is active.
-//
 // Platform notes
-// ──────────────
-// iOS:   Face ID / Touch ID — system dialog appears above the app.
+// iOS: Face ID / Touch ID — system dialog appears above the app.
 // Android: Fingerprint / Face — rendered as a bottom-sheet dialog by the OS.
-//          We delay the auto-prompt by one frame on Android so the overlay
-//          is fully laid out before the native dialog appears, preventing a
-//          race condition where the dialog is dismissed immediately on some
-//          devices.
-//
-// ─────────────────────────────────────────────────────────────────────────────
+// We delay the auto-prompt by one frame on Android so the overlay
+// is fully laid out before the native dialog appears, preventing a
+// race condition where the dialog is dismissed immediately on some
+// devices.
 import * as LocalAuthentication from "expo-local-authentication";
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
@@ -28,8 +22,6 @@ import AppText from "@/components/ui/AppText";
 import FullLogo from "@/svgs/app/FullLogo";
 import { Theme } from "@/theme";
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
 type BiometricKind = "face" | "fingerprint" | "none";
 
 type Props = {
@@ -38,8 +30,6 @@ type Props = {
   /** Called when the user taps "Use password instead". */
   onUsePassword: () => void;
 };
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function useBiometricKind(): BiometricKind {
   const [kind, setKind] = useState<BiometricKind>("none");
@@ -82,8 +72,6 @@ function getKindLabel(kind: BiometricKind): string {
   return Platform.OS === "ios" ? "Passcode" : "PIN";
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
-
 export default function BiometricLockScreen({ onAuthenticate, onUsePassword }: Props) {
   const kind = useBiometricKind();
   const [busy, setBusy] = useState(false);
@@ -100,7 +88,7 @@ export default function BiometricLockScreen({ onAuthenticate, onUsePassword }: P
         : "keypad-outline";
   const label = getKindLabel(kind);
 
-  // ── Trigger biometric auth ──────────────────────────────────────────────────
+  // ── Trigger biometric auth
   const triggerAuth = async () => {
     if (busy) return;
     setBusy(true);
@@ -115,7 +103,7 @@ export default function BiometricLockScreen({ onAuthenticate, onUsePassword }: P
     }
   };
 
-  // ── Auto-prompt on mount ────────────────────────────────────────────────────
+  // ── Auto-prompt on mount
   // Android: delay by one rAF to ensure the native view is fully settled
   // before the fingerprint dialog opens (avoids an immediate dismiss bug on
   // some Android devices).
@@ -136,7 +124,6 @@ export default function BiometricLockScreen({ onAuthenticate, onUsePassword }: P
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
       <StatusBar
@@ -208,8 +195,6 @@ export default function BiometricLockScreen({ onAuthenticate, onUsePassword }: P
     </SafeAreaView>
   );
 }
-
-// ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   safe: {

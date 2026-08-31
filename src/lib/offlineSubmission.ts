@@ -1,10 +1,7 @@
-// ─── src/lib/offlineSubmission.ts ─────────────────────────────────────────
-//
 // Shared "is there a local, not-yet-synced submission for this election"
 // check. A report sitting in the offline sync queue counts as "already
 // submitted" just as much as one the server has confirmed — the user
 // genuinely submitted it, the backend just hasn't heard about it yet.
-//
 // Used by useSubmissionGate (to bypass the server round-trip entirely when
 // we already know the answer locally) and by useHasSubmission (so election
 // cards can render a "Submitted" state instantly, offline-first).

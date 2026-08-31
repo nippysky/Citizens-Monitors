@@ -1,5 +1,3 @@
-// ─── src/lib/api/discussion.api.ts ────────────────────────────────────────
-//
 // Collation "Election Discussion" — real backend endpoints, confirmed by the
 // backend engineer with sample request/response bodies. Mirrors the existing
 // Pulse post/comment API shape (src/lib/api/pulse.api.ts) — same author

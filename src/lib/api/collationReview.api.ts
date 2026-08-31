@@ -1,9 +1,6 @@
-// ─── src/lib/api/collationReview.api.ts ────────────────────────────────────
-//
 // Collation "Review Reports" — Community Verification (agree/flag on
 // individual result & incident submissions). Real backend endpoints
 // confirmed by the backend engineer with sample request/response bodies.
-//
 // IMPORTANT ASSUMPTION (flagged to product/backend — confirm before relying
 // on this in production): the backend only gave us a POST for
 // `/elections/:id/collation/user-action` (perform agree/flag, returns the

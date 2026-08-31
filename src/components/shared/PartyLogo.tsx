@@ -1,5 +1,3 @@
-// ─── src/components/shared/PartyLogo.tsx ──────────────────────────────────
-//
 // Renders a party's logo, preferring the real image URL the API provides
 // (ElectionVaultElection.politicalParties[].logo) over the local static SVG
 // set. Falls back to the local SVG (keyed by party code) when there's no

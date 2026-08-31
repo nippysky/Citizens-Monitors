@@ -5,7 +5,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 
-
 type Props = {
   children: ReactNode;
 };

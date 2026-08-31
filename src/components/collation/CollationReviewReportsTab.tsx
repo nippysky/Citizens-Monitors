@@ -1,8 +1,6 @@
-// ─── src/components/collation/CollationReviewReportsTab.tsx ───────────────────
 // Community Verification — real backend-backed (GET/POST
 // /elections/:id/collation/user-action). Replaces the old local-mock
 // implementation entirely.
-// ─────────────────────────────────────────────────────────────────────────────
 
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
@@ -620,7 +618,7 @@ export default function CollationReviewReportsTab({
   );
 }
 
-/* ───── Action Row ───── */
+// Action Row
 
 function ActionRow({
   myAction,

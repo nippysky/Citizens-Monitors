@@ -1,7 +1,5 @@
 import { apiRequest } from "@/lib/api/http";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 export type FaqItem = {
   id: string;
   question: string;
@@ -23,8 +21,6 @@ export type FaqResponse = {
   subtitle: string;
   categories: FaqCategory[];
 };
-
-// ─── API functions ────────────────────────────────────────────────────────────
 
 /**
  * GET /faq

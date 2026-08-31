@@ -1,11 +1,9 @@
-// ─── src/data/pulse.ts ────────────────────────────────────────────────────────
 // Pulse feed data: discussions, live elections, review reports.
 // Swap dummy data for API responses — all consumers use these types.
-// ─────────────────────────────────────────────────────────────────────────────
 
 import { ReviewReportItem } from "@/data/collation";
 
-/* ───── Types ───── */
+// Types
 
 export type PulseDiscussionPost = {
   id: string;
@@ -37,6 +35,6 @@ export type PulseReviewReport = ReviewReportItem & {
   electionLabel: string;
 };
 
-/* ───── Dummy data ───── */
+// Dummy data
 
 /** Party results for the review collation result card */

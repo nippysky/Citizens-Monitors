@@ -42,9 +42,7 @@ export default function SignUpScreen() {
     isGoogleSigningIn ||
     googleMutation.isPending;
 
-  // ---------------------------------------------------------------------------
   // Email + password sign-up (unchanged)
-  // ---------------------------------------------------------------------------
 
   const onSubmit = handleSubmit(async (values) => {
     const email = values.email.trim().toLowerCase();
@@ -76,17 +74,13 @@ export default function SignUpScreen() {
     }
   });
 
-  // ---------------------------------------------------------------------------
   // Google sign-up / sign-in
-  //
   // One endpoint handles both. Backend tells us which via `requiresPasswordSetup`:
-  //   - true  → first-time Google user → set-password screen
-  //   - false → returning user         → app home
-  //
+  // - true  → first-time Google user → set-password screen
+  // - false → returning user         → app home
   // In both cases we call signIn() first so the auth token is persisted in
   // SecureStore. The set-password screen can then make authenticated requests
   // using the token from AuthContext.
-  // ---------------------------------------------------------------------------
 
   const handleGoogleContinue = async (): Promise<void> => {
     setIsGoogleSigningIn(true);

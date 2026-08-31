@@ -1,5 +1,3 @@
-// ─── src/data/me.ts ──────────────────────────────────────────────────────────
-
 import React, { ReactNode } from "react";
 
 import ArchiveReport from "@/svgs/app/profile/ArchiveReport";
@@ -16,9 +14,7 @@ import Security from "@/svgs/app/profile/Security";
 import Support from "@/svgs/app/profile/Support";
 import SignOut from "@/svgs/app/SignOut";
 
-/* ────────────────────────────────────────────────────────────────────────────
- * Core Me/Profile Types
- * -------------------------------------------------------------------------- */
+// Core Me/Profile Types
 
 export type UserType = "observer" | "volunteer" | "public-viewer";
 
@@ -74,9 +70,7 @@ export type MeBannerConfig = {
     | "none";
 };
 
-/* ────────────────────────────────────────────────────────────────────────────
- * Helpers
- * -------------------------------------------------------------------------- */
+// Helpers
 
 function icon(node: React.ComponentType<{ width?: number; height?: number }>) {
   return React.createElement(node, { width: 42, height: 42 });
@@ -96,9 +90,7 @@ function getDigitalVaultSubtitle(user: MeUser): string {
   return `${user.reportsCount} reports across ${user.electionsCount} elections`;
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
- * Banner Logic
- * -------------------------------------------------------------------------- */
+// Banner Logic
 
 export function getMeBanner(user: MeUser): MeBannerConfig {
   if (user.userType === "observer" && user.verificationStatus === "pending") {
@@ -136,9 +128,7 @@ export function getMeBanner(user: MeUser): MeBannerConfig {
   };
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
- * Account Menu Logic
- * -------------------------------------------------------------------------- */
+// Account Menu Logic
 
 export function getMeAccountItems(user: MeUser): MeMenuItem[] {
   const items: MeMenuItem[] = [
@@ -265,10 +255,8 @@ export function getMeOtherItems(): MeMenuItem[] {
   ];
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
- * Notification Settings
- * Matches backend /profile/notifications response exactly.
- * -------------------------------------------------------------------------- */
+// Notification Settings
+// Matches backend /profile/notifications response exactly.
 
 export type NotificationSettingsState = {
   pollingUnitActivity: boolean;
@@ -292,10 +280,8 @@ export const defaultNotificationSettings: NotificationSettingsState = {
   newsletter: true,
 };
 
-/* ────────────────────────────────────────────────────────────────────────────
- * Citizen Academy
- * Static educational content for now. This is not user/profile dummy state.
- * -------------------------------------------------------------------------- */
+// Citizen Academy
+// Static educational content for now. This is not user/profile dummy state.
 
 export type AcademyItem = {
   id: string;
@@ -349,11 +335,9 @@ export const citizenAcademyItems: AcademyItem[] = [
   },
 ];
 
-/* ────────────────────────────────────────────────────────────────────────────
- * Archive Reports
- * Kept as an empty compatibility export to avoid old screens crashing.
- * Real vault/report data should now come from production APIs.
- * -------------------------------------------------------------------------- */
+// Archive Reports
+// Kept as an empty compatibility export to avoid old screens crashing.
+// Real vault/report data should now come from production APIs.
 
 export type ArchiveReportItem = {
   id: string;

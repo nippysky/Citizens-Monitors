@@ -1,4 +1,3 @@
-// ─── src/constants/tabRoutes.ts ──────────────────────────────────────────────
 // expo-router's usePathname() returns pathnames WITHOUT group segments —
 // e.g. "/home", never "/(app)/(tabs)/home" — so any check like
 // pathname.includes("/(tabs)/") silently never matches. Always use this

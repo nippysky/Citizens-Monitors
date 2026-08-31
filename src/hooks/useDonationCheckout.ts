@@ -1,11 +1,9 @@
-// ─── src/hooks/useDonationCheckout.ts ────────────────────────────────────────
-//
 // Drives the Stripe Checkout donation flow end to end:
-//   1. Ask the backend to create a donation + Checkout Session.
-//   2. Open the hosted checkout page in the system browser sheet.
-//   3. Once the donor closes it (paid, cancelled, or just backed out), ask
-//      the backend what actually happened — the browser closing tells us
-//      nothing on its own, only the session status is authoritative.
+// 1. Ask the backend to create a donation + Checkout Session.
+// 2. Open the hosted checkout page in the system browser sheet.
+// 3. Once the donor closes it (paid, cancelled, or just backed out), ask
+// the backend what actually happened — the browser closing tells us
+// nothing on its own, only the session status is authoritative.
 
 import * as WebBrowser from "expo-web-browser";
 import { useCallback, useState } from "react";

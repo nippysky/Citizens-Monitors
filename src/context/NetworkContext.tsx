@@ -14,8 +14,6 @@ import React, {
 import { ToastData, ToastType } from "@/types/home";
 import { registerToast } from "@/lib/toast";
 
-// ─── Cache helpers ───────────────────────────────────────────────────────────
-
 const CACHE_PREFIX = "@cm_cache_";
 
 export async function cacheSet(key: string, data: unknown): Promise<void> {
@@ -59,7 +57,7 @@ export async function cacheClear(): Promise<void> {
   }
 }
 
-// ─── Toast priority helpers ──────────────────────────────────────────────────
+// Toast priority helpers
 
 const TOAST_PRIORITY: Record<ToastType, number> = {
   "network-offline": 6,
@@ -101,8 +99,6 @@ function sortToastsByPriority(items: ToastData[]): ToastData[] {
   });
 }
 
-// ─── Context ─────────────────────────────────────────────────────────────────
-
 type NetworkContextValue = {
   isConnected: boolean;
   isInternetReachable: boolean;
@@ -124,8 +120,6 @@ const NetworkContext = createContext<NetworkContextValue>({
 export function useNetwork() {
   return useContext(NetworkContext);
 }
-
-// ─── Provider ────────────────────────────────────────────────────────────────
 
 type Props = { children: ReactNode };
 

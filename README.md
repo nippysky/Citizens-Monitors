@@ -1,50 +1,94 @@
-# Welcome to your Expo app 👋
+# Citizen Monitors
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Citizen Monitors is a React Native (Expo) mobile app for election observation and civic engagement in Nigeria. It lets registered observers submit election results and incident reports from polling units, tracks those submissions through an offline-first sync queue, and gives every user live collation results, community discussion, and voter education content.
 
-## Get started
+## Core features
 
-1. Install dependencies
+- **Auth** — email/password sign-up with verification, Google sign-in, password reset, and an app-level lock (device PIN/pattern/password or biometrics).
+- **Election reporting** — submit election results and incident reports per polling unit, with photo/video evidence. Reports queue locally and sync automatically once the device is online, so observers can report from areas with poor connectivity.
+- **Digital Vault** — a personal record of every report a user has submitted, with live sync status (synced, pending, or failed).
+- **Collation** — live, per-election result collation with a geographic breakdown, sentiment analysis, and a community review feed where submitted reports can be confirmed, disputed, or flagged.
+- **Pulse** — a discussion feed for sharing opinions and commenting on election-related topics.
+- **Voter essentials** — registration guide, polling unit locator, election day procedure, a citizen academy, press coverage, and news/insights.
+- **Notifications, help & support, and donations.**
+
+## Tech stack
+
+- [Expo](https://expo.dev) SDK 57 (React Native 0.86, React 19) with [Expo Router](https://docs.expo.dev/router/introduction/) for file-based navigation
+- [TanStack Query](https://tanstack.com/query) for server state and caching
+- TypeScript, ESLint (`eslint-config-expo`)
+- `@gorhom/bottom-sheet`, `react-native-reanimated`, `react-native-gesture-handler`
+- `expo-secure-store` for token/credential storage, `expo-local-authentication` for biometric app lock
+- EAS Build and EAS Update for native builds and over-the-air updates
+
+## Project structure
+
+```
+app/                    Screens and routes (Expo Router, file-based)
+  (public)/              Sign in, sign up, onboarding, password flows
+  (app)/(tabs)/           Home, Elections, Collation, Pulse, Me
+  (app)/reporting/        Election result & incident report submission flows
+  (app)/voter-essentials/ Registration guide, polling unit locator, academy, etc.
+src/
+  components/            UI components, grouped by feature area
+  context/                Auth, offline sync, network, elections, tour context
+  hooks/api/               React Query hooks per API domain
+  lib/api/                 API request functions and response mapping
+  data/                    Static reference data (parties, FAQ content, etc.)
+  theme/                   Colors, spacing, typography
+```
+
+## Getting started
+
+1. Install dependencies:
 
    ```bash
    npm install
    ```
 
-2. Start the app
+2. Create a `.env.local` file in the project root with the following variables:
+
+   ```
+   EXPO_PUBLIC_API_BASE_URL=
+   EXPO_PUBLIC_INHOUSE_ACCESS_TOKEN=
+   EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=
+   EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=
+   ```
+
+   Ask a project maintainer for the actual values. `.env.local` is git-ignored and should never be committed.
+
+3. Start the dev server:
 
    ```bash
    npx expo start
    ```
 
-In the output, you'll find options to open the app in a
+   This app uses native modules (Google Sign-In, biometrics, camera, etc.), so it needs a development build rather than Expo Go — run `npx expo run:ios` or `npx expo run:android` for a first build, then `npx expo start` for subsequent development.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Building and releasing
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+Native builds and store submissions go through [EAS](https://docs.expo.dev/eas/):
 
 ```bash
-npm run reset-project
+eas build --platform ios --profile production
+eas build --platform android --profile production
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Build profiles (`development`, `preview`, `production`) are defined in `eas.json`.
 
-## Learn more
+Over-the-air JS updates are published per environment:
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+npm run update:development
+npm run update:preview
+npm run update:production
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Each of these requires the matching environment variables to be configured on EAS (`eas env:list --environment <name>`), separate from local `.env.local`.
 
-## Join the community
+## Linting and type-checking
 
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```bash
+npm run lint
+npx tsc --noEmit
+```

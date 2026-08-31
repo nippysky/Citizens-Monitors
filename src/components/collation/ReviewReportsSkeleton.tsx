@@ -1,4 +1,3 @@
-// ─── src/components/collation/ReviewReportsSkeleton.tsx ───────────────────
 // Loading placeholder for the Review Reports tab — mirrors the real card
 // shapes (result card with party rows, incident row with thread line) so
 // the transition into real content doesn't jump.

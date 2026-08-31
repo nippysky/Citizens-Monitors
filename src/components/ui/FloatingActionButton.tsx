@@ -1,4 +1,3 @@
-// ─── src/components/ui/FloatingActionButton.tsx ──────────────────────────────
 // Shared floating action button for tab screens (Pulse "Post", Elections
 // "Submit Result", …). Expanded = icon + label pill; collapses to a round
 // icon-only button while the user scrolls, with a smooth width/radius

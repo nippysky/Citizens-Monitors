@@ -1,4 +1,3 @@
-// ─── src/components/pulse/PulseDiscussionCard.tsx ─────────────────────────────
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";

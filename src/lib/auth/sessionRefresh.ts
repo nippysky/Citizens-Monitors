@@ -1,16 +1,12 @@
-// ─── src/lib/auth/sessionRefresh.ts ──────────────────────────────────────────
 // Single source of truth for renewing the access token.
-//
 // HOW THE BACKEND'S TOKENS WORK
-// - access token  (`token`)        — short-lived, 1 hour. Sent as the Bearer
-//                                    header on every request.
+// - access token (`token`) — short-lived, 1 hour. Sent as the Bearer
+// header on every request.
 // - refresh token (`refreshToken`) — long-lived. Its ONLY job is to mint a
-//                                    new access token via POST /auth/refresh.
-//
+// new access token via POST /auth/refresh.
 // So "staying logged in" is not about keeping the access token alive; it's
 // about holding a valid refresh token and quietly swapping it for a new
 // access token whenever the old one lapses. The user never notices.
-//
 // SINGLE-FLIGHT
 // A cold start can fire several requests at once, each hitting a 401. Without
 // coordination they'd all POST /auth/refresh simultaneously — and because the

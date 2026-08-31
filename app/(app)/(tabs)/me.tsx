@@ -502,7 +502,7 @@ export default function MeScreen() {
   const securitySheetRef = useRef<BottomSheetModal>(null);
   const appLockSheetRef = useRef<BottomSheetModal>(null);
 
-  // ── App Lock (biometric) preference — available to every role ────────────
+  // ── App Lock (biometric) preference — available to every role
   const [appLockEnabled, setAppLockEnabledState] = useState(false);
   const [appLockSupported, setAppLockSupported] = useState(false);
   const [appLockMethod, setAppLockMethod] = useState("device passcode");

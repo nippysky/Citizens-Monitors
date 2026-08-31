@@ -233,17 +233,15 @@ export async function clearLiveVideoUri() {
   await AsyncStorage.removeItem(LIVE_VIDEO_KEY);
 }
 
-/* ── Draft abandonment ────────────────────────────────────────────────────────
- * Drafts are kept while a flow is merely INTERRUPTED (phone call, app killed,
- * camera detour) — losing half-entered election evidence in the field is
- * expensive. But when the user deliberately LEAVES a reporting screen, the
- * draft AND its staged media files are wiped so nothing stale greets them on
- * re-entry and evidence files don't bloat storage.
- *
- * Both helpers are storage-driven and idempotent: after a successful submit
- * or offline enqueue the stored draft is already cleared, so calling these on
- * unmount is a safe no-op (and queued uploads keep their staged files).
- */
+// ── Draft abandonment
+// Drafts are kept while a flow is merely INTERRUPTED (phone call, app killed,
+// camera detour) — losing half-entered election evidence in the field is
+// expensive. But when the user deliberately LEAVES a reporting screen, the
+// draft AND its staged media files are wiped so nothing stale greets them on
+// re-entry and evidence files don't bloat storage.
+// Both helpers are storage-driven and idempotent: after a successful submit
+// or offline enqueue the stored draft is already cleared, so calling these on
+// unmount is a safe no-op (and queued uploads keep their staged files).
 
 export function collectResultDraftMediaUris(
   draft: ElectionResultDraft

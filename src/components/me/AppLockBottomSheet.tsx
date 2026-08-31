@@ -1,4 +1,3 @@
-// ─── src/components/me/AppLockBottomSheet.tsx ────────────────────────────────
 // Settings → App Lock. Available to every role (observer, volunteer,
 // public viewer) since it's a device privacy feature, not a permission.
 

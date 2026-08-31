@@ -459,7 +459,6 @@ function normalizePartyList(draft: ElectionResultDraft): ElectionResultDraft {
   };
 }
 
-
 export default function SubmitElectionReportScreen() {
   const params = useLocalSearchParams<{
     electionId?: string;
@@ -1905,7 +1904,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
-  // ── Sentiment step styles ──────────────────────────────────────────────────
+  // ── Sentiment step styles
   sentimentContent: {
     paddingHorizontal: 18,
     paddingTop: 8,

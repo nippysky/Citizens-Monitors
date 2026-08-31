@@ -4,7 +4,6 @@ import * as Location from "expo-location";
 import { Linking } from "react-native";
 import { showGlobalToast } from "./toast";
 
-
 type PermissionStatus = "granted" | "denied" | "blocked";
 
 type PermissionResponseLike = {
@@ -12,9 +11,7 @@ type PermissionResponseLike = {
   canAskAgain?: boolean;
 };
 
-// ─────────────────────────────────────────────────────────────
 // CORE
-// ─────────────────────────────────────────────────────────────
 
 function resolveStatus(res: PermissionResponseLike): PermissionStatus {
   if (res.granted) return "granted";
@@ -44,9 +41,7 @@ function showBlockedToast(title: string, message: string) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────
 // MAIN FLOW
-// ─────────────────────────────────────────────────────────────
 
 async function handlePermissionFlow(
   getCurrent: () => Promise<PermissionResponseLike>,
@@ -60,10 +55,10 @@ async function handlePermissionFlow(
   const current = await getCurrent();
   const currentStatus = resolveStatus(current);
 
-  // ✅ granted
+  // already granted
   if (currentStatus === "granted") return true;
 
-  // 🚫 blocked
+  // already blocked
   if (currentStatus === "blocked") {
     showBlockedToast(
       config.title,
@@ -73,7 +68,7 @@ async function handlePermissionFlow(
     return false;
   }
 
-  // 🔁 request
+  // not yet determined, ask for it
   const response = await request();
   const newStatus = resolveStatus(response);
 
@@ -88,14 +83,12 @@ async function handlePermissionFlow(
     return false;
   }
 
-  // ❌ denied
+  // denied
   showDeniedToast(config.title, config.message);
   return false;
 }
 
-// ─────────────────────────────────────────────────────────────
 // CAMERA
-// ─────────────────────────────────────────────────────────────
 
 export async function ensureCameraPermission(): Promise<boolean> {
   return handlePermissionFlow(
@@ -109,9 +102,7 @@ export async function ensureCameraPermission(): Promise<boolean> {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
 // GALLERY
-// ─────────────────────────────────────────────────────────────
 
 export async function ensureMediaLibraryPermission(): Promise<boolean> {
   return handlePermissionFlow(
@@ -125,9 +116,7 @@ export async function ensureMediaLibraryPermission(): Promise<boolean> {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
 // LOCATION
-// ─────────────────────────────────────────────────────────────
 
 export async function ensureLocationPermission(): Promise<boolean> {
   return handlePermissionFlow(
@@ -141,9 +130,7 @@ export async function ensureLocationPermission(): Promise<boolean> {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
 // COMBINED HELPERS
-// ─────────────────────────────────────────────────────────────
 
 export async function ensureCameraAndGallery(): Promise<boolean> {
   const camera = await ensureCameraPermission();
@@ -164,9 +151,7 @@ export async function ensureAllCorePermissions(): Promise<boolean> {
   return location;
 }
 
-// ─────────────────────────────────────────────────────────────
 // HANDLE SETTINGS ACTION (hook for toast click)
-// ─────────────────────────────────────────────────────────────
 
 export function handlePermissionAction(route?: string) {
   if (route === "__open_settings__") {

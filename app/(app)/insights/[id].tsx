@@ -1,4 +1,4 @@
-// ─── app/(app)/insights/[id].tsx ─────────────────────────────────────────────
+// app/(app)/insights/[id].tsx
 // URL alias for Universal/App Links. The website publishes news articles at
 // https://www.citizenmonitors.com/insights/<slug>, so when such a link opens
 // the app, expo-router lands here — redirect to the real news detail screen.

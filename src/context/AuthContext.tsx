@@ -271,8 +271,6 @@ export function AuthProvider({ children }: Props) {
     lockSessionRef.current = lockSession;
   }, [lockSession]);
 
-
-
   const startOnboarding = useCallback(
     async (
       user: AuthUser,

@@ -1,10 +1,8 @@
-// ─── src/components/app/NotificationsGate.tsx ───────────────────────────────
 // Side-effect-only component that owns the entire push notification lifecycle:
-//   - Acquires the Expo push token on mount
-//   - Re-acquires when push token truly rotates
-//   - Syncs token to backend after user is authenticated
-//   - Handles foreground notifications, taps, and cold-start tap routing
-//
+// - Acquires the Expo push token on mount
+// - Re-acquires when push token truly rotates
+// - Syncs token to backend after user is authenticated
+// - Handles foreground notifications, taps, and cold-start tap routing
 // Must be rendered INSIDE AuthProvider so it can react to auth state.
 
 import { Alert } from "react-native";
@@ -28,7 +26,6 @@ import {
   registerForPushNotificationsAsync,
 } from "@/lib/notifications";
 
-// ─── DEV-ONLY toggles ────────────────────────────────────────────────────────
 // Both are gated by __DEV__, so neither affects production builds.
 
 const DEV_SHOW_TOKEN_ALERT = false;
@@ -37,8 +34,6 @@ const DEV_LOG_FOREGROUND_NOTIFICATIONS = false;
 // Keeps the boot token log once per JS runtime, even with React StrictMode or
 // quick remounts during development.
 let devLoggedExpoToken: string | null = null;
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function serializeNativePushToken(token: unknown): string | null {
   if (!token || typeof token !== "object") return null;
@@ -244,7 +239,7 @@ function isArticleNotification(data: AppNotificationData | null): boolean {
   );
 }
 
-// ─── Notification tap routing ────────────────────────────────────────────────
+// Notification tap routing
 
 function handleNotificationRoute(data: AppNotificationData | null): void {
   if (!data) return;
@@ -304,7 +299,7 @@ function handleNotificationRoute(data: AppNotificationData | null): void {
   router.push("/(app)/notifications" as never);
 }
 
-// ─── Backend sync helper ─────────────────────────────────────────────────────
+// Backend sync helper
 
 async function syncTokenToBackend(token: string): Promise<boolean> {
   try {
@@ -343,8 +338,6 @@ async function syncTokenToBackend(token: string): Promise<boolean> {
     return false;
   }
 }
-
-// ─── Component ───────────────────────────────────────────────────────────────
 
 export default function NotificationsGate(): null {
   const { isAuthenticated, isOnboardingComplete, token: authToken } = useAuth();
@@ -406,7 +399,7 @@ export default function NotificationsGate(): null {
       });
   }, []);
 
-  // ─── Effect 1: bootstrap + listeners ──────────────────────────────────────
+  // Effect 1: bootstrap + listeners
 
   useEffect(() => {
     let mounted = true;
@@ -534,7 +527,7 @@ export default function NotificationsGate(): null {
     };
   }, [syncCurrentTokenIfNeeded]);
 
-  // ─── Effect 2: sync when auth becomes ready ────────────────────────────────
+  // Effect 2: sync when auth becomes ready
 
   useEffect(() => {
     syncCurrentTokenIfNeeded();

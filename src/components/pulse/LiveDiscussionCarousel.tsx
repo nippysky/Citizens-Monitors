@@ -1,4 +1,3 @@
-// ─── src/components/pulse/LiveDiscussionCarousel.tsx ──────────────────────────
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -53,9 +52,7 @@ const SECTION_HPAD = 16;
 
 const DOT_COLOR = Theme.colors.primary;
 
-/* ------------------------------------------------------------------ */
 /* Helpers                                                            */
-/* ------------------------------------------------------------------ */
 
 /**
  * Returns an ELEMENT rather than a component type. Binding a component to a
@@ -99,9 +96,7 @@ function getDiscussionCountText(item: PulseLiveElection): string {
   return "Live collation discussion";
 }
 
-/* ------------------------------------------------------------------ */
 /* Pulsing LIVE indicator                                             */
-/* ------------------------------------------------------------------ */
 
 function PulsingDot() {
   const opacity = useSharedValue(1);
@@ -122,9 +117,7 @@ function PulsingDot() {
   return <Animated.View style={[styles.liveDot, animStyle]} />;
 }
 
-/* ------------------------------------------------------------------ */
 /* Pagination dot — driven by scrollX                                 */
-/* ------------------------------------------------------------------ */
 
 function PageDot({
   index,
@@ -164,9 +157,7 @@ function PageDot({
   return <Animated.View style={[styles.dot, animatedStyle]} />;
 }
 
-/* ------------------------------------------------------------------ */
 /* Card — scroll-driven scale + opacity                               */
-/* ------------------------------------------------------------------ */
 
 function DiscussionCard({
   item,
@@ -278,9 +269,7 @@ function DiscussionCard({
   );
 }
 
-/* ------------------------------------------------------------------ */
 /* Carousel                                                           */
-/* ------------------------------------------------------------------ */
 
 export default function LiveDiscussionCarousel({
   items,
@@ -380,9 +369,7 @@ export default function LiveDiscussionCarousel({
   );
 }
 
-/* ------------------------------------------------------------------ */
 /* Styles                                                             */
-/* ------------------------------------------------------------------ */
 
 const styles = StyleSheet.create({
   wrap: {

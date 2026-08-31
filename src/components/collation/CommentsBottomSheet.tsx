@@ -79,7 +79,6 @@ function getViewerName(params: {
   return name || "@You";
 }
 
-
 const CommentsBottomSheet = forwardRef<BottomSheetModal, Props>(
   function CommentsBottomSheet(
     { postId: rawPostId, comments = [], onSubmitComment },
